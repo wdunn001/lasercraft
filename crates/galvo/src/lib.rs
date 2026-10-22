@@ -160,9 +160,84 @@ pub fn mark_polyline(
     commands
 }
 
+/// One constant-power horizontal span to mark, in millimetres.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MarkRun {
+    /// The row position.
+    pub y_mm: f64,
+    /// Where the span starts.
+    pub x_start_mm: f64,
+    /// Where the span ends.
+    pub x_end_mm: f64,
+    /// The marking power percentage.
+    pub power_percent: f64,
+}
+
+/// Convert constant-power scan runs into galvo marking commands.
+///
+/// This is the galvo analogue of raster engraving: each run jumps to its start
+/// with the beam off, then marks across at the run power. Power is set only when it
+/// changes between runs, so a flat image does not re-send it on every line.
+pub fn mark_scanlines(
+    param: &GalvoParam,
+    runs: &[MarkRun],
+    frequency_hz: u32,
+) -> Vec<GalvoCommand> {
+    let mut commands = vec![GalvoCommand::SetFrequency { hz: frequency_hz }];
+    let mut last_power: Option<i64> = None;
+    for run in runs {
+        let quantized = run.power_percent.round() as i64;
+        if last_power != Some(quantized) {
+            commands.push(GalvoCommand::SetPower {
+                percent: run.power_percent.clamp(0.0, 100.0),
+            });
+            last_power = Some(quantized);
+        }
+        let (sx, sy) = param.logic_to_device(run.x_start_mm, run.y_mm);
+        let (ex, ey) = param.logic_to_device(run.x_end_mm, run.y_mm);
+        commands.push(GalvoCommand::Jump { x: sx, y: sy });
+        commands.push(GalvoCommand::Mark { x: ex, y: ey });
+    }
+    commands
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scanlines_set_power_once_per_change() {
+        let param = GalvoParam {
+            field_size_mm: 100.0,
+            resolution_bits: 16,
+        };
+        let runs = [
+            MarkRun {
+                y_mm: 0.0,
+                x_start_mm: 0.0,
+                x_end_mm: 10.0,
+                power_percent: 60.0,
+            },
+            MarkRun {
+                y_mm: 1.0,
+                x_start_mm: 0.0,
+                x_end_mm: 10.0,
+                power_percent: 60.0,
+            },
+        ];
+        let commands = mark_scanlines(&param, &runs, 30000);
+        // Frequency, one power (shared), then jump+mark per run.
+        let powers = commands
+            .iter()
+            .filter(|c| matches!(c, GalvoCommand::SetPower { .. }))
+            .count();
+        assert_eq!(powers, 1);
+        let marks = commands
+            .iter()
+            .filter(|c| matches!(c, GalvoCommand::Mark { .. }))
+            .count();
+        assert_eq!(marks, 2);
+    }
 
     #[test]
     fn field_center_maps_to_mid_scale() {

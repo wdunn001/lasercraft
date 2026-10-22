@@ -14,6 +14,7 @@
 //! controller output by composing the vendor-free crates: the document model, the
 //! toolpath generator, the motion limits, and a GCode dialect.
 
+use lasercraft_galvo::{GalvoCommand, GalvoParam, MarkRun, mark_polyline, mark_scanlines};
 use lasercraft_gcode::{Dialect, Op, program};
 use lasercraft_laser_doc::{CutSetting, Geometry, Project, Shape};
 use lasercraft_motion::MotionConfig;
@@ -154,6 +155,59 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         }
     }
     program(dialect, &ops)
+}
+
+/// Generate galvo marking commands that cut every polyline shape in a project.
+///
+/// This is the galvo analogue of [`plan_project`], for fiber and galvo machines
+/// like the EZCAD2 path. Each shape is flattened and marked at its layer power and
+/// the given pulse frequency. The board-specific byte encoding serializes the
+/// returned commands.
+pub fn plan_galvo_project(
+    project: &Project,
+    param: &GalvoParam,
+    frequency_hz: u32,
+) -> Vec<GalvoCommand> {
+    const CURVE_STEPS: u32 = 24;
+    let mut commands = Vec::new();
+    for shape in &project.shapes {
+        let (points, closed) = match &shape.geometry {
+            Geometry::Polyline { points, closed } => (points.clone(), *closed),
+            Geometry::Path(path) => (path.flatten(CURVE_STEPS), path.closed),
+            Geometry::Empty => continue,
+        };
+        let Some(setting) = project.cut_setting_for(shape) else {
+            continue;
+        };
+        let path: Vec<(f64, f64)> = points.iter().map(|p| (p.x, p.y)).collect();
+        commands.extend(mark_polyline(
+            param,
+            &path,
+            closed,
+            setting.power_max,
+            frequency_hz,
+        ));
+    }
+    commands
+}
+
+/// Generate galvo marking commands to raster-engrave an image on a galvo machine.
+pub fn plan_galvo_raster(
+    image: &GrayImage,
+    params: &RasterParams,
+    param: &GalvoParam,
+    frequency_hz: u32,
+) -> Vec<GalvoCommand> {
+    let runs: Vec<MarkRun> = raster_scan(image, params)
+        .iter()
+        .map(|r| MarkRun {
+            y_mm: r.y_mm,
+            x_start_mm: r.x_start_mm,
+            x_end_mm: r.x_end_mm,
+            power_percent: r.power,
+        })
+        .collect();
+    mark_scanlines(param, &runs, frequency_hz)
 }
 
 /// Generate a framing pass that traces the job's bounding box.
@@ -350,6 +404,37 @@ mod tests {
         // Three edges cut twice is six moves.
         let cut_moves = out.lines().filter(|l| l.starts_with("G1 ")).count();
         assert_eq!(cut_moves, 6);
+    }
+
+    #[test]
+    fn plan_galvo_project_marks_a_polyline() {
+        let param = GalvoParam {
+            field_size_mm: 100.0,
+            resolution_bits: 16,
+        };
+        let project = Project {
+            app_version: "0.1.0".to_string(),
+            shapes: vec![Shape {
+                kind: ShapeKind::Path,
+                cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 0.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 0.0 },
+                        Point2 { x: 5.0, y: 8.0 },
+                    ],
+                    closed: true,
+                },
+            }],
+            cut_settings: vec![cut()],
+        };
+        let commands = plan_galvo_project(&project, &param, 20000);
+        let marks = commands
+            .iter()
+            .filter(|c| matches!(c, GalvoCommand::Mark { .. }))
+            .count();
+        // Two edges plus the closing edge.
+        assert_eq!(marks, 3);
     }
 
     #[test]
