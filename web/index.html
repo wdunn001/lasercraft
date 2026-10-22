@@ -140,7 +140,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div></div>
     </span>
     <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:150px;margin-left:8px" />
     <input id="textH" type="number" value="8" step="1" title="height mm" style="width:52px" />
@@ -295,6 +295,31 @@
         <div class="grid3" style="margin-top:12px"><div class="f"><label data-i18n="mc.w">Width mm</label><input id="mc_w" type="number" value="400" style="width:100%"></div><div class="f"><label data-i18n="mc.h">Height mm</label><input id="mc_h" type="number" value="400" style="width:100%"></div><div></div></div>
       </div>
       <div class="mfoot"><span class="spacer"></span><button class="btn" id="mcCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="mcOk" data-i18n="mc.save">Add</button></div>
+    </div>
+  </div>
+
+  <!-- arrange: array + align -->
+  <div class="modal-bg" id="arBg">
+    <div class="modal" style="width:460px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="ar.title">Arrange</h2><span class="spacer"></span><span class="btn" id="arClose">&times;</span></div>
+      <div class="mbody">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px" data-i18n="ar.grid">Grid array</div>
+        <div class="grid3"><div class="f"><label data-i18n="ar.cols">Columns</label><input id="ar_cols" type="number" min="1" value="3" style="width:100%"></div><div class="f"><label data-i18n="ar.rows">Rows</label><input id="ar_rows" type="number" min="1" value="2" style="width:100%"></div><div></div></div>
+        <div class="grid3" style="margin-top:8px"><div class="f"><label data-i18n="ar.dx">Gap X mm</label><input id="ar_dx" type="number" value="5" style="width:100%"></div><div class="f"><label data-i18n="ar.dy">Gap Y mm</label><input id="ar_dy" type="number" value="5" style="width:100%"></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_grid" style="width:100%" data-i18n="ar.apply">Apply</button></div></div>
+        <div style="font-size:12px;color:var(--muted);margin:14px 0 6px" data-i18n="ar.circ">Circular array</div>
+        <div class="grid3"><div class="f"><label data-i18n="ar.count">Count</label><input id="ar_count" type="number" min="2" value="8" style="width:100%"></div><div class="f"><label data-i18n="ar.radius">Radius mm</label><input id="ar_radius" type="number" value="20" style="width:100%"></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_circ" style="width:100%" data-i18n="ar.apply">Apply</button></div></div>
+        <div style="font-size:12px;color:var(--muted);margin:14px 0 6px" data-i18n="ar.align">Align to bed</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button class="btn" data-align="center" data-i18n="ar.a.center">Center</button>
+          <button class="btn" data-align="cx" data-i18n="ar.a.cx">Center X</button>
+          <button class="btn" data-align="cy" data-i18n="ar.a.cy">Center Y</button>
+          <button class="btn" data-align="left" data-i18n="ar.a.left">Left</button>
+          <button class="btn" data-align="right" data-i18n="ar.a.right">Right</button>
+          <button class="btn" data-align="top" data-i18n="ar.a.top">Top</button>
+          <button class="btn" data-align="bottom" data-i18n="ar.a.bottom">Bottom</button>
+        </div>
+      </div>
+      <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="ar.note">Select a shape first. Array copies the selection.</span><button class="btn" id="arCancel" data-i18n="action.cancel">Close</button></div>
     </div>
   </div>
 
@@ -482,6 +507,14 @@
     return [];
   }
   function bbox(sh){ const pts = shapeFlatPts(sh); let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const q of pts){x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);} return {x0,y0,x1,y1}; }
+  // Visit every anchor and control point of a shape, polyline or cubic path.
+  function eachPoint(sh, fn){
+    const g = sh.geometry;
+    if (g.Polyline){ for (const q of g.Polyline.points) fn(q); return; }
+    if (g.Path){ fn(g.Path.start); for (const seg of g.Path.segments){ if (seg.Cubic){ fn(seg.Cubic.c1); fn(seg.Cubic.c2); fn(seg.Cubic.to); } else if (seg.Line){ fn(seg.Line.to); } } }
+  }
+  function translateShape(sh, dx, dy){ eachPoint(sh, q => { q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); }); }
+  function rotateShapeAbout(sh, cx, cy, th){ const cs=Math.cos(th), sn=Math.sin(th); eachPoint(sh, q => { const x=q.x-cx, y=q.y-cy; q.x=+(cx+x*cs-y*sn).toFixed(3); q.y=+(cy+x*sn+y*cs).toFixed(3); }); }
 
   // ---- interaction ----
   let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null;
@@ -564,7 +597,7 @@
     start=null; drawing=null; dragShape=null; dragNode=null; render(); refreshCounts();
   });
   function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
-  function moveShapeTo(i, nx, ny){ const sh=doc.shapes[i]; const bb=bbox(sh); const dx=nx-bb.x0, dy=ny-bb.y0; for (const q of shapePoints(sh)){ q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); } }
+  function moveShapeTo(i, nx, ny){ const sh=doc.shapes[i]; const bb=bbox(sh); translateShape(sh, nx-bb.x0, ny-bb.y0); }
 
   // zoom
   document.querySelectorAll("[data-zoom]").forEach(b => b.onclick = () => {
@@ -659,6 +692,12 @@
   }
   $("matBtn").onclick = openMaterials;
   $("matClose").onclick = $("matCancel").onclick = () => $("matBg").classList.remove("show");
+
+  // arrange modal
+  $("arClose").onclick = $("arCancel").onclick = () => $("arBg").classList.remove("show");
+  $("ar_grid").onclick = () => arrayGrid(Math.max(1,+$("ar_cols").value||1), Math.max(1,+$("ar_rows").value||1), +$("ar_dx").value||0, +$("ar_dy").value||0);
+  $("ar_circ").onclick = () => arrayCircular(Math.max(2,+$("ar_count").value||2), +$("ar_radius").value||0);
+  document.querySelectorAll("#arBg [data-align]").forEach(b => b.onclick = () => alignBed(b.dataset.align));
 
   // ---- machine profiles (built-in + custom, saved locally) ----
   const BUILTIN_MACHINES = [
@@ -896,11 +935,42 @@
     else if (a==="subtract"){ booleanWith("difference"); }
     else if (a==="intersect"){ booleanWith("intersect"); }
     else if (a==="concentric"){ concentricFill(); }
+    else if (a==="arrange"){ openArrange(); return; }
     else if (a==="undo"){ undo(); return; }
     else if (a==="redo"){ redo(); return; }
     render(); refreshCounts();
   });
-  function moveShapeTo2(sh,dx,dy){ for(const q of shapePoints(sh)){ q.x+=dx; q.y+=dy; } }
+  function moveShapeTo2(sh,dx,dy){ translateShape(sh,dx,dy); }
+  // Tile the selection into a cols by rows grid. Gap is the mm space between copies.
+  function arrayGrid(cols, rows, gapX, gapY){
+    if (selected==null || !doc.shapes[selected]) return;
+    const base = doc.shapes[selected], bb = bbox(base);
+    const stepX = (bb.x1-bb.x0) + gapX, stepY = (bb.y1-bb.y0) + gapY, added = [];
+    for (let r=0;r<rows;r++) for (let c=0;c<cols;c++){ if (!r && !c) continue; const cp=JSON.parse(JSON.stringify(base)); translateShape(cp, c*stepX, r*stepY); added.push(cp); }
+    doc.shapes.push(...added); render(); refreshCounts();
+  }
+  // Rotate count copies of the selection evenly around a ring. The base sits at
+  // the bottom of the ring and each copy is rotated to face the centre.
+  function arrayCircular(count, radius){
+    if (selected==null || !doc.shapes[selected] || count<2) return;
+    const base = doc.shapes[selected], bb = bbox(base);
+    const bx=(bb.x0+bb.x1)/2, by=(bb.y0+bb.y1)/2, cx=bx, cy=by+radius, added=[];
+    for (let k=1;k<count;k++){ const cp=JSON.parse(JSON.stringify(base)); rotateShapeAbout(cp, cx, cy, 2*Math.PI*k/count); added.push(cp); }
+    doc.shapes.push(...added); render(); refreshCounts();
+  }
+  // Move the selection to a bed anchor. Modes: center, cx, cy, left, right, top, bottom.
+  function alignBed(mode){
+    if (selected==null || !doc.shapes[selected]) return;
+    const sh=doc.shapes[selected], bb=bbox(sh), w=bb.x1-bb.x0, h=bb.y1-bb.y0; let dx=0, dy=0;
+    if (mode==="center"||mode==="cx") dx = (BED.w-w)/2 - bb.x0;
+    if (mode==="center"||mode==="cy") dy = (BED.h-h)/2 - bb.y0;
+    if (mode==="left")   dx = -bb.x0;
+    if (mode==="right")  dx = BED.w - bb.x1;
+    if (mode==="bottom") dy = -bb.y0;
+    if (mode==="top")    dy = BED.h - bb.y1;
+    translateShape(sh, dx, dy); render(); refreshCounts();
+  }
+  function openArrange(){ $("arBg").classList.add("show"); }
 
   // keyboard
   window.addEventListener("keydown", e => {
@@ -1076,6 +1146,10 @@
   Object.assign(I18N.de, { "action.undo":"Rückgängig","action.redo":"Wiederholen","mat.open":"Materialbibliothek…","mat.title":"Materialbibliothek","mat.note":"Nur Startwerte. Immer an Abfallmaterial testen.","action.cancel":"Schließen" });
   Object.assign(I18N.fr, { "action.undo":"Annuler","action.redo":"Rétablir","mat.open":"Bibliothèque de matériaux…","mat.title":"Bibliothèque de matériaux","mat.note":"Valeurs de départ uniquement. Testez toujours sur une chute.","action.cancel":"Fermer" });
   Object.assign(I18N["pt-BR"], { "action.undo":"Desfazer","action.redo":"Refazer","mat.open":"Biblioteca de materiais…","mat.title":"Biblioteca de materiais","mat.note":"Apenas pontos de partida. Teste sempre em material de descarte.","action.cancel":"Fechar" });
+  Object.assign(I18N.es, { "action.arrange":"Organizar…","ar.title":"Organizar","ar.grid":"Matriz en cuadrícula","ar.cols":"Columnas","ar.rows":"Filas","ar.dx":"Espacio X mm","ar.dy":"Espacio Y mm","ar.apply":"Aplicar","ar.circ":"Matriz circular","ar.count":"Cantidad","ar.radius":"Radio mm","ar.align":"Alinear a la mesa","ar.a.center":"Centrar","ar.a.cx":"Centrar X","ar.a.cy":"Centrar Y","ar.a.left":"Izquierda","ar.a.right":"Derecha","ar.a.top":"Arriba","ar.a.bottom":"Abajo","ar.note":"Seleccione una forma. La matriz copia la selección." });
+  Object.assign(I18N.de, { "action.arrange":"Anordnen…","ar.title":"Anordnen","ar.grid":"Rasteranordnung","ar.cols":"Spalten","ar.rows":"Zeilen","ar.dx":"Abstand X mm","ar.dy":"Abstand Y mm","ar.apply":"Anwenden","ar.circ":"Kreisanordnung","ar.count":"Anzahl","ar.radius":"Radius mm","ar.align":"An Arbeitsfläche ausrichten","ar.a.center":"Zentrieren","ar.a.cx":"X zentrieren","ar.a.cy":"Y zentrieren","ar.a.left":"Links","ar.a.right":"Rechts","ar.a.top":"Oben","ar.a.bottom":"Unten","ar.note":"Zuerst eine Form wählen. Die Anordnung kopiert die Auswahl." });
+  Object.assign(I18N.fr, { "action.arrange":"Agencer…","ar.title":"Agencer","ar.grid":"Réseau en grille","ar.cols":"Colonnes","ar.rows":"Lignes","ar.dx":"Écart X mm","ar.dy":"Écart Y mm","ar.apply":"Appliquer","ar.circ":"Réseau circulaire","ar.count":"Nombre","ar.radius":"Rayon mm","ar.align":"Aligner sur le plateau","ar.a.center":"Centrer","ar.a.cx":"Centrer X","ar.a.cy":"Centrer Y","ar.a.left":"Gauche","ar.a.right":"Droite","ar.a.top":"Haut","ar.a.bottom":"Bas","ar.note":"Sélectionnez une forme. Le réseau copie la sélection." });
+  Object.assign(I18N["pt-BR"], { "action.arrange":"Organizar…","ar.title":"Organizar","ar.grid":"Matriz em grade","ar.cols":"Colunas","ar.rows":"Linhas","ar.dx":"Espaço X mm","ar.dy":"Espaço Y mm","ar.apply":"Aplicar","ar.circ":"Matriz circular","ar.count":"Quantidade","ar.radius":"Raio mm","ar.align":"Alinhar à mesa","ar.a.center":"Centralizar","ar.a.cx":"Centralizar X","ar.a.cy":"Centralizar Y","ar.a.left":"Esquerda","ar.a.right":"Direita","ar.a.top":"Topo","ar.a.bottom":"Base","ar.note":"Selecione uma forma. A matriz copia a seleção." });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -1133,6 +1207,9 @@
     else if (act==="cs"){ openCutSettings(2); }
     else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selected=doc.shapes.length-1; render(); refreshCounts(); }
     else if (act==="dither"){ const c=document.createElement("canvas"); c.width=220; c.height=150; const cx=c.getContext("2d"); const g=cx.createRadialGradient(110,75,8,110,75,100); g.addColorStop(0,"#fff"); g.addColorStop(1,"#000"); cx.fillStyle=g; cx.fillRect(0,0,220,150); const im=new Image(); im.onload=()=>ditherImage(im); im.src=c.toDataURL(); }
+    else if (act==="arraygrid"){ doc.shapes=[rect(15,15,24,16,0)]; selected=0; arrayGrid(4,3,6,6); openArrange(); }
+    else if (act==="arraycircular"){ doc.shapes=[rect(66,18,18,12,0)]; selected=0; arrayCircular(9,30); openArrange(); }
+    else if (act==="alignbed"){ doc.shapes=[rect(8,8,26,18,0)]; selected=0; alignBed("center"); openArrange(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
