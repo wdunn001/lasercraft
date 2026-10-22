@@ -145,6 +145,7 @@
     <input id="textH" type="number" value="8" step="1" title="height mm" style="width:52px" />
     <button class="btn" id="addText" data-i18n="text.add">Add Text</button>
     <span class="spacer"></span>
+    <select id="machine" title="Machine" style="margin-right:10px;max-width:220px"></select>
     <select id="lang" title="Language" style="margin-right:10px">
       <option value="en">English</option><option value="es">Español</option>
       <option value="de">Deutsch</option><option value="fr">Français</option><option value="pt-BR">Português</option>
@@ -282,11 +283,24 @@
     </div>
   </div>
 
+  <!-- add machine -->
+  <div class="modal-bg" id="mcBg">
+    <div class="modal" style="width:440px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="mc.add">Add machine</h2><span class="spacer"></span><span class="btn" id="mcClose">&times;</span></div>
+      <div class="mbody">
+        <div class="f"><label data-i18n="mc.name">Name</label><input id="mc_name" style="width:100%" placeholder="My laser"></div>
+        <div class="f" style="margin-top:12px"><label data-i18n="mc.ctrl">Controller</label><select id="mc_ctrl" style="width:100%"><option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option><option value="marlin">Marlin</option><option value="smoothie">Smoothie</option><option value="galvo">EZCAD2 / JCZFiber (galvo)</option></select></div>
+        <div class="grid3" style="margin-top:12px"><div class="f"><label data-i18n="mc.w">Width mm</label><input id="mc_w" type="number" value="400" style="width:100%"></div><div class="f"><label data-i18n="mc.h">Height mm</label><input id="mc_h" type="number" value="400" style="width:100%"></div><div></div></div>
+      </div>
+      <div class="mfoot"><span class="spacer"></span><button class="btn" id="mcCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="mcOk" data-i18n="mc.save">Add</button></div>
+    </div>
+  </div>
+
 <script type="module">
   import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op } from "./pkg/lasercraft_wasm.js";
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
-  const BED = { w: 150, h: 150 };               // work area in mm
+  let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
   const SVGNS = "http://www.w3.org/2000/svg";
   const $ = id => document.getElementById(id);
 
@@ -585,6 +599,43 @@
   }
   $("matBtn").onclick = openMaterials;
   $("matClose").onclick = $("matCancel").onclick = () => $("matBg").classList.remove("show");
+
+  // ---- machine profiles (built-in + custom, saved locally) ----
+  const BUILTIN_MACHINES = [
+    { name:"Generic GRBL (200 mm)", ctrl:"grbl", w:200, h:200 },
+    { name:"ComMarker B6 (galvo)", ctrl:"galvo", w:110, h:110 },
+    { name:"EZCAD2 Fiber (galvo)", ctrl:"galvo", w:150, h:150 },
+    { name:"Diode 400", ctrl:"grbl-m3", w:400, h:400 },
+    { name:"Snapmaker (Marlin)", ctrl:"marlin", w:320, h:350 },
+    { name:"Ruida CO2 600", ctrl:"grbl", w:600, h:400 },
+  ];
+  function customMachines(){ try { return JSON.parse(localStorage.getItem("lc_machines") || "[]"); } catch(e){ return []; } }
+  function allMachines(){ return [...BUILTIN_MACHINES, ...customMachines()]; }
+  function populateMachines(sel){
+    const m = $("machine");
+    m.innerHTML = allMachines().map((x, i) => `<option value="${i}">${x.name}</option>`).join("") + `<option value="add">+ Add machine…</option>`;
+    if (sel != null) m.value = sel;
+  }
+  function applyMachine(mc){
+    BED = { w: mc.w, h: mc.h };
+    $("flavor").value = mc.ctrl;
+    const g = mc.ctrl === "galvo";
+    $("galvoRow").style.display = g ? "flex" : "none";
+    $("devstat").style.display = g ? "flex" : "none";
+    fit(); layout(); generate();
+  }
+  $("machine").onchange = () => {
+    if ($("machine").value === "add"){ populateMachines("0"); $("mcBg").classList.add("show"); return; }
+    const mc = allMachines()[+$("machine").value]; if (mc) applyMachine(mc);
+  };
+  $("mcOk").onclick = () => {
+    const mc = { name: $("mc_name").value || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400 };
+    const custom = customMachines(); custom.push(mc);
+    try { localStorage.setItem("lc_machines", JSON.stringify(custom)); } catch(e){}
+    $("mcBg").classList.remove("show"); populateMachines(String(allMachines().length - 1)); applyMachine(mc);
+  };
+  $("mcClose").onclick = $("mcCancel").onclick = () => { $("mcBg").classList.remove("show"); populateMachines("0"); };
+  populateMachines("0");
 
   // ---- export to engine project JSON ----
   function toProject(){
@@ -934,6 +985,10 @@
   Object.assign(I18N.es, { "cs.title":"Ajustes de corte","cs.freq":"Frecuencia de pulso","cs.qpulse":"Ancho de pulso","cs.pmin":"Potencia mín.","cs.interval":"Intervalo de líneas","cs.angle":"Ángulo de trama","cs.on":"Activado","cs.off":"Desactivado","cs.onus":"Retardo láser on","cs.offus":"Retardo láser off","cs.polyus":"Retardo de esquina","cs.tabcut":"Corte","cs.tabtimings":"Tiempos","cs.reset":"Restablecer capa" });
   Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","cs.freq":"Pulsfrequenz","cs.qpulse":"Pulsbreite","cs.pmin":"Min. Leistung","cs.interval":"Linienabstand","cs.angle":"Schraffurwinkel","cs.on":"Ein","cs.off":"Aus","cs.onus":"Laser-Ein-Verzögerung","cs.offus":"Laser-Aus-Verzögerung","cs.polyus":"Eckverzögerung","cs.tabcut":"Schnitt","cs.tabtimings":"Zeiten","cs.reset":"Ebene zurücksetzen" });
   Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","cs.freq":"Fréquence d'impulsion","cs.qpulse":"Largeur d'impulsion","cs.pmin":"Puissance min.","cs.interval":"Intervalle de lignes","cs.angle":"Angle de hachure","cs.on":"Activé","cs.off":"Désactivé","cs.onus":"Délai laser activé","cs.offus":"Délai laser désactivé","cs.polyus":"Délai d'angle","cs.tabcut":"Coupe","cs.tabtimings":"Temps","cs.reset":"Réinitialiser le calque" });
+  Object.assign(I18N.es, { "mc.add":"Añadir máquina","mc.name":"Nombre","mc.ctrl":"Controlador","mc.w":"Ancho mm","mc.h":"Alto mm","mc.save":"Añadir" });
+  Object.assign(I18N.de, { "mc.add":"Maschine hinzufügen","mc.name":"Name","mc.ctrl":"Steuerung","mc.w":"Breite mm","mc.h":"Höhe mm","mc.save":"Hinzufügen" });
+  Object.assign(I18N.fr, { "mc.add":"Ajouter une machine","mc.name":"Nom","mc.ctrl":"Contrôleur","mc.w":"Largeur mm","mc.h":"Hauteur mm","mc.save":"Ajouter" });
+  Object.assign(I18N["pt-BR"], { "mc.add":"Adicionar máquina","mc.name":"Nome","mc.ctrl":"Controlador","mc.w":"Largura mm","mc.h":"Altura mm","mc.save":"Adicionar" });
   Object.assign(I18N["pt-BR"], { "cs.title":"Configurações de corte","cs.freq":"Frequência de pulso","cs.qpulse":"Largura de pulso","cs.pmin":"Potência mín.","cs.interval":"Intervalo de linhas","cs.angle":"Ângulo de hachura","cs.on":"Ligado","cs.off":"Desligado","cs.onus":"Atraso laser ligado","cs.offus":"Atraso laser desligado","cs.polyus":"Atraso de canto","cs.tabcut":"Corte","cs.tabtimings":"Tempos","cs.reset":"Redefinir camada" });
   let curLang = "en";
   function trMode(m){ const t = I18N[curLang] || {}; return t["mode." + String(m).toLowerCase()] || m; }
@@ -960,6 +1015,9 @@
   if (urlTab) { const tb = document.querySelector(`.docktabs button[data-dock="${urlTab}"]`); if (tb) tb.click(); }
   const urlTool = params.get("tool");
   if (urlTool) { const tb = document.querySelector(`.tool[data-tool="${urlTool}"]`); if (tb) tb.click(); if (urlTool === "node") { selected = 0; render(); } }
+  const mIdx = params.get("machine");
+  if (mIdx != null && allMachines()[+mIdx]) $("machine").value = mIdx;
+  applyMachine(allMachines()[+($("machine").value) || 0]);
   snapshot();   // seed the undo history with the initial document
   fit(); layout();
 
