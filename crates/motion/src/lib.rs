@@ -15,7 +15,7 @@
 //! controller dialect, which the `lasercraft-gcode` and DSP crates own.
 
 /// The machine motion limits.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct MotionConfig {
     /// The highest travel speed in millimetres per second.
     pub max_speed_mm_s: f64,

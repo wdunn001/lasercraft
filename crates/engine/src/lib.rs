@@ -245,7 +245,7 @@ pub fn project_to_svg(project: &Project) -> String {
 }
 
 /// A material-test grid: columns vary speed, rows vary power.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct MaterialTestSpec {
     /// Number of columns, each a speed step.
     pub columns: u32,
