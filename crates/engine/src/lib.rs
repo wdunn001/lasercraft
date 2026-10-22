@@ -16,7 +16,7 @@
 
 use lasercraft_galvo::{GalvoCommand, GalvoParam, MarkRun, mark_polyline, mark_scanlines};
 use lasercraft_gcode::{Dialect, Op, program};
-use lasercraft_laser_doc::{CutSetting, Geometry, Project, Shape};
+use lasercraft_laser_doc::{CutSetting, Geometry, Point2, Project, Shape, ShapeKind};
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
 use lasercraft_toolpath::{BBox, Point, follow_polyline, line_fill};
@@ -179,6 +179,83 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         }
     }
     program(dialect, &ops)
+}
+
+/// A material-test grid: columns vary speed, rows vary power.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MaterialTestSpec {
+    /// Number of columns, each a speed step.
+    pub columns: u32,
+    /// Number of rows, each a power step.
+    pub rows: u32,
+    /// The side length of each test square in millimetres.
+    pub cell_mm: f64,
+    /// The gap between squares in millimetres.
+    pub gap_mm: f64,
+    /// The speed of the first column in millimetres per second.
+    pub speed_min: f64,
+    /// The speed of the last column.
+    pub speed_max: f64,
+    /// The power of the first row as a percentage.
+    pub power_min: f64,
+    /// The power of the last row.
+    pub power_max: f64,
+}
+
+/// Build a material-test project: a grid of squares, each cut at its own speed and
+/// power, for dialing in settings on a new material. Columns step speed left to
+/// right, rows step power bottom to top. Each square becomes a shape with its own
+/// cut setting, so the grid cuts and estimates through the normal pipeline.
+pub fn material_test(spec: &MaterialTestSpec) -> Project {
+    fn fraction(index: u32, count: u32) -> f64 {
+        if count <= 1 {
+            0.0
+        } else {
+            f64::from(index) / f64::from(count - 1)
+        }
+    }
+    fn lerp(a: f64, b: f64, t: f64) -> f64 {
+        a + (b - a) * t
+    }
+    let mut project = Project::new();
+    project.app_version = "material-test".to_string();
+    let step = spec.cell_mm + spec.gap_mm;
+    for row in 0..spec.rows {
+        for col in 0..spec.columns {
+            let index = row * spec.columns + col;
+            let speed = lerp(spec.speed_min, spec.speed_max, fraction(col, spec.columns));
+            let power = lerp(spec.power_min, spec.power_max, fraction(row, spec.rows));
+            let x0 = f64::from(col) * step;
+            let y0 = f64::from(row) * step;
+            let c = spec.cell_mm;
+            project.cut_settings.push(CutSetting {
+                index,
+                name: format!("{speed:.0} mm/s {power:.0}%"),
+                speed_mm_s: speed,
+                power_min: 0.0,
+                power_max: power,
+                num_passes: 1,
+                air_assist: true,
+            });
+            project.shapes.push(Shape {
+                kind: ShapeKind::Rect,
+                cut_index: index,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: x0, y: y0 },
+                        Point2 { x: x0 + c, y: y0 },
+                        Point2 {
+                            x: x0 + c,
+                            y: y0 + c,
+                        },
+                        Point2 { x: x0, y: y0 + c },
+                    ],
+                    closed: true,
+                },
+            });
+        }
+    }
+    project
 }
 
 /// Order points by a greedy nearest-neighbour walk from the origin.
@@ -354,7 +431,6 @@ pub fn plan_raster(
 mod tests {
     use super::*;
     use lasercraft_gcode::GCodeDialect;
-    use lasercraft_laser_doc::{Point2, ShapeKind};
 
     fn cut() -> CutSetting {
         CutSetting {
@@ -500,6 +576,30 @@ mod tests {
         assert!(out.contains("G0 X20.000 Y18.000"));
         // Framing never fires the laser.
         assert!(!out.contains("G1 "));
+    }
+
+    #[test]
+    fn material_test_builds_a_speed_power_grid() {
+        let spec = MaterialTestSpec {
+            columns: 3,
+            rows: 2,
+            cell_mm: 8.0,
+            gap_mm: 2.0,
+            speed_min: 10.0,
+            speed_max: 30.0,
+            power_min: 20.0,
+            power_max: 80.0,
+        };
+        let project = material_test(&spec);
+        // 3x2 grid is six squares, each with its own cut setting.
+        assert_eq!(project.shapes.len(), 6);
+        assert_eq!(project.cut_settings.len(), 6);
+        // First cell is the slowest, lowest power; last cell the fastest, highest.
+        assert_eq!(project.cut_settings[0].speed_mm_s, 10.0);
+        assert_eq!(project.cut_settings[0].power_max, 20.0);
+        let last = project.cut_settings.len() - 1;
+        assert_eq!(project.cut_settings[last].speed_mm_s, 30.0);
+        assert_eq!(project.cut_settings[last].power_max, 80.0);
     }
 
     #[test]
