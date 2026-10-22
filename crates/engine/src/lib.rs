@@ -94,18 +94,20 @@ pub fn plan_line_fill(
 ) -> String {
     let feed = motion.clamp_feed(setting.speed_mm_s);
     let segments = line_fill(bbox, interval_mm);
-    let mut ops = Vec::with_capacity(segments.len() * 2);
-    for segment in &segments {
-        ops.push(Op::RapidTo {
-            x: segment.start.x,
-            y: segment.start.y,
-        });
-        ops.push(Op::CutTo {
-            x: segment.end.x,
-            y: segment.end.y,
-            feed_mm_s: feed,
-            power: setting.power_max,
-        });
+    let mut ops = Vec::with_capacity(segments.len() * 2 * setting.num_passes as usize);
+    for _ in 0..setting.num_passes {
+        for segment in &segments {
+            ops.push(Op::RapidTo {
+                x: segment.start.x,
+                y: segment.start.y,
+            });
+            ops.push(Op::CutTo {
+                x: segment.end.x,
+                y: segment.end.y,
+                feed_mm_s: feed,
+                power: setting.power_max,
+            });
+        }
     }
     program(dialect, &ops)
 }
@@ -133,19 +135,22 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
         let segments = follow_polyline(&path, closed);
         let feed = motion.clamp_feed(setting.speed_mm_s);
-        if let Some(first) = segments.first() {
-            ops.push(Op::RapidTo {
-                x: first.start.x,
-                y: first.start.y,
-            });
-        }
-        for segment in &segments {
-            ops.push(Op::CutTo {
-                x: segment.end.x,
-                y: segment.end.y,
-                feed_mm_s: feed,
-                power: setting.power_max,
-            });
+        // Repeat the path once per configured pass. A zero-pass layer is off.
+        for _ in 0..setting.num_passes {
+            if let Some(first) = segments.first() {
+                ops.push(Op::RapidTo {
+                    x: first.start.x,
+                    y: first.start.y,
+                });
+            }
+            for segment in &segments {
+                ops.push(Op::CutTo {
+                    x: segment.end.x,
+                    y: segment.end.y,
+                    feed_mm_s: feed,
+                    power: setting.power_max,
+                });
+            }
         }
     }
     program(dialect, &ops)
@@ -263,6 +268,37 @@ mod tests {
         assert_eq!(cut_moves, 3);
         // The cut runs at the layer feed and power.
         assert!(out.contains("F1200 S800"));
+    }
+
+    #[test]
+    fn plan_project_repeats_passes() {
+        let motion = MotionConfig {
+            max_speed_mm_s: 100.0,
+            accel_mm_s2: 1000.0,
+            accel_to_decel_mm_s2: 500.0,
+        };
+        let mut setting = cut();
+        setting.num_passes = 2;
+        let project = Project {
+            app_version: "0.1.0".to_string(),
+            shapes: vec![Shape {
+                kind: ShapeKind::Path,
+                cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 0.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 10.0 },
+                    ],
+                    closed: true,
+                },
+            }],
+            cut_settings: vec![setting],
+        };
+        let out = plan_project(&project, &motion, &Grbl::new());
+        // Three edges cut twice is six moves.
+        let cut_moves = out.lines().filter(|l| l.starts_with("G1 ")).count();
+        assert_eq!(cut_moves, 6);
     }
 
     #[test]

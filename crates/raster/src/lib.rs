@@ -71,6 +71,7 @@ pub fn raster_scan(image: &GrayImage, params: &RasterParams) -> Vec<ScanRun> {
     }
     for y in 0..image.height {
         let y_mm = f64::from(y) * params.pixel_mm;
+        let mut row_runs = Vec::new();
         let mut x = 0u32;
         while x < image.width {
             let power = power_percent(image.get(x, y), params);
@@ -82,13 +83,22 @@ pub fn raster_scan(image: &GrayImage, params: &RasterParams) -> Vec<ScanRun> {
             while x < image.width && power_percent(image.get(x, y), params) == power {
                 x += 1;
             }
-            runs.push(ScanRun {
+            row_runs.push(ScanRun {
                 y_mm,
                 x_start_mm: f64::from(start) * params.pixel_mm,
                 x_end_mm: f64::from(x) * params.pixel_mm,
                 power: f64::from(power),
             });
         }
+        // Boustrophedon: odd rows sweep right to left so the head does not fly
+        // back. Reverse the run order and the direction of each run.
+        if y % 2 == 1 {
+            row_runs.reverse();
+            for run in &mut row_runs {
+                std::mem::swap(&mut run.x_start_mm, &mut run.x_end_mm);
+            }
+        }
+        runs.append(&mut row_runs);
     }
     runs
 }
@@ -130,6 +140,23 @@ mod tests {
         assert_eq!(run.x_end_mm, 3.0);
         // 200/255 * 100 rounds to 78 percent.
         assert_eq!(run.power, 78.0);
+    }
+
+    #[test]
+    fn odd_rows_sweep_in_reverse() {
+        let image = GrayImage {
+            width: 2,
+            height: 2,
+            pixels: vec![255, 255, 255, 255],
+        };
+        let runs = raster_scan(&image, &params());
+        assert_eq!(runs.len(), 2);
+        // Row 0 runs left to right.
+        assert!(runs[0].x_start_mm < runs[0].x_end_mm);
+        assert_eq!(runs[0].y_mm, 0.0);
+        // Row 1 runs right to left.
+        assert!(runs[1].x_start_mm > runs[1].x_end_mm);
+        assert_eq!(runs[1].y_mm, 1.0);
     }
 
     #[test]
