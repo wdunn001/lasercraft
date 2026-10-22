@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LaserCraft</title>
+<style>
+  :root {
+    --bg: #0c0d11; --panel: #1c1f26; --panel2: #232732; --line: #2e3340;
+    --ink: #e8eaf0; --muted: #8b93a7; --faint: #626a7e; --accent: #ff5a3c;
+    --field: #11131a; --ok: #28c08a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 14px; padding: 13px 20px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+  header .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  header h1 { font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+  header .tag { font-size: 12px; color: var(--muted); background: var(--field); border: 1px solid var(--line); padding: 3px 10px; border-radius: 20px; }
+  header .spacer { flex: 1; }
+  .ctrl { display: flex; align-items: center; gap: 8px; }
+  select, button { font: inherit; font-size: 13px; border-radius: 7px; border: 1px solid var(--line); background: var(--field); color: var(--ink); padding: 8px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .est { font-size: 12px; color: var(--muted); }
+  .est b { color: var(--ink); }
+
+  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); overflow: hidden; }
+  .pane { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+  .pane h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 12px 18px 8px; }
+  .preview { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: auto; }
+  .preview svg { max-width: 100%; max-height: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0a0b0f; }
+
+  .tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); padding: 9px 14px; border-radius: 0; }
+  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .tabbody { flex: 1; overflow: auto; padding: 16px 18px; }
+  pre { font-family: "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 12px; line-height: 1.55; color: #cdd3e0; white-space: pre; }
+  .info-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .info-row span:first-child { color: var(--muted); }
+  .info-row b { font-variant-numeric: tabular-nums; }
+  .hidden { display: none; }
+  .err { color: var(--accent); font-size: 13px; }
+  footer { padding: 8px 20px; background: var(--panel2); border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); display: flex; gap: 16px; }
+  footer .ok { color: var(--ok); }
+</style>
+</head>
+<body>
+  <header>
+    <span class="dot"></span>
+    <h1>LaserCraft</h1>
+    <span class="tag">running in your browser &middot; WebAssembly</span>
+    <span class="spacer"></span>
+    <div class="ctrl">
+      <span class="est" id="est">&nbsp;</span>
+      <select id="flavor" title="Controller">
+        <option value="grbl">GRBL</option>
+        <option value="grbl-m3">GRBL M3</option>
+        <option value="marlin">Marlin</option>
+        <option value="smoothie">Smoothie</option>
+      </select>
+      <button id="frameBtn">Frame</button>
+      <button id="genBtn" class="primary">Generate</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="pane">
+      <h2>Preview</h2>
+      <div class="preview" id="preview"></div>
+    </section>
+    <section class="pane">
+      <div class="tabs">
+        <button data-tab="gcode" class="active">GCode</button>
+        <button data-tab="galvo">Galvo (fiber)</button>
+        <button data-tab="about">About</button>
+      </div>
+      <div class="tabbody" id="tab-gcode"><pre id="gcode">Click Generate.</pre></div>
+      <div class="tabbody hidden" id="tab-galvo">
+        <div class="info-row"><span>Board</span><b>BJJCZ LMC (EZCAD2 / JCZFiber)</b></div>
+        <div class="info-row"><span>USB identity</span><b>0x9588 : 0x9899</b></div>
+        <div class="info-row"><span>Field</span><b>110 mm, 16-bit</b></div>
+        <div class="info-row"><span>List buffer</span><b id="lmcLen">&mdash;</b></div>
+        <div class="info-row"><span>First command</span><b id="lmcHead">&mdash;</b></div>
+        <p style="margin-top:14px;color:var(--muted);font-size:12.5px">The byte buffer is written to the controller's bulk endpoint over WebUSB. No install, no native helper.</p>
+      </div>
+      <div class="tabbody hidden" id="tab-about">
+        <p style="color:var(--muted);font-size:13px;line-height:1.7">This page runs the LaserCraft engine compiled to WebAssembly. The preview, the GCode and the galvo board bytes are all computed in Rust in your browser. The same engine drives the native app. Controllers reach their machines through Web Serial, WebUSB and Web Bluetooth.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="status">Loading WebAssembly&hellip;</span>
+    <span class="spacer" style="flex:1"></span>
+    <span class="ok" id="wasmok"></span>
+  </footer>
+
+<script type="module">
+  import init, { preview_svg, generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc } from "./pkg/lasercraft_wasm.js";
+
+  const PROJECT = JSON.stringify({
+    app_version: "web",
+    shapes: [
+      { kind: "Rect", cut_index: 0, geometry: { Polyline: { points: [
+        { x: 5, y: 5 }, { x: 95, y: 5 }, { x: 95, y: 60 }, { x: 5, y: 60 } ], closed: true } } },
+      { kind: "Path", cut_index: 1, geometry: { Polyline: { points: [
+        { x: 20, y: 15 }, { x: 80, y: 15 }, { x: 50, y: 52 } ], closed: true } } },
+      { kind: "Ellipse", cut_index: 2, geometry: { Path: {
+        start: { x: 50, y: 20 },
+        segments: [
+          { Cubic: { c1: { x: 74, y: 20 }, c2: { x: 74, y: 45 }, to: { x: 50, y: 45 } } },
+          { Cubic: { c1: { x: 26, y: 45 }, c2: { x: 26, y: 20 }, to: { x: 50, y: 20 } } } ],
+        closed: true } } }
+    ],
+    cut_settings: [
+      { index: 0, name: "Cut", speed_mm_s: 20, power_min: 10, power_max: 80, num_passes: 1, air_assist: true },
+      { index: 1, name: "Score", speed_mm_s: 60, power_min: 5, power_max: 20, num_passes: 1, air_assist: false },
+      { index: 2, name: "Engrave", speed_mm_s: 100, power_min: 0, power_max: 40, num_passes: 1, air_assist: false }
+    ]
+  });
+  const MOTION = JSON.stringify({ max_speed_mm_s: 300, accel_mm_s2: 3000, accel_to_decel_mm_s2: 1500 });
+
+  const $ = (id) => document.getElementById(id);
+  const flavor = () => $("flavor").value;
+
+  function render() {
+    try {
+      $("preview").innerHTML = preview_svg(PROJECT);
+      $("gcode").textContent = generate_gcode(PROJECT, MOTION, flavor());
+      const secs = estimate_seconds(PROJECT, MOTION);
+      const m = Math.floor(secs / 60), s = (secs - m * 60).toFixed(1);
+      $("est").innerHTML = `Est. <b>${m}m ${s}s</b>`;
+      const bytes = generate_galvo_lmc(PROJECT, 110, 16, 30, 100, 2048);
+      $("lmcLen").textContent = `${bytes.length} bytes (${bytes.length / 12} commands)`;
+      const head = Array.from(bytes.slice(0, 6)).map(b => b.toString(16).padStart(2, "0")).join(" ");
+      $("lmcHead").textContent = head;
+      $("status").textContent = "Ready.";
+    } catch (e) {
+      $("gcode").innerHTML = `<span class="err">${e}</span>`;
+      $("status").textContent = "Error.";
+    }
+  }
+
+  function frame() {
+    try {
+      $("gcode").textContent = generate_frame(PROJECT, "hull", flavor());
+      document.querySelector('.tabs button[data-tab="gcode"]').click();
+    } catch (e) { $("gcode").innerHTML = `<span class="err">${e}</span>`; }
+  }
+
+  document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    for (const t of ["gcode", "galvo", "about"]) $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab);
+  }));
+  $("genBtn").addEventListener("click", render);
+  $("frameBtn").addEventListener("click", frame);
+  $("flavor").addEventListener("change", render);
+
+  init().then(() => {
+    $("wasmok").textContent = "WASM ready";
+    $("status").textContent = "Ready.";
+    render();
+  }).catch(e => { $("status").innerHTML = `<span class="err">Failed to load WASM: ${e}</span>`; });
+</script>
+</body>
+</html>

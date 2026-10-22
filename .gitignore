@@ -14,3 +14,6 @@ Thumbs.db
 
 # Demo preview artifacts (not source)
 /preview/
+
+# Generated wasm bindings for the web app
+web/pkg/
