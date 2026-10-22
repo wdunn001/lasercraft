@@ -512,6 +512,66 @@ pub struct IoPort {
     pub active_high: bool,
 }
 
+/// The camera capture backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CaptureSystem {
+    /// The compatibility fallback capture path.
+    Fallback,
+    /// The recommended native capture path.
+    #[default]
+    Recommended,
+}
+
+/// Camera lens description and distortion model.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CameraLens {
+    /// The lens kind, for example `standard` or `fisheye`.
+    pub kind: String,
+    /// Radial and tangential distortion coefficients.
+    #[serde(default)]
+    pub distortion: Vec<f64>,
+}
+
+/// Camera-to-bed alignment from calibration markers.
+///
+/// The marker pixel positions and their known bed positions define the perspective
+/// map from camera image to work coordinates. Pairing them per device means each
+/// machine keeps its own alignment, which is the improvement over a single app-wide
+/// camera.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CameraAlignment {
+    /// Marker positions in camera pixels.
+    pub markers_px: Vec<[f64; 2]>,
+    /// The same markers in bed millimetres.
+    pub markers_mm: Vec<[f64; 2]>,
+}
+
+/// A per-device camera for overlay and alignment.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CameraConfig {
+    /// The camera device name or identifier.
+    pub device_name: String,
+    /// The capture resolution in pixels.
+    pub resolution_px: [u32; 2],
+    /// The capture backend.
+    #[serde(default)]
+    pub capture_system: CaptureSystem,
+    /// The default capture frame rate.
+    #[serde(default = "default_fps")]
+    pub default_fps: f64,
+    /// The lens model, when calibrated.
+    #[serde(default)]
+    pub lens: Option<CameraLens>,
+    /// The bed alignment, when calibrated.
+    #[serde(default)]
+    pub alignment: Option<CameraAlignment>,
+}
+
+fn default_fps() -> f64 {
+    20.0
+}
+
 /// A device profile: everything needed to drive one machine.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceProfile {
@@ -545,6 +605,9 @@ pub struct DeviceProfile {
     /// Configurable input and output ports.
     #[serde(default)]
     pub io_ports: Vec<IoPort>,
+    /// A per-device camera for overlay and alignment, when fitted.
+    #[serde(default)]
+    pub camera: Option<CameraConfig>,
 }
 
 impl DeviceProfile {
@@ -680,6 +743,7 @@ mod tests {
             rotary: None,
             extra_axes: Vec::new(),
             io_ports: Vec::new(),
+            camera: None,
         };
         set.insert(custom);
         assert_eq!(
@@ -721,6 +785,7 @@ mod tests {
                 pin: 2,
                 active_high: true,
             }],
+            camera: None,
         };
         let json = serde_json::to_string(&profile).unwrap_or_default();
         let back: Result<DeviceProfile, _> = serde_json::from_str(&json);
@@ -745,6 +810,39 @@ mod tests {
             assert_eq!(galvo.galvo1.scale_percent, 100.0);
             assert_eq!(galvo.delays.laser_on_tc_us, -300.0);
             assert!(galvo.fiber.is_none());
+        }
+    }
+
+    #[test]
+    fn per_device_camera_round_trips() {
+        let json = r#"{
+            "id": "fiber-cam",
+            "display_name": "Fiber with camera",
+            "controller": "EzCad2",
+            "transport": "Usb",
+            "work_area_mm": [150.0, 150.0],
+            "max_speed_mm_s": 7000.0,
+            "camera": {
+                "device_name": "ComMarker Overlay Cam",
+                "resolution_px": [1920, 1080],
+                "alignment": {
+                    "markers_px": [[10.0, 10.0], [1900.0, 20.0]],
+                    "markers_mm": [[0.0, 0.0], [150.0, 0.0]]
+                }
+            }
+        }"#;
+        let profile: Result<DeviceProfile, _> = serde_json::from_str(json);
+        assert!(profile.is_ok());
+        if let Ok(profile) = profile {
+            let camera = profile.camera;
+            assert!(camera.is_some());
+            if let Some(camera) = camera {
+                assert_eq!(camera.resolution_px, [1920, 1080]);
+                // Capture system and fps default when absent.
+                assert_eq!(camera.capture_system, CaptureSystem::Recommended);
+                assert_eq!(camera.default_fps, 20.0);
+                assert_eq!(camera.alignment.map(|a| a.markers_mm.len()), Some(2));
+            }
         }
     }
 
