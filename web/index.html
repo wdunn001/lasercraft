@@ -8,160 +8,501 @@
   :root {
     --bg: #0c0d11; --panel: #1c1f26; --panel2: #232732; --line: #2e3340;
     --ink: #e8eaf0; --muted: #8b93a7; --faint: #626a7e; --accent: #ff5a3c;
-    --field: #11131a; --ok: #28c08a;
+    --field: #11131a; --ok: #28c08a; --sel: #3b82f6; --bed: #0a0b0f;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
-  header { display: flex; align-items: center; gap: 14px; padding: 13px 20px; background: var(--panel2); border-bottom: 1px solid var(--line); }
-  header .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
-  header h1 { font-size: 17px; font-weight: 600; letter-spacing: .01em; }
-  header .tag { font-size: 12px; color: var(--muted); background: var(--field); border: 1px solid var(--line); padding: 3px 10px; border-radius: 20px; }
-  header .spacer { flex: 1; }
-  .ctrl { display: flex; align-items: center; gap: 8px; }
-  select, button { font: inherit; font-size: 13px; border-radius: 7px; border: 1px solid var(--line); background: var(--field); color: var(--ink); padding: 8px 12px; cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  button:disabled { opacity: .5; cursor: default; }
-  .est { font-size: 12px; color: var(--muted); }
-  .est b { color: var(--ink); }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; }
 
-  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); overflow: hidden; }
-  .pane { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
-  .pane h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 12px 18px 8px; }
-  .preview { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: auto; }
-  .preview svg { max-width: 100%; max-height: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0a0b0f; }
+  /* menu + toolbar */
+  .menubar { display: flex; align-items: center; gap: 2px; padding: 6px 12px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+  .menubar .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; margin-right: 14px; }
+  .menubar .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .menubar .m { padding: 5px 10px; color: var(--muted); border-radius: 6px; cursor: pointer; position: relative; }
+  .menubar .m:hover { background: var(--field); color: var(--ink); }
+  .menubar .spacer { flex: 1; }
+  .dropdown { position: absolute; top: 100%; left: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px; min-width: 190px; z-index: 50; box-shadow: 0 16px 40px rgba(0,0,0,.6); display: none; }
+  .menubar .m.open .dropdown { display: block; }
+  .dropdown div { padding: 7px 11px; border-radius: 6px; color: var(--ink); font-weight: 400; }
+  .dropdown div:hover { background: var(--accent); color: #fff; }
+  select, input { font: inherit; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; }
+  .btn { font: inherit; border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 7px; padding: 7px 13px; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.ok { color: var(--ok); }
 
-  .tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid var(--line); }
-  .tabs button { border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); padding: 9px 14px; border-radius: 0; }
-  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
-  .tabbody { flex: 1; overflow: auto; padding: 16px 18px; }
-  pre { font-family: "Cascadia Code", "SF Mono", Consolas, monospace; font-size: 12px; line-height: 1.55; color: #cdd3e0; white-space: pre; }
-  .info-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-  .info-row span:first-child { color: var(--muted); }
-  .info-row b { font-variant-numeric: tabular-nums; }
-  .hidden { display: none; }
-  .err { color: var(--accent); font-size: 13px; }
-  footer { padding: 8px 20px; background: var(--panel2); border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); display: flex; gap: 16px; }
-  footer .ok { color: var(--ok); }
+  /* workspace grid */
+  .work { flex: 1; display: grid; grid-template-columns: 54px 1fr 340px; grid-template-rows: 1fr; min-height: 0; }
+  .tools { background: var(--panel2); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; }
+  .tool { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); border: 1px solid transparent; }
+  .tool:hover { background: var(--field); color: var(--ink); }
+  .tool.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tool svg { width: 20px; height: 20px; }
+
+  .canvas-wrap { position: relative; background: #060709; overflow: hidden; }
+  #canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+  #canvas.select { cursor: default; }
+  .readout { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; background: rgba(0,0,0,.4); padding: 3px 8px; border-radius: 5px; }
+  .zoomctl { position: absolute; right: 10px; bottom: 8px; display: flex; gap: 4px; }
+  .zoomctl .btn { padding: 4px 9px; font-size: 12px; }
+
+  /* right dock */
+  .dock { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .dock .section { border-bottom: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .dock h3 { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); padding: 11px 14px 7px; display: flex; align-items: center; }
+  .dock h3 .mini { margin-left: auto; display: flex; gap: 4px; }
+  .dock h3 .mini span { width: 22px; height: 22px; border: 1px solid var(--line); background: var(--field); border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; font-size: 12px; }
+
+  /* layers */
+  .cols { display: grid; grid-template-columns: 46px 1fr 96px 34px 34px; padding: 5px 14px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+  .cols span:nth-child(n+4) { text-align: center; }
+  .layers { overflow-y: auto; max-height: 190px; }
+  .row { display: grid; grid-template-columns: 46px 1fr 96px 34px 34px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); cursor: pointer; position: relative; }
+  .row.sel { background: #223046; }
+  .row.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--sel); }
+  .lyr { display: flex; align-items: center; gap: 8px; }
+  .lyr .sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(255,255,255,.15); }
+  .lyr .n { font-weight: 600; }
+  .badge { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); justify-self: start; }
+  .badge.line { color: #7fd1ff; background: #16222e; }
+  .badge.fill { color: #ffb27f; background: #2a2016; }
+  .badge.img { color: #c79bff; background: #241a2e; }
+  .sp { font-size: 12px; } .sp .pw { color: var(--muted); }
+  .sw-toggle { width: 28px; height: 16px; border-radius: 8px; background: var(--ok); position: relative; justify-self: center; cursor: pointer; }
+  .sw-toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .sw-toggle.off { background: #3a3f4c; } .sw-toggle.off::after { left: 2px; right: auto; }
+
+  /* laser/output section */
+  .out { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+  .out .devrow { display: flex; gap: 8px; }
+  .out .devrow select { flex: 1; }
+  .out .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .gcode { flex: 1; min-height: 80px; overflow: auto; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .gcode pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; line-height: 1.5; color: #cdd3e0; white-space: pre; }
+  .stat { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); }
+  .stat b { color: var(--ink); }
+
+  /* bottom palette bar */
+  .palette { display: flex; align-items: center; gap: 3px; padding: 6px 10px; background: var(--panel2); border-top: 1px solid var(--line); overflow-x: auto; }
+  .palette .sw { width: 24px; height: 20px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; flex: 0 0 auto; }
+  .palette .sw.active { border-color: #fff; }
+  .palette .lbl { color: var(--faint); font-size: 11px; margin-right: 8px; }
+
+  /* modal cut-settings editor */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-bg.show { display: flex; }
+  .modal { width: 720px; max-height: 90vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 30px 70px rgba(0,0,0,.7); }
+  .modal .mhead { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+  .modal .mhead h2 { font-size: 15px; } .modal .mhead .spacer { flex: 1; }
+  .modal .mbody { padding: 18px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+  .seg button { flex: 1; padding: 9px 0; background: transparent; border: none; border-right: 1px solid var(--line); color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .seg .aka { display: block; font-size: 9px; font-weight: 400; opacity: .7; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px 16px; }
+  .f label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+  .f .aka { display: block; font-size: 9.5px; color: var(--faint); margin-bottom: 5px; }
+  .f input { width: 100%; }
+  .tabrow { display: flex; gap: 4px; margin: 18px 0 0; border-bottom: 1px solid var(--line); }
+  .tabrow button { padding: 9px 15px; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+  .tabrow button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .mfoot { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }
+  .mfoot .spacer { flex: 1; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
-  <header>
-    <span class="dot"></span>
-    <h1>LaserCraft</h1>
-    <span class="tag">running in your browser &middot; WebAssembly</span>
+  <div class="menubar">
+    <span class="brand"><span class="dot"></span>LaserCraft</span>
+    <span class="m" data-menu="file">File
+      <div class="dropdown">
+        <div data-act="new">New</div>
+        <div data-act="import">Import SVG&hellip;</div>
+        <div data-act="export">Export GCode&hellip;</div>
+      </div>
+    </span>
+    <span class="m" data-menu="edit">Edit
+      <div class="dropdown"><div data-act="delete">Delete selected</div><div data-act="dupe">Duplicate</div></div>
+    </span>
     <span class="spacer"></span>
-    <div class="ctrl">
-      <span class="est" id="est">&nbsp;</span>
-      <select id="flavor" title="Controller">
-        <option value="grbl">GRBL</option>
-        <option value="grbl-m3">GRBL M3</option>
-        <option value="marlin">Marlin</option>
-        <option value="smoothie">Smoothie</option>
-      </select>
-      <button id="frameBtn">Frame</button>
-      <button id="genBtn" class="primary">Generate</button>
+    <span class="stat" style="margin-right:14px"><span>Est. <b id="est">&mdash;</b></span></span>
+    <span class="btn ok" id="wasmok" style="margin-right:8px">loading&hellip;</span>
+    <button class="btn" id="frameBtn">Frame</button>
+    <button class="btn primary" id="genBtn">Generate</button>
+    <input type="file" id="file" accept=".svg" class="hidden" />
+  </div>
+
+  <div class="work">
+    <div class="tools" id="tools"></div>
+
+    <div class="canvas-wrap">
+      <svg id="canvas"></svg>
+      <div class="readout" id="readout">x 0.0  y 0.0 mm</div>
+      <div class="zoomctl">
+        <button class="btn" data-zoom="out">&minus;</button>
+        <button class="btn" data-zoom="fit">Fit</button>
+        <button class="btn" data-zoom="in">+</button>
+      </div>
     </div>
-  </header>
 
-  <main>
-    <section class="pane">
-      <h2>Preview</h2>
-      <div class="preview" id="preview"></div>
-    </section>
-    <section class="pane">
-      <div class="tabs">
-        <button data-tab="gcode" class="active">GCode</button>
-        <button data-tab="galvo">Galvo (fiber)</button>
-        <button data-tab="about">About</button>
+    <div class="dock">
+      <div class="section">
+        <h3>Cuts / Layers <span class="mini"><span id="layerUp">&#9650;</span><span id="layerDown">&#9660;</span></span></h3>
+        <div class="cols"><span>Layer</span><span>Mode</span><span>Speed / Pwr</span><span>Out</span><span>Show</span></div>
+        <div class="layers" id="layers"></div>
       </div>
-      <div class="tabbody" id="tab-gcode"><pre id="gcode">Click Generate.</pre></div>
-      <div class="tabbody hidden" id="tab-galvo">
-        <div class="info-row"><span>Board</span><b>BJJCZ LMC (EZCAD2 / JCZFiber)</b></div>
-        <div class="info-row"><span>USB identity</span><b>0x9588 : 0x9899</b></div>
-        <div class="info-row"><span>Field</span><b>110 mm, 16-bit</b></div>
-        <div class="info-row"><span>List buffer</span><b id="lmcLen">&mdash;</b></div>
-        <div class="info-row"><span>First command</span><b id="lmcHead">&mdash;</b></div>
-        <p style="margin-top:14px;color:var(--muted);font-size:12.5px">The byte buffer is written to the controller's bulk endpoint over WebUSB. No install, no native helper.</p>
+      <div class="section" style="flex:1">
+        <h3>Laser</h3>
+        <div class="out">
+          <div class="devrow">
+            <select id="flavor">
+              <option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option>
+              <option value="marlin">Marlin</option><option value="smoothie">Smoothie</option>
+              <option value="galvo">EZCAD2 / JCZFiber (galvo)</option>
+            </select>
+            <button class="btn" id="copyBtn">Copy</button>
+          </div>
+          <div class="devrow" id="galvoRow" style="display:none">
+            <button class="btn" id="connectBtn" style="flex:1">Connect galvo (WebUSB)</button>
+            <button class="btn" id="sendBtn" disabled>Send</button>
+          </div>
+          <div class="stat" id="devstat" style="display:none">Galvo not connected. Plug in the board and click Connect.</div>
+          <div class="gcode"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
+          <div class="stat"><span>Lines <b id="lineCount">0</b></span><span>Shapes <b id="shapeCount">0</b></span><span id="galvo"></span></div>
+        </div>
       </div>
-      <div class="tabbody hidden" id="tab-about">
-        <p style="color:var(--muted);font-size:13px;line-height:1.7">This page runs the LaserCraft engine compiled to WebAssembly. The preview, the GCode and the galvo board bytes are all computed in Rust in your browser. The same engine drives the native app. Controllers reach their machines through Web Serial, WebUSB and Web Bluetooth.</p>
-      </div>
-    </section>
-  </main>
+    </div>
+  </div>
 
-  <footer>
-    <span id="status">Loading WebAssembly&hellip;</span>
-    <span class="spacer" style="flex:1"></span>
-    <span class="ok" id="wasmok"></span>
-  </footer>
+  <div class="palette" id="palette"><span class="lbl">Layer</span></div>
+
+  <!-- Cut settings editor -->
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 id="csTitle">Cut Settings</h2><span class="spacer"></span><span class="btn" id="csClose">&times;</span></div>
+      <div class="mbody">
+        <div class="seg" id="csMode"></div>
+        <div class="grid3">
+          <div class="f"><label>Speed</label><span class="aka">LightBurn Speed &middot; EZCAD Mark Speed</span><input id="cs_speed" type="number" step="1"></div>
+          <div class="f"><label>Power</label><span class="aka">LB Max Power &middot; EZCAD Power</span><input id="cs_power" type="number" step="1"></div>
+          <div class="f"><label>Passes</label><span class="aka">LB Number of Passes</span><input id="cs_passes" type="number" step="1"></div>
+          <div class="f"><label>Pulse Frequency</label><span class="aka">LB Frequency</span><input id="cs_freq" type="number" step="0.1"></div>
+          <div class="f"><label>Pulse Width</label><span class="aka">LB Q-Pulse &middot; EZCAD Q Pulse</span><input id="cs_qpulse" type="number" step="1"></div>
+          <div class="f"><label>Min Power</label><span class="aka">LB Min Power</span><input id="cs_pmin" type="number" step="1"></div>
+        </div>
+        <div class="tabrow"><button class="active" data-cstab="cut">Cut</button><button data-cstab="timings">Timings</button></div>
+        <div id="cstab-cut" style="padding-top:14px">
+          <div class="grid3">
+            <div class="f"><label>Line Interval</label><span class="aka">LB Line Interval &middot; EZCAD Line Space</span><input id="cs_interval" type="number" step="0.01"></div>
+            <div class="f"><label>Hatch Angle</label><span class="aka">LB Angle</span><input id="cs_angle" type="number" step="1"></div>
+            <div class="f"><label>Air Assist</label><span class="aka">on / off</span><select id="cs_air"><option value="true">On</option><option value="false">Off</option></select></div>
+          </div>
+        </div>
+        <div id="cstab-timings" class="hidden" style="padding-top:14px">
+          <div class="grid3">
+            <div class="f"><label>Laser On Delay</label><span class="aka">LB Laser On TC (us)</span><input id="cs_onus" type="number" step="1"></div>
+            <div class="f"><label>Laser Off Delay</label><span class="aka">LB Laser Off TC (us)</span><input id="cs_offus" type="number" step="1"></div>
+            <div class="f"><label>Corner Delay</label><span class="aka">LB Polygon TC (us)</span><input id="cs_polyus" type="number" step="1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="mfoot"><button class="btn" id="csReset">Reset layer</button><span class="spacer"></span><button class="btn" id="csCancel">Cancel</button><button class="btn primary" id="csOk">OK</button></div>
+    </div>
+  </div>
 
 <script type="module">
-  import init, { preview_svg, generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc } from "./pkg/lasercraft_wasm.js";
 
-  const PROJECT = JSON.stringify({
-    app_version: "web",
-    shapes: [
-      { kind: "Rect", cut_index: 0, geometry: { Polyline: { points: [
-        { x: 5, y: 5 }, { x: 95, y: 5 }, { x: 95, y: 60 }, { x: 5, y: 60 } ], closed: true } } },
-      { kind: "Path", cut_index: 1, geometry: { Polyline: { points: [
-        { x: 20, y: 15 }, { x: 80, y: 15 }, { x: 50, y: 52 } ], closed: true } } },
-      { kind: "Ellipse", cut_index: 2, geometry: { Path: {
-        start: { x: 50, y: 20 },
-        segments: [
-          { Cubic: { c1: { x: 74, y: 20 }, c2: { x: 74, y: 45 }, to: { x: 50, y: 45 } } },
-          { Cubic: { c1: { x: 26, y: 45 }, c2: { x: 26, y: 20 }, to: { x: 50, y: 20 } } } ],
-        closed: true } } }
+  const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
+  const BED = { w: 150, h: 150 };               // work area in mm
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const $ = id => document.getElementById(id);
+
+  // ---- document model (mirrors the engine's project JSON) ----
+  let doc = {
+    shapes: [],
+    layers: [
+      layer(0, "Cut",     20, 80, "Line"),
+      layer(1, "Score",   60, 20, "Line"),
+      layer(2, "Engrave",100, 40, "Fill"),
     ],
-    cut_settings: [
-      { index: 0, name: "Cut", speed_mm_s: 20, power_min: 10, power_max: 80, num_passes: 1, air_assist: true },
-      { index: 1, name: "Score", speed_mm_s: 60, power_min: 5, power_max: 20, num_passes: 1, air_assist: false },
-      { index: 2, name: "Engrave", speed_mm_s: 100, power_min: 0, power_max: 40, num_passes: 1, air_assist: false }
-    ]
-  });
-  const MOTION = JSON.stringify({ max_speed_mm_s: 300, accel_mm_s2: 3000, accel_to_decel_mm_s2: 1500 });
+  };
+  function layer(i, name, speed, power, mode) {
+    return { index: i, name, speed_mm_s: speed, power_min: 0, power_max: power, num_passes: 1,
+      air_assist: i === 0, mode, interval: 0.1, angle: 0, freq: 30, qpulse: 200,
+      on_us: -300, off_us: 100, poly_us: 100 };
+  }
+  let activeLayer = 0, tool = "select", selected = null, view = { s: 3.2, x: 40, y: 40 };
 
-  const $ = (id) => document.getElementById(id);
-  const flavor = () => $("flavor").value;
+  // seed a couple of shapes so it is not empty
+  doc.shapes.push(rect(10, 10, 90, 55, 0));
+  doc.shapes.push(poly([[25,22],[75,22],[50,48]], true, 1));
+
+  function rect(x, y, w, h, cut) { return { kind: "Rect", cut_index: cut, geometry: { Polyline: { points: [p(x,y),p(x+w,y),p(x+w,y+h),p(x,y+h)], closed: true } } }; }
+  function poly(pts, closed, cut) { return { kind: "Path", cut_index: cut, geometry: { Polyline: { points: pts.map(a=>p(a[0],a[1])), closed } } }; }
+  function ellipse(cx, cy, rx, ry, cut) {
+    const pts = []; for (let i=0;i<64;i++){ const t=i/64*Math.PI*2; pts.push(p(cx+rx*Math.cos(t), cy+ry*Math.sin(t))); }
+    return { kind: "Ellipse", cut_index: cut, geometry: { Polyline: { points: pts, closed: true } } };
+  }
+  function p(x,y){ return { x:+x.toFixed(3), y:+y.toFixed(3) }; }
+
+  // ---- toolbar ----
+  const TOOLS = [
+    ["select","M4 2l9 16 2-7 7-2z"],
+    ["rect","M3 5h18v14H3z"],
+    ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"],
+    ["poly","M12 3l9 7-3 11H6L3 10z"],
+    ["line","M4 20L20 4"],
+  ];
+  const toolsEl = $("tools");
+  for (const [name, d] of TOOLS) {
+    const el = document.createElement("div");
+    el.className = "tool" + (name===tool?" active":"");
+    el.dataset.tool = name;
+    el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${d}"/></svg>`;
+    el.title = name;
+    el.onclick = () => { tool = name; document.querySelectorAll(".tool").forEach(t=>t.classList.toggle("active", t.dataset.tool===name)); $("canvas").classList.toggle("select", name==="select"); };
+    toolsEl.appendChild(el);
+  }
+
+  // ---- canvas ----
+  const canvas = $("canvas");
+  function mm2px(pt){ return { x: pt.x*view.s + view.x, y: (BED.h-pt.y)*view.s + view.y }; }
+  function px2mm(cx, cy){ const r = canvas.getBoundingClientRect(); const x=(cx-r.left-view.x)/view.s; const y=BED.h-(cy-r.top-view.y)/view.s; return { x, y }; }
 
   function render() {
-    try {
-      $("preview").innerHTML = preview_svg(PROJECT);
-      $("gcode").textContent = generate_gcode(PROJECT, MOTION, flavor());
-      const secs = estimate_seconds(PROJECT, MOTION);
-      const m = Math.floor(secs / 60), s = (secs - m * 60).toFixed(1);
-      $("est").innerHTML = `Est. <b>${m}m ${s}s</b>`;
-      const bytes = generate_galvo_lmc(PROJECT, 110, 16, 30, 100, 2048);
-      $("lmcLen").textContent = `${bytes.length} bytes (${bytes.length / 12} commands)`;
-      const head = Array.from(bytes.slice(0, 6)).map(b => b.toString(16).padStart(2, "0")).join(" ");
-      $("lmcHead").textContent = head;
-      $("status").textContent = "Ready.";
-    } catch (e) {
-      $("gcode").innerHTML = `<span class="err">${e}</span>`;
-      $("status").textContent = "Error.";
+    const r = canvas.getBoundingClientRect();
+    let s = `<rect x="0" y="0" width="${r.width}" height="${r.height}" fill="#060709"/>`;
+    // bed
+    const o = mm2px(p(0,0)), far = mm2px(p(BED.w,BED.h));
+    s += `<rect x="${far.x}" y="${far.y}" width="${(BED.w)*view.s}" height="${(BED.h)*view.s}" fill="var(--bed)" stroke="#2e3340"/>`;
+    // grid every 10mm
+    for (let g=0; g<=BED.w; g+=10){ const a=mm2px(p(g,0)), b=mm2px(p(g,BED.h)); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#171a22"/>`; }
+    for (let g=0; g<=BED.h; g+=10){ const a=mm2px(p(0,g)), b=mm2px(p(BED.w,g)); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#171a22"/>`; }
+    // origin marker
+    s += `<circle cx="${o.x}" cy="${o.y}" r="4" fill="#28c08a"/>`;
+    // shapes
+    doc.shapes.forEach((sh, i) => {
+      const col = PALETTE[(sh.cut_index)%PALETTE.length];
+      const pts = shapePoints(sh).map(mm2px);
+      if (!pts.length) return;
+      const closed = sh.geometry.Polyline ? sh.geometry.Polyline.closed : true;
+      let dd = pts.map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ") + (closed?" Z":"");
+      const selAttr = (selected===i) ? ` stroke-dasharray="none" stroke-width="2.5"` : ` stroke-width="1.6"`;
+      s += `<path d="${dd}" fill="none" stroke="${col}"${selAttr}/>`;
+      if (selected===i) {
+        const bb = bbox(sh);
+        const a=mm2px(p(bb.x0,bb.y1)), b=mm2px(p(bb.x1,bb.y0));
+        s += `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="#3b82f6" stroke-dasharray="4 3"/>`;
+      }
+    });
+    if (drawing) s += drawing;
+    canvas.innerHTML = s;
+  }
+  function shapePoints(sh){ return sh.geometry.Polyline ? sh.geometry.Polyline.points : []; }
+  function bbox(sh){ const pts = shapePoints(sh); let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const q of pts){x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);} return {x0,y0,x1,y1}; }
+
+  // ---- interaction ----
+  let drawing = null, start = null, dragShape = null, dragOff = null;
+  canvas.addEventListener("mousedown", e => {
+    const m = px2mm(e.clientX, e.clientY); start = m;
+    if (tool === "select") {
+      selected = hitTest(m); dragShape = selected;
+      if (selected!=null){ const bb=bbox(doc.shapes[selected]); dragOff = { x: m.x-bb.x0, y: m.y-bb.y0 }; }
+      render();
     }
+  });
+  canvas.addEventListener("mousemove", e => {
+    const m = px2mm(e.clientX, e.clientY);
+    $("readout").textContent = `x ${m.x.toFixed(1)}  y ${m.y.toFixed(1)} mm`;
+    if (!start) return;
+    if (tool==="select" && dragShape!=null){ moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y); render(); return; }
+    if (tool==="rect" || tool==="ellipse"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=PALETTE[activeLayer%PALETTE.length];
+      drawing = tool==="rect" ? `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`
+        : `<ellipse cx="${(a.x+b.x)/2}" cy="${(a.y+b.y)/2}" rx="${Math.abs(b.x-a.x)/2}" ry="${Math.abs(b.y-a.y)/2}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`;
+      render(); }
+  });
+  window.addEventListener("mouseup", e => {
+    if (!start){ return; }
+    const m = px2mm(e.clientX, e.clientY);
+    if (tool==="rect" && Math.abs(m.x-start.x)>1){ doc.shapes.push(rect(Math.min(start.x,m.x),Math.min(start.y,m.y),Math.abs(m.x-start.x),Math.abs(m.y-start.y),doc.layers[activeLayer].index)); selected=doc.shapes.length-1; }
+    else if (tool==="ellipse" && Math.abs(m.x-start.x)>1){ doc.shapes.push(ellipse((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,doc.layers[activeLayer].index)); selected=doc.shapes.length-1; }
+    start=null; drawing=null; dragShape=null; render(); refreshCounts();
+  });
+  function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
+  function moveShapeTo(i, nx, ny){ const sh=doc.shapes[i]; const bb=bbox(sh); const dx=nx-bb.x0, dy=ny-bb.y0; for (const q of shapePoints(sh)){ q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); } }
+
+  // zoom
+  document.querySelectorAll("[data-zoom]").forEach(b => b.onclick = () => {
+    if (b.dataset.zoom==="in") view.s*=1.2; else if (b.dataset.zoom==="out") view.s/=1.2; else fit(); render();
+  });
+  function fit(){ const r=canvas.getBoundingClientRect(); view.s=Math.min(r.width/(BED.w*1.15), r.height/(BED.h*1.15)); view.x=(r.width-BED.w*view.s)/2; view.y=(r.height-BED.h*view.s)/2; }
+  canvas.addEventListener("wheel", e => { e.preventDefault(); const f=e.deltaY<0?1.1:1/1.1; view.s*=f; render(); }, { passive:false });
+
+  // ---- layers panel ----
+  function renderLayers(){
+    const host=$("layers"); host.innerHTML="";
+    doc.layers.forEach((L,i)=>{
+      const col=PALETTE[L.index%PALETTE.length];
+      const cls = L.mode==="Fill"?"fill":(L.mode==="Image"?"img":"line");
+      const el=document.createElement("div"); el.className="row"+(i===activeLayer?" sel":"");
+      el.innerHTML=`<div class="lyr"><span class="sw" style="background:${col}"></span><span class="n">${String(L.index).padStart(2,"0")}</span></div>`
+        +`<span class="badge ${cls}">${L.mode}</span>`
+        +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`
+        +`<span class="sw-toggle"></span><span class="sw-toggle"></span>`;
+      el.onclick=()=>{ activeLayer=i; renderLayers(); renderPalette(); };
+      el.ondblclick=()=>openCutSettings(i);
+      host.appendChild(el);
+    });
+    $("shapeCount").textContent=doc.shapes.length;
+  }
+  function renderPalette(){
+    const host=$("palette"); host.querySelectorAll(".sw").forEach(n=>n.remove());
+    doc.layers.forEach((L,i)=>{ const sw=document.createElement("span"); sw.className="sw"+(i===activeLayer?" active":""); sw.style.background=PALETTE[L.index%PALETTE.length]; sw.title=L.name; sw.onclick=()=>{activeLayer=i;renderLayers();renderPalette();}; host.appendChild(sw); });
   }
 
-  function frame() {
+  // ---- cut settings modal ----
+  let editing=0;
+  const MODES=[["Line","outline"],["Fill","hatch"],["Concentric","offset"],["Image","bitmap"]];
+  function openCutSettings(i){
+    editing=i; const L=doc.layers[i];
+    $("csTitle").textContent=`Cut Settings — Layer ${String(L.index).padStart(2,"0")} (${L.name})`;
+    const seg=$("csMode"); seg.innerHTML="";
+    MODES.forEach(([m,aka])=>{ const b=document.createElement("button"); b.className=(L.mode===m?"active":""); b.innerHTML=`${m}<span class="aka">${aka}</span>`; b.onclick=()=>{ seg.querySelectorAll("button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); L._mode=m; }; seg.appendChild(b); });
+    L._mode=L.mode;
+    $("cs_speed").value=L.speed_mm_s; $("cs_power").value=L.power_max; $("cs_passes").value=L.num_passes;
+    $("cs_freq").value=L.freq; $("cs_qpulse").value=L.qpulse; $("cs_pmin").value=L.power_min;
+    $("cs_interval").value=L.interval; $("cs_angle").value=L.angle; $("cs_air").value=String(L.air_assist);
+    $("cs_onus").value=L.on_us; $("cs_offus").value=L.off_us; $("cs_polyus").value=L.poly_us;
+    $("modalBg").classList.add("show");
+  }
+  function closeCS(){ $("modalBg").classList.remove("show"); }
+  $("csClose").onclick=$("csCancel").onclick=closeCS;
+  document.querySelectorAll("[data-cstab]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-cstab]").forEach(x=>x.classList.toggle("active",x===b)); $("cstab-cut").classList.toggle("hidden",b.dataset.cstab!=="cut"); $("cstab-timings").classList.toggle("hidden",b.dataset.cstab!=="timings"); });
+  $("csOk").onclick=()=>{ const L=doc.layers[editing]; L.mode=L._mode||L.mode; L.speed_mm_s=+$("cs_speed").value; L.power_max=+$("cs_power").value; L.num_passes=+$("cs_passes").value; L.freq=+$("cs_freq").value; L.qpulse=+$("cs_qpulse").value; L.power_min=+$("cs_pmin").value; L.interval=+$("cs_interval").value; L.angle=+$("cs_angle").value; L.air_assist=$("cs_air").value==="true"; L.on_us=+$("cs_onus").value; L.off_us=+$("cs_offus").value; L.poly_us=+$("cs_polyus").value; closeCS(); renderLayers(); render(); generate(); };
+
+  // ---- export to engine project JSON ----
+  function toProject(){
+    return {
+      app_version: "web",
+      shapes: doc.shapes,
+      cut_settings: doc.layers.map(L=>({
+        index:L.index, name:L.name, speed_mm_s:L.speed_mm_s, power_min:L.power_min, power_max:L.power_max,
+        num_passes:L.num_passes, air_assist:L.air_assist,
+        galvo: { mode:L.mode, frequency_khz:L.freq, q_pulse_width_ns:L.qpulse, global_passes:1,
+          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:0, auto_rotate:false, dot_width_adjust:false, dot_width_mm:0.08, ramp_length_mm:0, ramp_outer_edge:false },
+          line:{ kerf_offset_mm:0, perforation:false, perforation_cut_mm:0.1, perforation_skip_mm:0.1 },
+          tabs:{ enabled:false, automatic:true, size_mm:0.5, spacing_mm:50, tabs_per_shape:1, skip_inner_shapes:false, cut_power_pct:0 },
+          wobble:{ enabled:false, step_mm:0.05, size_mm:0.1 },
+          timing_override:{ jump_speed_mm_s:4000, min_jump_delay_us:500, max_jump_delay_us:500, jump_distance_limit_mm:0, laser_on_tc_us:L.on_us, laser_off_tc_us:L.off_us, end_tc_us:300, polygon_tc_us:L.poly_us, pause_before_ms:0, pause_after_ms:0 } },
+      })),
+    };
+  }
+  const MOTION = JSON.stringify({ max_speed_mm_s: 300, accel_mm_s2: 3000, accel_to_decel_mm_s2: 1500 });
+
+  let ready=false;
+  function generate(){
+    if (!ready) return;
     try {
-      $("gcode").textContent = generate_frame(PROJECT, "hull", flavor());
-      document.querySelector('.tabs button[data-tab="gcode"]').click();
-    } catch (e) { $("gcode").innerHTML = `<span class="err">${e}</span>`; }
+      const pj = JSON.stringify(toProject());
+      const secs = estimate_seconds(pj, MOTION); const mm=Math.floor(secs/60), ss=(secs-mm*60).toFixed(1);
+      $("est").textContent = `${mm}m ${ss}s`;
+      const bytes = generate_galvo_lmc(pj, 110, 16, 30, 100, 2048);
+      $("galvo").innerHTML = `Galvo <b>${bytes.length}</b> B`;
+      if (isGalvo()) {
+        $("gcode").textContent =
+          `; BJJCZ LMC galvo list buffer — EZCAD2 / JCZFiber\n`+
+          `; USB 0x9588:0x9899, 12-byte commands, written to the bulk OUT endpoint\n`+
+          `; ${bytes.length} bytes = ${bytes.length/12} commands\n`+
+          `; first command: ${hex(bytes.slice(0,12))}\n`+
+          `;\n; Connect the board over WebUSB (button above) and Send to write it.\n`;
+        $("lineCount").textContent = bytes.length/12;
+      } else {
+        const g = generate_gcode(pj, MOTION, $("flavor").value);
+        $("gcode").textContent = g;
+        $("lineCount").textContent = g.split("\n").length;
+      }
+    } catch(e){ $("gcode").textContent = String(e); }
+  }
+  function refreshCounts(){ renderLayers(); generate(); }
+
+  $("genBtn").onclick = generate;
+  $("frameBtn").onclick = () => { if(!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":$("flavor").value); } catch(e){ $("gcode").textContent=String(e); } };
+  $("flavor").onchange = () => { const g=isGalvo(); $("galvoRow").style.display=g?"flex":"none"; $("devstat").style.display=g?"flex":"none"; generate(); };
+  $("copyBtn").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("gcode").textContent);
+
+  // ---- galvo output + real WebUSB connection ----
+  function isGalvo(){ return $("flavor").value==="galvo"; }
+  function galvoBytes(){ return generate_galvo_lmc(JSON.stringify(toProject()), 110, 16, 30, 100, 2048); }
+  function hex(a){ return Array.from(a).map(b=>b.toString(16).padStart(2,"0")).join(" "); }
+
+  const USB = { dev:null, ep:2 };
+  function setDev(msg){ $("devstat").textContent = msg; }
+  async function connectGalvo(){
+    if (!("usb" in navigator)) { setDev("WebUSB is not available. Use Chrome or Edge over HTTPS."); return; }
+    try {
+      const dev = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x9588 }] });
+      await dev.open();
+      if (dev.configuration === null) await dev.selectConfiguration(1);
+      const itf = dev.configuration.interfaces[0];
+      await dev.claimInterface(itf.interfaceNumber);
+      let epOut = 2;
+      for (const alt of itf.alternates) for (const e of alt.endpoints) if (e.direction === "out" && e.type === "bulk") epOut = e.endpointNumber;
+      USB.dev = dev; USB.ep = epOut;
+      $("sendBtn").disabled = false;
+      $("connectBtn").textContent = "Connected";
+      setDev(`Connected: ${dev.productName || "BJJCZ galvo"} (vendor 0x9588, bulk OUT EP ${epOut}).`);
+    } catch (e) { setDev("Connect cancelled or failed: " + e.message + (e.message.includes("No device")?"":" — on Windows the board may need the WinUSB driver (Zadig).")); }
+  }
+  async function sendGalvo(){
+    if (!USB.dev) { setDev("Connect the galvo first."); return; }
+    try {
+      const bytes = galvoBytes();
+      const res = await USB.dev.transferOut(USB.ep, bytes);
+      setDev(`Sent ${res.bytesWritten} bytes (the list buffer) to the galvo. Note: this writes the mark list only. The full init and execute handshake is not hardware-verified yet.`);
+    } catch (e) { setDev("Send failed: " + e.message); }
+  }
+  $("connectBtn") && ($("connectBtn").onclick = connectGalvo);
+  $("sendBtn") && ($("sendBtn").onclick = sendGalvo);
+
+  // menus
+  document.querySelectorAll(".menubar .m").forEach(m => m.onclick = e => { if (e.target.dataset.act) return; document.querySelectorAll(".menubar .m").forEach(x=>x.classList.toggle("open", x===m && !m.classList.contains("open"))); e.stopPropagation(); });
+  document.addEventListener("click", ()=>document.querySelectorAll(".menubar .m").forEach(x=>x.classList.remove("open")));
+  document.querySelectorAll(".dropdown div").forEach(d => d.onclick = () => {
+    const a=d.dataset.act;
+    if (a==="new"){ doc.shapes=[]; selected=null; }
+    else if (a==="delete" && selected!=null){ doc.shapes.splice(selected,1); selected=null; }
+    else if (a==="dupe" && selected!=null){ const c=JSON.parse(JSON.stringify(doc.shapes[selected])); moveShapeTo2(c,5,5); doc.shapes.push(c); selected=doc.shapes.length-1; }
+    else if (a==="import"){ $("file").click(); }
+    else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
+    render(); refreshCounts();
+  });
+  function moveShapeTo2(sh,dx,dy){ for(const q of shapePoints(sh)){ q.x+=dx; q.y+=dy; } }
+
+  // keyboard
+  window.addEventListener("keydown", e => { if ((e.key==="Delete"||e.key==="Backspace") && selected!=null && !/INPUT/.test(document.activeElement.tagName)){ doc.shapes.splice(selected,1); selected=null; render(); refreshCounts(); } });
+
+  // SVG import (basic: rect, circle, ellipse, polygon, polyline, path M/L/C/Z)
+  $("file").onchange = ev => {
+    const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
+    rd.onload = () => { try { importSvg(rd.result); render(); refreshCounts(); } catch(e){ console.error(e); } };
+    rd.readAsText(f);
+  };
+  function importSvg(text){
+    const d=new DOMParser().parseFromString(text,"image/svg+xml"); const cut=doc.layers[activeLayer].index;
+    d.querySelectorAll("rect").forEach(r=>doc.shapes.push(rect(+r.getAttribute("x")||0,+r.getAttribute("y")||0,+r.getAttribute("width")||0,+r.getAttribute("height")||0,cut)));
+    d.querySelectorAll("circle").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("r")||0,+c.getAttribute("r")||0,cut)));
+    d.querySelectorAll("ellipse").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("rx")||0,+c.getAttribute("ry")||0,cut)));
+    d.querySelectorAll("polygon,polyline").forEach(pl=>{ const pts=(pl.getAttribute("points")||"").trim().split(/\s+/).map(s=>s.split(",").map(Number)).filter(a=>a.length===2); if(pts.length) doc.shapes.push(poly(pts, pl.tagName==="polygon", cut)); });
   }
 
-  document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
-    document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    for (const t of ["gcode", "galvo", "about"]) $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab);
-  }));
-  $("genBtn").addEventListener("click", render);
-  $("frameBtn").addEventListener("click", frame);
-  $("flavor").addEventListener("change", render);
+  // boot
+  function layout(){ const r=canvas.getBoundingClientRect(); canvas.setAttribute("viewBox",`0 0 ${r.width} ${r.height}`); render(); }
+  window.addEventListener("resize", layout);
+  renderLayers(); renderPalette(); $("canvas").classList.toggle("select", tool==="select");
+  fit(); layout();
 
-  init().then(() => {
-    $("wasmok").textContent = "WASM ready";
-    $("status").textContent = "Ready.";
-    render();
-  }).catch(e => { $("status").innerHTML = `<span class="err">Failed to load WASM: ${e}</span>`; });
+  init().then(()=>{ ready=true; $("wasmok").textContent="WASM ready"; generate(); }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
 </html>
