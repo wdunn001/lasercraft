@@ -143,6 +143,27 @@ impl GCodeDialect {
         }
     }
 
+    /// GRBL-LPC, the GRBL port for LPC1768 boards. It runs GRBL firmware, so it
+    /// speaks the same dynamic-power `M4` mode with `S` scaled to 1000.
+    pub fn grbl_lpc() -> Self {
+        Self {
+            flavor: Flavor::Grbl,
+            laser_mode: "M4 S0",
+            power: PowerStyle::IntScale(1000),
+        }
+    }
+
+    /// LinuxCNC, `M3`/`M5` with `S` scaled to 1000, LightBurn's default S-value
+    /// maximum for this controller. A machine whose configured maximum differs
+    /// sets its own scale in the device profile.
+    pub fn linuxcnc() -> Self {
+        Self {
+            flavor: Flavor::LinuxCnc,
+            laser_mode: "M3 S0",
+            power: PowerStyle::IntScale(1000),
+        }
+    }
+
     fn power_word(&self, power: f64) -> String {
         let pct = power.clamp(0.0, 100.0);
         match self.power {
@@ -221,6 +242,25 @@ mod tests {
         let out = program(&GCodeDialect::grbl_m3(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
         assert!(out.starts_with("G90\nG21\nM3 S0\n"));
         assert!(!out.contains("M4"));
+    }
+
+    #[test]
+    fn linuxcnc_scales_power_to_1000() {
+        assert_eq!(
+            GCodeDialect::linuxcnc().emit(&cut_50()),
+            "G1 X10.000 Y5.000 F1200 S500"
+        );
+        let out = program(&GCodeDialect::linuxcnc(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
+        assert!(out.starts_with("G90\nG21\nM3 S0\n"));
+    }
+
+    #[test]
+    fn grbl_lpc_speaks_the_same_gcode_as_grbl() {
+        let ops = [Op::RapidTo { x: 0.0, y: 0.0 }];
+        assert_eq!(
+            program(&GCodeDialect::grbl_lpc(), &ops),
+            program(&GCodeDialect::grbl(), &ops)
+        );
     }
 
     #[test]
