@@ -78,6 +78,12 @@ The xTool path is unusual. It speaks HTTP and a WebSocket status bus, carrying i
 
 The project format is plain XML. The root element is `<LightBurnProject>` and geometry is carried in `<Shape>` elements with attributes such as `Type="Group"` and `CutIndex="0"`. Exported GCode embeds a preview through a `;thumbnail: data:image/png;base64,` comment. Bundled sample projects (`GalvoCalibration.lbrn2`, `alignmenttargets.lbrn`) confirm both extensions. This is parsing work for `craft-laser-doc`, not deep reverse engineering.
 
+## The exe decompile is unblocked on .57
+
+The `LightBurn.exe` snapshot reopen that was killed on the laptop was an out-of-memory on a machine with little free RAM, not a real wall. Re-run on .57, which has 62 GB, the analysis and every snapshot reopen succeed. The decompile toolchain is staged on .57 at `/srv/data/re` (Temurin 21, Ghidra 12.1.4, rea-agents, the snapshot `lightburn.snap`, and `LightBurn.exe`), run through a `node:22-bookworm` container with `_JAVA_OPTIONS=-Xmx24g`. Byte-level RE of the exe is now an on-demand drill-down, not a blocker.
+
+Proof of the path end to end: searching the Ruida transport string, cross-referencing it, and decompiling the referencing function all succeeded on .57. The function `FUN_1405783a0` (evidence in `rea-evidence/decompile-ruida-transport.md`) is LightBurn's controller-connection registry builder. It installs about twenty per-controller factories in sequence, each a `FUN_140xxxxxx` assigned and registered, with the `Ethernet or Wifi/TCP Ruida` label marking the Ruida entry. This confirms the data-driven descriptor model that `craft-device` already reproduces, and it gives the exact Ruida factory addresses to drill into for the byte-level framing when it is needed.
+
 ## What still needs deeper work
 
-Two things remain for a later pass. The byte-level framing of the DSP protocols (Ruida, Trocen, Topwisdom) needs function decompilation. That is currently blocked by the `LightBurn.exe` snapshot reopen being killed on load. The fix is to raise the Ghidra heap or to re-analyze only the address range around a chosen `Protocol_Ruida` method. The second is the cut-settings and material-library schema. That can be read from the XML and the embedded device-profile JSON without the decompiler.
+The DSP byte scramble itself (Ruida, Trocen, Topwisdom) is one or two decompile hops past the registry, down each controller's send path. It is now reachable on the staged .57 toolchain. The cut-settings and material-library schema can be read from the XML and the embedded device-profile JSON without the decompiler.
