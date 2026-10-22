@@ -14,10 +14,11 @@
 //! which exercises the document, persistence, engine, and dialect crates together.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use lasercraft_engine::{plan_line_fill, plan_project};
+use lasercraft_engine::{plan_line_fill, plan_project, plan_raster};
 use lasercraft_gcode::{Dialect, Grbl, Marlin};
 use lasercraft_laser_doc::CutSetting;
 use lasercraft_motion::MotionConfig;
+use lasercraft_raster::{GrayImage, RasterParams};
 use lasercraft_toolpath::BBox;
 use std::path::PathBuf;
 
@@ -85,6 +86,30 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = Flavor::Grbl)]
         flavor: Flavor,
     },
+    /// Load a binary PGM image and print the GCode that raster-engraves it.
+    Raster {
+        /// Path to the PGM (P5) image.
+        #[arg(long)]
+        image: PathBuf,
+        /// Physical size of one pixel in millimetres.
+        #[arg(long, default_value_t = 0.1)]
+        pixel: f64,
+        /// Power percentage for a fully dark pixel.
+        #[arg(long, default_value_t = 60.0)]
+        power: f64,
+        /// Samples at or below this value are skipped as blank.
+        #[arg(long, default_value_t = 20)]
+        threshold: u8,
+        /// Engrave speed in millimetres per second.
+        #[arg(long, default_value_t = 150.0)]
+        speed: f64,
+        /// Machine maximum speed in millimetres per second.
+        #[arg(long, default_value_t = 300.0)]
+        max_speed: f64,
+        /// Controller dialect.
+        #[arg(long, value_enum, default_value_t = Flavor::Grbl)]
+        flavor: Flavor,
+    },
 }
 
 fn main() -> std::process::ExitCode {
@@ -141,6 +166,40 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::FAILURE
             }
         },
+        Commands::Raster {
+            image,
+            pixel,
+            power,
+            threshold,
+            speed,
+            max_speed,
+            flavor,
+        } => {
+            let bytes = match std::fs::read(&image) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    eprintln!("could not read {}: {error}", image.display());
+                    return std::process::ExitCode::FAILURE;
+                }
+            };
+            let gray = match GrayImage::from_pgm(&bytes) {
+                Ok(gray) => gray,
+                Err(error) => {
+                    eprintln!("could not parse {}: {error}", image.display());
+                    return std::process::ExitCode::FAILURE;
+                }
+            };
+            let params = RasterParams {
+                pixel_mm: pixel,
+                power_max: power,
+                threshold,
+                speed_mm_s: speed,
+            };
+            let motion = motion_for(max_speed);
+            let gcode = plan_raster(&gray, &params, &motion, flavor.dialect().as_ref());
+            print!("{gcode}");
+            std::process::ExitCode::SUCCESS
+        }
     }
 }
 

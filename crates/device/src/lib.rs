@@ -20,6 +20,7 @@
 //! of its own, following the craft-libs house style where the wire format is
 //! separated from the socket.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Errors surfaced by a transport or a protocol.
@@ -37,7 +38,7 @@ pub enum DeviceError {
 }
 
 /// How a controller is reached physically.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransportKind {
     /// USB serial or raw USB, as in `transfer.dll` USB descriptor handling.
     Usb,
@@ -68,7 +69,7 @@ pub trait Transport {
 ///
 /// This is the data-driven analogue of LightBurn's `ProtocolDescriptor` and the
 /// embedded device-profile JSON. The registry is data, never hardcoded branches.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Descriptor {
     /// Stable identifier, for example `grbl` or `ruida`.
     pub id: String,

@@ -35,6 +35,92 @@ impl GrayImage {
         let index = (y as usize) * (self.width as usize) + (x as usize);
         self.pixels.get(index).copied().unwrap_or(0)
     }
+
+    /// Parse a binary PGM (`P5`) image.
+    ///
+    /// PGM is the simplest lossless grayscale container, so it is the first import
+    /// format. The header may carry `#` comments. A maxval other than 255 is scaled
+    /// to the full range. Returns a borrowed static error message on malformed input
+    /// rather than panicking.
+    pub fn from_pgm(bytes: &[u8]) -> Result<GrayImage, &'static str> {
+        let mut pos = 0usize;
+        let magic = read_token(bytes, &mut pos).ok_or("missing PGM magic")?;
+        if magic != b"P5" {
+            return Err("not a binary PGM (expected P5)");
+        }
+        let width = read_uint(bytes, &mut pos)?;
+        let height = read_uint(bytes, &mut pos)?;
+        let maxval = read_uint(bytes, &mut pos)?;
+        if maxval == 0 || maxval > 255 {
+            return Err("unsupported PGM maxval");
+        }
+        // Exactly one whitespace byte separates the header from the pixel data.
+        match bytes.get(pos) {
+            Some(b) if is_ws(*b) => pos += 1,
+            _ => return Err("missing PGM data separator"),
+        }
+        let count = (width as usize)
+            .checked_mul(height as usize)
+            .ok_or("PGM dimensions overflow")?;
+        let data = bytes
+            .get(pos..pos + count)
+            .ok_or("truncated PGM pixel data")?;
+        let pixels = if maxval == 255 {
+            data.to_vec()
+        } else {
+            data.iter()
+                .map(|&b| ((u32::from(b) * 255) / maxval) as u8)
+                .collect()
+        };
+        Ok(GrayImage {
+            width,
+            height,
+            pixels,
+        })
+    }
+}
+
+fn is_ws(b: u8) -> bool {
+    matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0c)
+}
+
+fn skip_ws_and_comments(bytes: &[u8], pos: &mut usize) {
+    while let Some(&b) = bytes.get(*pos) {
+        if is_ws(b) {
+            *pos += 1;
+        } else if b == b'#' {
+            while let Some(&c) = bytes.get(*pos) {
+                *pos += 1;
+                if c == b'\n' {
+                    break;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+}
+
+fn read_token<'a>(bytes: &'a [u8], pos: &mut usize) -> Option<&'a [u8]> {
+    skip_ws_and_comments(bytes, pos);
+    let start = *pos;
+    while let Some(&b) = bytes.get(*pos) {
+        if is_ws(b) {
+            break;
+        }
+        *pos += 1;
+    }
+    if *pos == start {
+        None
+    } else {
+        bytes.get(start..*pos)
+    }
+}
+
+fn read_uint(bytes: &[u8], pos: &mut usize) -> Result<u32, &'static str> {
+    let token = read_token(bytes, pos).ok_or("missing PGM header number")?;
+    let text = std::str::from_utf8(token).map_err(|_| "non-ascii PGM header")?;
+    text.parse::<u32>().map_err(|_| "invalid PGM header number")
 }
 
 /// Parameters for a raster scan.
@@ -157,6 +243,27 @@ mod tests {
         // Row 1 runs right to left.
         assert!(runs[1].x_start_mm > runs[1].x_end_mm);
         assert_eq!(runs[1].y_mm, 1.0);
+    }
+
+    #[test]
+    fn parses_a_binary_pgm_with_a_comment() {
+        let mut bytes = b"P5\n# a comment\n2 1\n255\n".to_vec();
+        bytes.push(0);
+        bytes.push(200);
+        let parsed = GrayImage::from_pgm(&bytes);
+        assert!(parsed.is_ok(), "a valid PGM should parse");
+        if let Ok(image) = parsed {
+            assert_eq!(image.width, 2);
+            assert_eq!(image.height, 1);
+            assert_eq!(image.pixels, vec![0, 200]);
+        }
+    }
+
+    #[test]
+    fn rejects_truncated_pgm() {
+        // Header promises two pixels but only one byte follows.
+        let bytes = b"P5\n2 1\n255\n\x10".to_vec();
+        assert!(GrayImage::from_pgm(&bytes).is_err());
     }
 
     #[test]

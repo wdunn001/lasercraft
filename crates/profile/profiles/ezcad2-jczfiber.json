@@ -1,0 +1,12 @@
+{
+  "id": "ezcad2-jczfiber",
+  "display_name": "EZCAD2 Fiber (JCZ)",
+  "controller": "EzCad2",
+  "transport": "Usb",
+  "work_area_mm": [110.0, 110.0],
+  "max_speed_mm_s": 7000.0,
+  "galvo": {
+    "field_size_mm": 110.0,
+    "resolution_bits": 16
+  }
+}

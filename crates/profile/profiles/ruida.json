@@ -1,0 +1,8 @@
+{
+  "id": "ruida",
+  "display_name": "Ruida",
+  "controller": "Ruida",
+  "transport": "Udp",
+  "work_area_mm": [600.0, 400.0],
+  "max_speed_mm_s": 500.0
+}
