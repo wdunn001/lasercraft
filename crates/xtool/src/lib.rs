@@ -44,7 +44,8 @@ impl XToolProtocol {
             descriptor: Descriptor {
                 id: format!("xtool-{suffix}"),
                 display_name: "xTool".to_string(),
-                transport: TransportKind::Tcp,
+                // xTool speaks HTTP and WebSocket, so a browser reaches it directly.
+                transport: TransportKind::WebSocket,
                 gcode_flavor: None,
             },
         }
@@ -67,11 +68,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generations_get_distinct_ids_over_tcp() {
+    fn generations_get_distinct_ids_over_websocket() {
         let v1 = XToolProtocol::new(Generation::V1);
         let v2 = XToolProtocol::new(Generation::V2);
         assert_eq!(v1.descriptor().id, "xtool-v1");
         assert_eq!(v2.descriptor().id, "xtool-v2");
-        assert_eq!(v2.descriptor().transport, TransportKind::Tcp);
+        assert_eq!(v2.descriptor().transport, TransportKind::WebSocket);
+        // xTool is reachable straight from the browser.
+        assert!(v2.descriptor().transport.reachable_from_web());
     }
 }

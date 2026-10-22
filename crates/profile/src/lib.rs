@@ -787,7 +787,7 @@ impl DeviceProfile {
         Descriptor {
             id: self.id.clone(),
             display_name: self.display_name.clone(),
-            transport: self.transport.clone(),
+            transport: self.transport,
             gcode_flavor: self.gcode_flavor.clone(),
         }
     }

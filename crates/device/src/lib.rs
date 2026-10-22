@@ -38,16 +38,71 @@ pub enum DeviceError {
 }
 
 /// How a controller is reached physically.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// The variants split by the channel the bytes travel over, because that choice
+/// decides which native library and which browser API can open it. A GCode
+/// controller is a USB-serial CDC device, so it is [`TransportKind::Serial`] and
+/// the browser reaches it with Web Serial. A galvo board is a raw-bulk USB
+/// device, so it is [`TransportKind::Usb`] and the browser reaches it with
+/// WebUSB. A Ruida DSP is on Ethernet, so it is [`TransportKind::Tcp`] or
+/// [`TransportKind::Udp`], which no browser API can open: the web app reaches it
+/// only through a local bridge. See [`TransportKind::web_api`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransportKind {
-    /// USB serial or raw USB, as in `transfer.dll` USB descriptor handling.
+    /// A USB-serial CDC port, as most GCode controllers expose. Web Serial.
+    Serial,
+    /// A raw-bulk USB device, as the galvo JCZ/LMC board. WebUSB.
     Usb,
-    /// A TCP stream, as in `TcpTransfer`.
+    /// A Bluetooth Low Energy link. Web Bluetooth.
+    Bluetooth,
+    /// A TCP stream, as in `TcpTransfer`. No browser API, needs a bridge.
     Tcp,
-    /// A UDP datagram channel, as in `UdpTransfer`.
+    /// A UDP datagram channel, as in `UdpTransfer`. No browser API, needs a bridge.
     Udp,
     /// UDP with a broadcast bind, the network-laser discovery pattern.
     UdpBroadcast,
+    /// A WebSocket stream, as a bridge exposes or as xTool speaks.
+    WebSocket,
+    /// A plain HTTP endpoint, as xTool's REST control uses.
+    Http,
+}
+
+/// A browser connectivity API that can open a transport without a native helper.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WebApi {
+    /// The Web Serial API, for USB-serial controllers.
+    WebSerial,
+    /// The WebUSB API, for raw-bulk USB devices such as the galvo board.
+    WebUsb,
+    /// The Web Bluetooth API, for BLE devices.
+    WebBluetooth,
+    /// A WebSocket connection, direct or to a local bridge.
+    WebSocket,
+    /// The Fetch API, for HTTP endpoints.
+    Fetch,
+}
+
+impl TransportKind {
+    /// The browser API that opens this transport directly, if one exists.
+    ///
+    /// TCP and UDP return `None`: a browser cannot open a raw socket, so a DSP
+    /// laser on Ethernet is reached from the web only through a local bridge
+    /// that relays a WebSocket onto the socket.
+    pub fn web_api(self) -> Option<WebApi> {
+        match self {
+            TransportKind::Serial => Some(WebApi::WebSerial),
+            TransportKind::Usb => Some(WebApi::WebUsb),
+            TransportKind::Bluetooth => Some(WebApi::WebBluetooth),
+            TransportKind::WebSocket => Some(WebApi::WebSocket),
+            TransportKind::Http => Some(WebApi::Fetch),
+            TransportKind::Tcp | TransportKind::Udp | TransportKind::UdpBroadcast => None,
+        }
+    }
+
+    /// Whether a browser can reach this transport with no native helper.
+    pub fn reachable_from_web(self) -> bool {
+        self.web_api().is_some()
+    }
 }
 
 /// A byte channel to a controller. Implementors own the socket or handle.
@@ -137,5 +192,22 @@ mod tests {
         assert!(registry.insert(grbl.clone()).is_none());
         assert_eq!(registry.get("grbl"), Some(&grbl));
         assert_eq!(registry.iter().count(), 1);
+    }
+
+    #[test]
+    fn web_apis_map_to_the_right_transports() {
+        assert_eq!(TransportKind::Serial.web_api(), Some(WebApi::WebSerial));
+        assert_eq!(TransportKind::Usb.web_api(), Some(WebApi::WebUsb));
+        assert_eq!(
+            TransportKind::Bluetooth.web_api(),
+            Some(WebApi::WebBluetooth)
+        );
+        assert_eq!(TransportKind::WebSocket.web_api(), Some(WebApi::WebSocket));
+        assert_eq!(TransportKind::Http.web_api(), Some(WebApi::Fetch));
+        // A raw socket has no browser API, so a DSP laser needs a local bridge.
+        assert_eq!(TransportKind::Tcp.web_api(), None);
+        assert_eq!(TransportKind::Udp.web_api(), None);
+        assert!(!TransportKind::Tcp.reachable_from_web());
+        assert!(TransportKind::Serial.reachable_from_web());
     }
 }
