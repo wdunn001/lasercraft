@@ -1,0 +1,13 @@
+# REA analysis snapshots are large Ghidra project databases, regenerable from the binary
+/rea-snapshots/
+
+# Raw stderr progress logs from REA runs
+/rea-evidence/*.err
+
+# Rust
+/target/
+**/*.rs.bk
+
+# OS
+Thumbs.db
+.DS_Store
