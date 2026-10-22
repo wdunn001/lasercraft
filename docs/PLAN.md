@@ -84,6 +84,8 @@ Rust builds run in Docker on .57. Windows binaries cross-compile on .57 with car
 
 The workspace mirrors the craft-libs conventions: edition 2024, `unsafe_code = "forbid"`, and every `lib.rs` opens with the never-crash deny block (`unwrap_used`, `expect_used`, `panic`, `unimplemented`, `todo`, `unreachable`). The merge gate is the same three commands. Builds run in Docker on .57.
 
+The `lasercraft-device` scaffold was built and gate-checked on .57 on 2026-10-22 with rustc 1.99.1. `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` all pass.
+
 ## Open decisions
 
 1. MetaMCP onboarding shape for REA, given REA must run where LightBurn lives. See `rea-workflow.md`.
