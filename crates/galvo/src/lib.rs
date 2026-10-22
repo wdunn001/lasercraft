@@ -88,6 +88,78 @@ impl Protocol for GalvoProtocol {
     }
 }
 
+/// One galvo marking instruction in device coordinates.
+///
+/// A galvo controller does not speak GCode. It consumes a list of jumps and marks
+/// over the mirror field, with power and the MOPA pulse frequency set between them.
+/// This is the device-neutral marking model. The board-specific byte encoding
+/// (the JCZ or LMC list format behind EZCAD2) serializes these later, the same way
+/// a GCode dialect serializes the neutral ops.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GalvoCommand {
+    /// Move with the laser off to a device point.
+    Jump {
+        /// Device X.
+        x: i32,
+        /// Device Y.
+        y: i32,
+    },
+    /// Move with the laser on to a device point.
+    Mark {
+        /// Device X.
+        x: i32,
+        /// Device Y.
+        y: i32,
+    },
+    /// Set the marking power as a percentage.
+    SetPower {
+        /// Power percent from 0.0 to 100.0.
+        percent: f64,
+    },
+    /// Set the MOPA pulse frequency in hertz.
+    SetFrequency {
+        /// Frequency in hertz.
+        hz: u32,
+    },
+}
+
+/// Convert a logical polyline in millimetres into galvo marking commands.
+///
+/// Power and frequency are set first, then a jump to the first point, then a mark
+/// to each subsequent point. A closed polyline marks back to its start. Points are
+/// mapped through the field correction in `param`. Fewer than two points yields
+/// only the power and frequency commands.
+pub fn mark_polyline(
+    param: &GalvoParam,
+    points: &[(f64, f64)],
+    closed: bool,
+    power_percent: f64,
+    frequency_hz: u32,
+) -> Vec<GalvoCommand> {
+    let mut commands = vec![
+        GalvoCommand::SetPower {
+            percent: power_percent.clamp(0.0, 100.0),
+        },
+        GalvoCommand::SetFrequency { hz: frequency_hz },
+    ];
+    let Some((first_x, first_y)) = points.first().copied() else {
+        return commands;
+    };
+    if points.len() < 2 {
+        return commands;
+    }
+    let (jx, jy) = param.logic_to_device(first_x, first_y);
+    commands.push(GalvoCommand::Jump { x: jx, y: jy });
+    for &(x, y) in &points[1..] {
+        let (dx, dy) = param.logic_to_device(x, y);
+        commands.push(GalvoCommand::Mark { x: dx, y: dy });
+    }
+    if closed {
+        commands.push(GalvoCommand::Mark { x: jx, y: jy });
+    }
+    commands
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,6 +174,26 @@ mod tests {
         let (x, y) = param.logic_to_device(0.0, 0.0);
         assert_eq!(x, 32768);
         assert_eq!(y, 32768);
+    }
+
+    #[test]
+    fn mark_polyline_jumps_then_marks_and_closes() {
+        let param = GalvoParam {
+            field_size_mm: 100.0,
+            resolution_bits: 16,
+        };
+        // A triangle centred near the field centre.
+        let points = [(0.0, 0.0), (10.0, 0.0), (5.0, 8.0)];
+        let commands = mark_polyline(&param, &points, true, 70.0, 20000);
+        // Power, frequency, one jump, two marks along, one closing mark.
+        assert_eq!(commands.len(), 6);
+        assert_eq!(commands[0], GalvoCommand::SetPower { percent: 70.0 });
+        assert_eq!(commands[1], GalvoCommand::SetFrequency { hz: 20000 });
+        assert!(matches!(commands[2], GalvoCommand::Jump { .. }));
+        assert!(matches!(commands[5], GalvoCommand::Mark { .. }));
+        // The closing mark returns to the first point's device coordinate.
+        let (fx, fy) = param.logic_to_device(0.0, 0.0);
+        assert_eq!(commands[5], GalvoCommand::Mark { x: fx, y: fy });
     }
 
     #[test]
