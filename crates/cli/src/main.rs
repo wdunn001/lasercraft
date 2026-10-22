@@ -9,16 +9,17 @@
 //! The LaserCraft command-line interface.
 //!
 //! A thin headless front end over `lasercraft-engine`, matching the Craft suite
-//! convention of shipping an `<app>-cli` alongside the GUI. For now it generates a
-//! line-fill job and prints the controller GCode, which exercises the whole
-//! document-to-output pipeline from a terminal.
+//! convention of shipping an `<app>-cli` alongside the GUI. It can generate a
+//! line-fill job for a region or load a saved project and emit its cutting GCode,
+//! which exercises the document, persistence, engine, and dialect crates together.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use lasercraft_engine::plan_line_fill;
-use lasercraft_gcode::Grbl;
+use lasercraft_engine::{plan_line_fill, plan_project};
+use lasercraft_gcode::{Dialect, Grbl, Marlin};
 use lasercraft_laser_doc::CutSetting;
 use lasercraft_motion::MotionConfig;
 use lasercraft_toolpath::BBox;
+use std::path::PathBuf;
 
 /// LaserCraft command-line interface.
 #[derive(Debug, Parser)]
@@ -33,6 +34,17 @@ struct Cli {
 enum Flavor {
     /// GRBL and compatible controllers.
     Grbl,
+    /// Marlin firmware.
+    Marlin,
+}
+
+impl Flavor {
+    fn dialect(self) -> Box<dyn Dialect> {
+        match self {
+            Flavor::Grbl => Box::new(Grbl::new()),
+            Flavor::Marlin => Box::new(Marlin::new()),
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -61,9 +73,21 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = Flavor::Grbl)]
         flavor: Flavor,
     },
+    /// Load a saved project (JSON) and print the GCode that cuts its shapes.
+    Cut {
+        /// Path to the project file.
+        #[arg(long)]
+        project: PathBuf,
+        /// Machine maximum speed in millimetres per second.
+        #[arg(long, default_value_t = 300.0)]
+        max_speed: f64,
+        /// Controller dialect.
+        #[arg(long, value_enum, default_value_t = Flavor::Grbl)]
+        flavor: Flavor,
+    },
 }
 
-fn main() {
+fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Commands::Linefill {
@@ -90,15 +114,40 @@ fn main() {
                 num_passes: 1,
                 air_assist: true,
             };
-            let motion = MotionConfig {
-                max_speed_mm_s: max_speed,
-                accel_mm_s2: 1000.0,
-                accel_to_decel_mm_s2: 500.0,
-            };
-            let gcode = match flavor {
-                Flavor::Grbl => plan_line_fill(&bbox, &setting, &motion, interval, &Grbl::new()),
-            };
+            let motion = motion_for(max_speed);
+            let gcode = plan_line_fill(
+                &bbox,
+                &setting,
+                &motion,
+                interval,
+                flavor.dialect().as_ref(),
+            );
             print!("{gcode}");
+            std::process::ExitCode::SUCCESS
         }
+        Commands::Cut {
+            project,
+            max_speed,
+            flavor,
+        } => match lasercraft_persist::load_project(&project) {
+            Ok(doc) => {
+                let motion = motion_for(max_speed);
+                let gcode = plan_project(&doc, &motion, flavor.dialect().as_ref());
+                print!("{gcode}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("could not load {}: {error}", project.display());
+                std::process::ExitCode::FAILURE
+            }
+        },
+    }
+}
+
+fn motion_for(max_speed_mm_s: f64) -> MotionConfig {
+    MotionConfig {
+        max_speed_mm_s,
+        accel_mm_s2: 1000.0,
+        accel_to_decel_mm_s2: 500.0,
     }
 }
