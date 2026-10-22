@@ -11,15 +11,15 @@ Running record of what the reverse engineering has established. Every number her
 | `executor.dll` | galvo execution and calibration, `craft-galvo` | 3810 | 998 | `executor.pdb`, stripped | `executor.snap` |
 | `acclplanner.dll` | motion planning and GCode emission, `craft-motion`/`craft-gcode` | 3757 | 2084 | stripped | `acclplanner.snap` |
 
-All three DLLs are native PE32+ x86_64 with image base `0x180000000`. The shipped binaries carry no PDB, so Ghidra function names are auto-generated. MSVC name mangling survives in the export and RTTI strings, which recovers class and method names. The analyzed string inventory is the primary signal for locating behavior.
+All three DLLs are native PE32+ x86_64 with image base `0x180000000`. The shipped binaries carry no PDB. Ghidra function names are therefore auto-generated. MSVC name mangling survives in the export and RTTI strings. That recovers class and method names. The analyzed string inventory is the primary signal for locating behavior.
 
 ## String analysis
 
-The string inventory corrected the subsystem assumptions. The Ruida and GRBL framing expected from the plan does not appear in these three DLLs. It most likely lives in `LightBurn.exe`, which still needs a long analysis run. What these DLLs actually contain:
+The string inventory corrected the subsystem assumptions. The Ruida and GRBL framing expected from the plan does not appear in these three DLLs. It most likely lives in `LightBurn.exe`. That binary still needs a long analysis run. What these DLLs actually contain:
 
 ### transfer.dll is the transport layer
 
-Mangled class names recover a clean transport stack. `TcpTransfer` and `UdpTransfer` sit over a `utils` namespace holding `SocketBase`, `TcpClient`, `UdpSocket`, and `SocketAddr`. The UDP side has broadcast bind variants (`setBindByBroadcast`, `setIPAddrByBroadcast`, `setIPAddrAllByBroadcast`), which is the standard network-laser discovery pattern. USB appears through descriptor handling (`USBD_STATUS_PID_CHECK_FAILURE`, firmware BOS descriptor messages). This maps to `craft-device`'s transport trait with TCP, UDP, and USB backends.
+Mangled class names recover a clean transport stack. `TcpTransfer` and `UdpTransfer` sit over a `utils` namespace holding `SocketBase`, `TcpClient`, `UdpSocket`, and `SocketAddr`. The UDP side has broadcast bind variants (`setBindByBroadcast`, `setIPAddrByBroadcast`, `setIPAddrAllByBroadcast`). That is the standard network-laser discovery pattern. USB appears through descriptor handling (`USBD_STATUS_PID_CHECK_FAILURE`, firmware BOS descriptor messages). This maps to `craft-device`'s transport trait with TCP, UDP, and USB backends.
 
 Evidence: `0x180013c40` `TcpTransfer::OpenDev socket fail err=%x`, `0x180014da0` `UdpTransfer::setBindByBroadcast socket bind fail`, `0x18001c780` `?recvfrom@UdpSocket@@...`.
 
