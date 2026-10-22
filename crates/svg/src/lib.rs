@@ -112,6 +112,19 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                 point = end;
                 push_seg(&mut current, PathSeg::Cubic { c1, c2, to: point })?;
             }
+            b'A' => {
+                let rx = read_number(bytes, &mut pos)?;
+                let ry = read_number(bytes, &mut pos)?;
+                let rotation = read_number(bytes, &mut pos)?;
+                let large_arc = read_number(bytes, &mut pos)? != 0.0;
+                let sweep = read_number(bytes, &mut pos)? != 0.0;
+                let (x, y) = read_pair(bytes, &mut pos)?;
+                let end = resolve(absolute, point, x, y);
+                for (c1, c2, to) in arc_to_cubics(point, rx, ry, rotation, large_arc, sweep, end) {
+                    push_seg(&mut current, PathSeg::Cubic { c1, c2, to })?;
+                }
+                point = end;
+            }
             b'Z' => {
                 if let Some(path) = current.as_mut() {
                     path.closed = true;
@@ -128,6 +141,118 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
         paths.push(path);
     }
     Ok(paths)
+}
+
+/// Convert an SVG elliptical arc to a sequence of cubic bezier segments.
+///
+/// Follows the SVG implementation notes: convert the endpoint parameterization to
+/// the centre parameterization, then approximate the sweep with cubics of at most
+/// ninety degrees each. A zero radius or a zero-length arc degenerates to a single
+/// straight cubic to the endpoint.
+fn arc_to_cubics(
+    from: Point2,
+    rx: f64,
+    ry: f64,
+    rotation_deg: f64,
+    large_arc: bool,
+    sweep: bool,
+    to: Point2,
+) -> Vec<(Point2, Point2, Point2)> {
+    use std::f64::consts::PI;
+    let line = vec![(from, to, to)];
+    if rx == 0.0 || ry == 0.0 || (from.x == to.x && from.y == to.y) {
+        return line;
+    }
+    let mut rx = rx.abs();
+    let mut ry = ry.abs();
+    let phi = rotation_deg.to_radians();
+    let (sin_phi, cos_phi) = (phi.sin(), phi.cos());
+
+    let dx = (from.x - to.x) / 2.0;
+    let dy = (from.y - to.y) / 2.0;
+    let x1p = cos_phi * dx + sin_phi * dy;
+    let y1p = -sin_phi * dx + cos_phi * dy;
+
+    let lambda = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if lambda > 1.0 {
+        let scale = lambda.sqrt();
+        rx *= scale;
+        ry *= scale;
+    }
+
+    let num = (rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p).max(0.0);
+    let den = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    let mut coef = if den == 0.0 { 0.0 } else { (num / den).sqrt() };
+    if large_arc == sweep {
+        coef = -coef;
+    }
+    let cxp = coef * rx * y1p / ry;
+    let cyp = -coef * ry * x1p / rx;
+    let cx = cos_phi * cxp - sin_phi * cyp + (from.x + to.x) / 2.0;
+    let cy = sin_phi * cxp + cos_phi * cyp + (from.y + to.y) / 2.0;
+
+    let angle = |ux: f64, uy: f64, vx: f64, vy: f64| -> f64 {
+        let dot = ux * vx + uy * vy;
+        let len = (ux * ux + uy * uy).sqrt() * (vx * vx + vy * vy).sqrt();
+        let base = if len == 0.0 {
+            0.0
+        } else {
+            (dot / len).clamp(-1.0, 1.0).acos()
+        };
+        if ux * vy - uy * vx < 0.0 { -base } else { base }
+    };
+
+    let ux = (x1p - cxp) / rx;
+    let uy = (y1p - cyp) / ry;
+    let theta1 = angle(1.0, 0.0, ux, uy);
+    let mut dtheta = angle(ux, uy, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+    if !sweep && dtheta > 0.0 {
+        dtheta -= 2.0 * PI;
+    } else if sweep && dtheta < 0.0 {
+        dtheta += 2.0 * PI;
+    }
+
+    let segments = (dtheta.abs() / (PI / 2.0)).ceil().max(1.0);
+    let count = segments as usize;
+    let delta = dtheta / segments;
+    let k = 4.0 / 3.0 * (delta / 4.0).tan();
+
+    let point_at = |a: f64| -> Point2 {
+        let (sin_a, cos_a) = (a.sin(), a.cos());
+        Point2 {
+            x: cx + rx * cos_a * cos_phi - ry * sin_a * sin_phi,
+            y: cy + rx * cos_a * sin_phi + ry * sin_a * cos_phi,
+        }
+    };
+    let derivative_at = |a: f64| -> (f64, f64) {
+        let (sin_a, cos_a) = (a.sin(), a.cos());
+        (
+            -rx * sin_a * cos_phi - ry * cos_a * sin_phi,
+            -rx * sin_a * sin_phi + ry * cos_a * cos_phi,
+        )
+    };
+
+    let mut result = Vec::with_capacity(count);
+    let mut t = theta1;
+    let mut start = point_at(t);
+    for _ in 0..count {
+        let t2 = t + delta;
+        let end = point_at(t2);
+        let (d1x, d1y) = derivative_at(t);
+        let (d2x, d2y) = derivative_at(t2);
+        let c1 = Point2 {
+            x: start.x + k * d1x,
+            y: start.y + k * d1y,
+        };
+        let c2 = Point2 {
+            x: end.x - k * d2x,
+            y: end.y - k * d2y,
+        };
+        result.push((c1, c2, end));
+        t = t2;
+        start = end;
+    }
+    result
 }
 
 fn resolve(absolute: bool, from: Point2, x: f64, y: f64) -> Point2 {
@@ -259,5 +384,21 @@ mod tests {
     #[test]
     fn rejects_segment_before_move() {
         assert!(parse_path_data("L10 10").is_err());
+    }
+
+    #[test]
+    fn arc_approximates_a_unit_quarter_circle() {
+        // A quarter arc from (1,0) to (0,1), radius 1, centred at the origin.
+        let paths = parse_path_data("M1 0 A1 1 0 0 1 0 1").unwrap_or_default();
+        assert_eq!(paths.len(), 1);
+        if let Some(path) = paths.first() {
+            assert!(!path.segments.is_empty());
+            // Every flattened point should sit on the unit circle within the
+            // bezier approximation error for a ninety-degree arc.
+            for p in path.flatten(16) {
+                let r = (p.x * p.x + p.y * p.y).sqrt();
+                assert!((r - 1.0).abs() < 0.01, "radius {r} off the unit circle");
+            }
+        }
     }
 }
