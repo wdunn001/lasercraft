@@ -123,7 +123,14 @@ pub fn plan_line_fill(
 pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dialect) -> String {
     // A bezier path flattens to this many chords per cubic before toolpathing.
     const CURVE_STEPS: u32 = 24;
-    let mut ops = Vec::new();
+    // Collect the drawable shapes as toolpathed segment runs.
+    struct Run {
+        segments: Vec<lasercraft_toolpath::Segment>,
+        feed: f64,
+        power: f64,
+        passes: u32,
+    }
+    let mut runs: Vec<Run> = Vec::new();
     for shape in &project.shapes {
         let (points, closed) = match &shape.geometry {
             Geometry::Polyline { points, closed } => (points.clone(), *closed),
@@ -135,26 +142,75 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         };
         let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
         let segments = follow_polyline(&path, closed);
-        let feed = motion.clamp_feed(setting.speed_mm_s);
-        // Repeat the path once per configured pass. A zero-pass layer is off.
-        for _ in 0..setting.num_passes {
-            if let Some(first) = segments.first() {
+        if segments.is_empty() {
+            continue;
+        }
+        runs.push(Run {
+            segments,
+            feed: motion.clamp_feed(setting.speed_mm_s),
+            power: setting.power_max,
+            passes: setting.num_passes,
+        });
+    }
+    // Order the runs to shorten rapid travel between shapes.
+    let starts: Vec<Point> = runs
+        .iter()
+        .filter_map(|r| r.segments.first().map(|s| s.start))
+        .collect();
+    let order = optimize_order(&starts);
+    let mut ops = Vec::new();
+    for &index in &order {
+        let Some(run) = runs.get(index) else { continue };
+        for _ in 0..run.passes {
+            if let Some(first) = run.segments.first() {
                 ops.push(Op::RapidTo {
                     x: first.start.x,
                     y: first.start.y,
                 });
             }
-            for segment in &segments {
+            for segment in &run.segments {
                 ops.push(Op::CutTo {
                     x: segment.end.x,
                     y: segment.end.y,
-                    feed_mm_s: feed,
-                    power: setting.power_max,
+                    feed_mm_s: run.feed,
+                    power: run.power,
                 });
             }
         }
     }
     program(dialect, &ops)
+}
+
+/// Order points by a greedy nearest-neighbour walk from the origin.
+///
+/// This shortens the rapid travel between shapes, the air-time that LightBurn
+/// leaves on the table when it cuts in document order. Nearest-neighbour is a
+/// cheap heuristic that captures most of the saving.
+pub fn optimize_order(starts: &[Point]) -> Vec<usize> {
+    let count = starts.len();
+    let mut visited = vec![false; count];
+    let mut order = Vec::with_capacity(count);
+    let mut current = Point { x: 0.0, y: 0.0 };
+    for _ in 0..count {
+        let mut best: Option<usize> = None;
+        let mut best_distance = f64::INFINITY;
+        for (i, start) in starts.iter().enumerate() {
+            if visited[i] {
+                continue;
+            }
+            let distance = (start.x - current.x).hypot(start.y - current.y);
+            if distance < best_distance {
+                best_distance = distance;
+                best = Some(i);
+            }
+        }
+        if let Some(i) = best {
+            visited[i] = true;
+            order.push(i);
+            current = starts[i];
+        }
+    }
+    order
 }
 
 /// Generate galvo marking commands that cut every polyline shape in a project.
@@ -444,6 +500,17 @@ mod tests {
         assert!(out.contains("G0 X20.000 Y18.000"));
         // Framing never fires the laser.
         assert!(!out.contains("G1 "));
+    }
+
+    #[test]
+    fn optimize_order_visits_nearest_first() {
+        let starts = [
+            Point { x: 100.0, y: 0.0 },
+            Point { x: 1.0, y: 0.0 },
+            Point { x: 50.0, y: 0.0 },
+        ];
+        // From the origin: nearest is index 1, then 2, then 0.
+        assert_eq!(optimize_order(&starts), vec![1, 2, 0]);
     }
 
     #[test]
