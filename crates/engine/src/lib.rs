@@ -19,7 +19,7 @@ use lasercraft_gcode::{Dialect, Op, program};
 use lasercraft_laser_doc::{CutSetting, Geometry, Point2, Project, Shape, ShapeKind};
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
-use lasercraft_toolpath::{BBox, Point, follow_polyline, line_fill};
+use lasercraft_toolpath::{BBox, Point, follow_polyline, line_fill, wobble_path};
 
 /// Errors the engine can return while executing a command.
 #[derive(Debug, thiserror::Error)]
@@ -376,6 +376,25 @@ pub fn plan_galvo_project(
         let Some(setting) = project.cut_setting_for(shape) else {
             continue;
         };
+        // A layer with wobble enabled marks a widened, dense circle path instead.
+        if let Some(galvo) = &setting.galvo
+            && galvo.wobble.enabled
+        {
+            let mut pts: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+            if closed && let Some(first) = pts.first().copied() {
+                pts.push(first);
+            }
+            let wobbled = wobble_path(&pts, galvo.wobble.step_mm, galvo.wobble.size_mm);
+            let wpath: Vec<(f64, f64)> = wobbled.iter().map(|p| (p.x, p.y)).collect();
+            commands.extend(mark_polyline(
+                param,
+                &wpath,
+                false,
+                setting.power_max,
+                frequency_hz,
+            ));
+            continue;
+        }
         let path: Vec<(f64, f64)> = points.iter().map(|p| (p.x, p.y)).collect();
         commands.extend(mark_polyline(
             param,
@@ -740,6 +759,57 @@ mod tests {
         assert_eq!(bytes.len() % 0xC00, 0);
         // It opens with the marking-speed command 0x800C.
         assert_eq!(&bytes[0..2], &0x800Cu16.to_le_bytes());
+    }
+
+    #[test]
+    fn a_wobble_layer_densifies_the_galvo_path() {
+        use lasercraft_laser_doc::{GalvoSettings, Wobble};
+        let param = GalvoParam {
+            field_size_mm: 110.0,
+            resolution_bits: 16,
+        };
+        let triangle = || Geometry::Polyline {
+            points: vec![
+                Point2 { x: -10.0, y: -10.0 },
+                Point2 { x: 10.0, y: -10.0 },
+                Point2 { x: 5.0, y: 8.0 },
+            ],
+            closed: true,
+        };
+        let mut plain = Project::new();
+        plain.cut_settings.push(cut());
+        plain.shapes.push(Shape {
+            kind: ShapeKind::Path,
+            cut_index: 0,
+            geometry: triangle(),
+        });
+        let plain_cmds = plan_galvo_project(&plain, &param, 30_000);
+
+        let mut wobble_setting = cut();
+        wobble_setting.galvo = Some(GalvoSettings {
+            wobble: Wobble {
+                enabled: true,
+                step_mm: 1.0,
+                size_mm: 0.5,
+            },
+            ..GalvoSettings::default()
+        });
+        let mut wobbled = Project::new();
+        wobbled.cut_settings.push(wobble_setting);
+        wobbled.shapes.push(Shape {
+            kind: ShapeKind::Path,
+            cut_index: 0,
+            geometry: triangle(),
+        });
+        let wobble_cmds = plan_galvo_project(&wobbled, &param, 30_000);
+
+        // Wobble traces many circles, so it yields far more marking commands.
+        assert!(
+            wobble_cmds.len() > plain_cmds.len() * 5,
+            "wobble {} plain {}",
+            wobble_cmds.len(),
+            plain_cmds.len()
+        );
     }
 
     #[test]
