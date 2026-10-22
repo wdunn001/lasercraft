@@ -36,10 +36,82 @@ pub struct Point2 {
     pub y: f64,
 }
 
+/// One segment of a vector path, starting from the path's current point.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum PathSeg {
+    /// A straight line to `to`.
+    Line {
+        /// The segment end point.
+        to: Point2,
+    },
+    /// A cubic bezier with control points `c1` and `c2` ending at `to`.
+    Cubic {
+        /// The first control point.
+        c1: Point2,
+        /// The second control point.
+        c2: Point2,
+        /// The segment end point.
+        to: Point2,
+    },
+}
+
+/// A vector path of line and cubic segments from a start point.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BezierPath {
+    /// Where the path begins.
+    pub start: Point2,
+    /// The segments in order.
+    pub segments: Vec<PathSeg>,
+    /// Whether the path closes back to its start.
+    pub closed: bool,
+}
+
+impl BezierPath {
+    /// Flatten the path to a polyline, subdividing each cubic into `steps` chords.
+    ///
+    /// A cubic is sampled by the Bernstein form at evenly spaced `t`. Uniform
+    /// sampling is simple and correct. Adaptive flattening by flatness tolerance is
+    /// a later refinement.
+    pub fn flatten(&self, steps: u32) -> Vec<Point2> {
+        let mut points = vec![self.start];
+        let mut current = self.start;
+        let steps = steps.max(1);
+        for segment in &self.segments {
+            match segment {
+                PathSeg::Line { to } => {
+                    points.push(*to);
+                    current = *to;
+                }
+                PathSeg::Cubic { c1, c2, to } => {
+                    for i in 1..=steps {
+                        let t = f64::from(i) / f64::from(steps);
+                        points.push(cubic_point(current, *c1, *c2, *to, t));
+                    }
+                    current = *to;
+                }
+            }
+        }
+        points
+    }
+}
+
+/// Evaluate a cubic bezier at parameter `t` using the Bernstein form.
+fn cubic_point(p0: Point2, p1: Point2, p2: Point2, p3: Point2, t: f64) -> Point2 {
+    let u = 1.0 - t;
+    let w0 = u * u * u;
+    let w1 = 3.0 * u * u * t;
+    let w2 = 3.0 * u * t * t;
+    let w3 = t * t * t;
+    Point2 {
+        x: w0 * p0.x + w1 * p1.x + w2 * p2.x + w3 * p3.x,
+        y: w0 * p0.y + w1 * p1.y + w2 * p2.y + w3 * p3.y,
+    }
+}
+
 /// The concrete geometry a shape carries.
 ///
-/// Polylines come first because every vector shape reduces to one once curves are
-/// flattened. Bezier and primitive forms land on top of this later.
+/// Polylines are the flattened form every vector shape reduces to. A bezier path
+/// carries curves and flattens to a polyline for toolpathing.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub enum Geometry {
     /// No geometry yet, for example an empty group.
@@ -52,6 +124,8 @@ pub enum Geometry {
         /// Whether the last point connects back to the first.
         closed: bool,
     },
+    /// A vector path of line and cubic segments.
+    Path(BezierPath),
 }
 
 /// One piece of geometry. `cut_index` selects the [`CutSetting`] that drives it.
@@ -122,6 +196,27 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cubic_flattens_through_its_midpoint() {
+        let path = BezierPath {
+            start: Point2 { x: 0.0, y: 0.0 },
+            segments: vec![PathSeg::Cubic {
+                c1: Point2 { x: 0.0, y: 10.0 },
+                c2: Point2 { x: 10.0, y: 10.0 },
+                to: Point2 { x: 10.0, y: 0.0 },
+            }],
+            closed: false,
+        };
+        let points = path.flatten(2);
+        // Start, midpoint, end for two steps.
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[0], Point2 { x: 0.0, y: 0.0 });
+        // The Bernstein midpoint of this symmetric cubic is (5, 7.5).
+        assert!((points[1].x - 5.0).abs() < 1e-9);
+        assert!((points[1].y - 7.5).abs() < 1e-9);
+        assert_eq!(points[2], Point2 { x: 10.0, y: 0.0 });
+    }
 
     #[test]
     fn shape_resolves_its_cut_setting() {

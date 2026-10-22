@@ -118,16 +118,20 @@ pub fn plan_line_fill(
 /// resolvable cut setting are skipped. This is the vector path of the pipeline,
 /// alongside [`plan_line_fill`] for filled regions.
 pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dialect) -> String {
+    // A bezier path flattens to this many chords per cubic before toolpathing.
+    const CURVE_STEPS: u32 = 24;
     let mut ops = Vec::new();
     for shape in &project.shapes {
-        let Geometry::Polyline { points, closed } = &shape.geometry else {
-            continue;
+        let (points, closed) = match &shape.geometry {
+            Geometry::Polyline { points, closed } => (points.clone(), *closed),
+            Geometry::Path(path) => (path.flatten(CURVE_STEPS), path.closed),
+            Geometry::Empty => continue,
         };
         let Some(setting) = project.cut_setting_for(shape) else {
             continue;
         };
         let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
-        let segments = follow_polyline(&path, *closed);
+        let segments = follow_polyline(&path, closed);
         let feed = motion.clamp_feed(setting.speed_mm_s);
         if let Some(first) = segments.first() {
             ops.push(Op::RapidTo {
