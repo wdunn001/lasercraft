@@ -126,6 +126,23 @@ pub fn weld(polylines_json: &str) -> Result<String, JsError> {
     serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
+/// Combine two closed polylines with a boolean operation.
+///
+/// `op` is `difference` (a minus b), `intersect` (the overlap) or anything else
+/// for `union`. Each input is an array of `[x, y]` pairs. The result is a JSON
+/// array of result polylines. Run on the shared `craft-pathops` boolean.
+#[wasm_bindgen]
+pub fn boolean_op(a_json: &str, b_json: &str, op: &str) -> Result<String, JsError> {
+    let a: Vec<(f64, f64)> = parse(a_json, "shape a")?;
+    let b: Vec<(f64, f64)> = parse(b_json, "shape b")?;
+    let out = match op {
+        "difference" => lasercraft_geomops::difference(&a, &b),
+        "intersect" => lasercraft_geomops::intersect(&a, &b),
+        _ => lasercraft_geomops::weld(&[a, b]),
+    };
+    serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
 /// Offset a closed outline inward into concentric rings.
 ///
 /// The input is one polyline as an array of `[x, y]` pairs. The result is a JSON

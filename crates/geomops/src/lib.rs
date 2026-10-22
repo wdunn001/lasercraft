@@ -55,9 +55,39 @@ pub fn weld(polylines: &[Vec<(f64, f64)>]) -> Vec<Vec<(f64, f64)>> {
     };
     let mut acc = to_path(first);
     for pl in rest {
-        acc = boolean(&acc, FillRule::NonZero, &to_path(pl), FillRule::NonZero, BoolOp::Union);
+        acc = boolean(
+            &acc,
+            FillRule::NonZero,
+            &to_path(pl),
+            FillRule::NonZero,
+            BoolOp::Union,
+        );
     }
     to_polylines(&acc)
+}
+
+/// Subtract `cutter` from `base`, both closed polylines (`base` minus `cutter`).
+pub fn difference(base: &[(f64, f64)], cutter: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
+    let out = boolean(
+        &to_path(base),
+        FillRule::NonZero,
+        &to_path(cutter),
+        FillRule::NonZero,
+        BoolOp::Difference,
+    );
+    to_polylines(&out)
+}
+
+/// Intersect two closed polylines, keeping only the overlapping region.
+pub fn intersect(a: &[(f64, f64)], b: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
+    let out = boolean(
+        &to_path(a),
+        FillRule::NonZero,
+        &to_path(b),
+        FillRule::NonZero,
+        BoolOp::Intersect,
+    );
+    to_polylines(&out)
 }
 
 /// Offset a closed outline inward in `interval` steps, up to `max_rings` rings.
@@ -94,6 +124,14 @@ mod tests {
         // The union is one outline with more than the four points of a square.
         assert_eq!(out.len(), 1, "subpaths {}", out.len());
         assert!(out[0].len() >= 6, "points {}", out[0].len());
+    }
+
+    #[test]
+    fn difference_and_intersect_two_squares() {
+        let a = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let b = vec![(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0)];
+        assert!(!difference(&a, &b).is_empty());
+        assert!(!intersect(&a, &b).is_empty());
     }
 
     #[test]

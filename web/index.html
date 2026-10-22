@@ -139,7 +139,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div></div>
     </span>
     <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:150px;margin-left:8px" />
     <input id="textH" type="number" value="8" step="1" title="height mm" style="width:52px" />
@@ -273,7 +273,7 @@
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op } from "./pkg/lasercraft_wasm.js";
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
   const BED = { w: 150, h: 150 };               // work area in mm
@@ -602,6 +602,23 @@
     out.forEach(ring => doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: ring.map(a => p(a[0], a[1])), closed:true } } }));
     selected = null;
   }
+  function booleanWith(op){
+    if (!ready || selected == null) return;
+    const sh = doc.shapes[selected];
+    if (!sh || !sh.geometry.Polyline || !sh.geometry.Polyline.closed) return;
+    const cut = sh.cut_index;
+    const others = doc.shapes.filter((s, i) => i !== selected && s.cut_index === cut && s.geometry.Polyline && s.geometry.Polyline.closed);
+    if (!others.length) return;
+    const a = sh.geometry.Polyline.points.map(q => [q.x, q.y]);
+    let b;
+    if (others.length === 1) b = others[0].geometry.Polyline.points.map(q => [q.x, q.y]);
+    else { try { b = JSON.parse(weld(JSON.stringify(others.map(s => s.geometry.Polyline.points.map(q => [q.x, q.y])))))[0] || []; } catch(e){ return; } }
+    let out; try { out = JSON.parse(boolean_op(JSON.stringify(a), JSON.stringify(b), op)); } catch(e){ return; }
+    const remove = new Set([selected, ...others.map(s => doc.shapes.indexOf(s))]);
+    doc.shapes = doc.shapes.filter((s, i) => !remove.has(i));
+    out.forEach(ring => doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: ring.map(x => p(x[0], x[1])), closed:true } } }));
+    selected = null;
+  }
   function concentricFill(){
     if (!ready || selected == null) return;
     const sh = doc.shapes[selected];
@@ -709,6 +726,8 @@
     else if (a==="import"){ $("file").click(); }
     else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
     else if (a==="weld"){ weldActive(); }
+    else if (a==="subtract"){ booleanWith("difference"); }
+    else if (a==="intersect"){ booleanWith("intersect"); }
     else if (a==="concentric"){ concentricFill(); }
     else if (a==="undo"){ undo(); return; }
     else if (a==="redo"){ redo(); return; }
@@ -841,10 +860,10 @@
   Object.assign(I18N.de, { "mode.line":"Linie","mode.fill":"Füllung","mode.concentric":"Konzentrisch","mode.image":"Bild" });
   Object.assign(I18N.fr, { "mode.line":"Ligne","mode.fill":"Remplissage","mode.concentric":"Concentrique","mode.image":"Image" });
   Object.assign(I18N["pt-BR"], { "mode.line":"Linha","mode.fill":"Preenchimento","mode.concentric":"Concêntrico","mode.image":"Imagem" });
-  Object.assign(I18N.es, { "action.weld":"Soldar (unión)","action.concentric":"Relleno concéntrico" });
-  Object.assign(I18N.de, { "action.weld":"Verschmelzen","action.concentric":"Konzentrische Füllung" });
-  Object.assign(I18N.fr, { "action.weld":"Souder (union)","action.concentric":"Remplissage concentrique" });
-  Object.assign(I18N["pt-BR"], { "action.weld":"Soldar (união)","action.concentric":"Preenchimento concêntrico" });
+  Object.assign(I18N.es, { "action.weld":"Soldar (unión)","action.subtract":"Restar","action.intersect":"Intersecar","action.concentric":"Relleno concéntrico" });
+  Object.assign(I18N.de, { "action.weld":"Verschmelzen","action.subtract":"Subtrahieren","action.intersect":"Schneiden","action.concentric":"Konzentrische Füllung" });
+  Object.assign(I18N.fr, { "action.weld":"Souder (union)","action.subtract":"Soustraire","action.intersect":"Intersecter","action.concentric":"Remplissage concentrique" });
+  Object.assign(I18N["pt-BR"], { "action.weld":"Soldar (união)","action.subtract":"Subtrair","action.intersect":"Interseccionar","action.concentric":"Preenchimento concêntrico" });
   Object.assign(I18N.es, { "tab.camera":"Cámara","cam.enable":"Activar cámara","cam.opacity":"Opacidad de la capa","cam.calib":"Calibrar (clic en 4 esquinas)","cam.reset":"Restablecer" });
   Object.assign(I18N.de, { "tab.camera":"Kamera","cam.enable":"Kamera aktivieren","cam.opacity":"Deckkraft","cam.calib":"Kalibrieren (4 Ecken klicken)","cam.reset":"Zurücksetzen" });
   Object.assign(I18N.fr, { "tab.camera":"Caméra","cam.enable":"Activer la caméra","cam.opacity":"Opacité","cam.calib":"Calibrer (4 coins)","cam.reset":"Réinitialiser" });
@@ -886,6 +905,7 @@
     const act = params.get("act");
     if (act==="concentric"){ selected=0; concentricFill(); render(); refreshCounts(); }
     else if (act==="weld"){ doc.shapes.push(rect(70,45,70,45,0)); weldActive(); render(); refreshCounts(); }
+    else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selected=0; booleanWith("difference"); render(); refreshCounts(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
