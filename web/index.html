@@ -479,10 +479,12 @@
     });
     // node-edit handles on the selected shape
     if (tool === "node" && selected != null && doc.shapes[selected]) {
-      shapePoints(doc.shapes[selected]).forEach((q, ni) => {
-        const d = mm2px(q);
-        const on = (ni === dragNode);
-        s += `<rect x="${d.x-4}" y="${d.y-4}" width="8" height="8" fill="${on?"#ff5a3c":"#3b82f6"}" stroke="#fff" stroke-width="1.2"/>`;
+      const hs = nodeHandles(doc.shapes[selected]);
+      hs.forEach(h => { if (h.type==="handle" && h.link){ const a=mm2px(h.p), b=mm2px(h.link); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#3b82f6" stroke-width="1"/>`; } });
+      hs.forEach((h, ni) => {
+        const d = mm2px(h.p), on = (ni === dragNode);
+        if (h.type==="handle") s += `<circle cx="${d.x}" cy="${d.y}" r="4" fill="${on?"#ff5a3c":"#8ab4ff"}" stroke="#fff" stroke-width="1"/>`;
+        else s += `<rect x="${d.x-4}" y="${d.y-4}" width="8" height="8" fill="${on?"#ff5a3c":"#3b82f6"}" stroke="#fff" stroke-width="1.2"/>`;
       });
     }
     if (drawing) s += drawing;
@@ -490,6 +492,22 @@
     if (typeof positionCam === "function") positionCam();
   }
   function shapePoints(sh){ return sh.geometry.Polyline ? sh.geometry.Polyline.points : []; }
+  // Editable control points for the node tool. Each entry references the live
+  // point object, so dragging mutates it in place. Polyline points are anchors.
+  // A cubic path yields anchors plus the two handles per segment, each linked to
+  // the anchor it steers for the on-canvas tether line.
+  function nodeHandles(sh){
+    const g = sh.geometry, out = [];
+    if (g.Polyline){ for (const pt of g.Polyline.points) out.push({ p: pt, type: "anchor" }); return out; }
+    if (g.Path){ let prev = g.Path.start; out.push({ p: prev, type: "anchor" });
+      for (const seg of g.Path.segments){
+        if (seg.Cubic){ out.push({ p: seg.Cubic.c1, type: "handle", link: prev }); out.push({ p: seg.Cubic.c2, type: "handle", link: seg.Cubic.to }); out.push({ p: seg.Cubic.to, type: "anchor" }); prev = seg.Cubic.to; }
+        else if (seg.Line){ out.push({ p: seg.Line.to, type: "anchor" }); prev = seg.Line.to; }
+      }
+      return out;
+    }
+    return [];
+  }
   // The SVG path for a shape, in screen pixels. Handles both polylines and cubic paths.
   function shapeD(sh){
     const g = sh.geometry;
@@ -553,7 +571,7 @@
     }
     penAnchors = []; penDrag = false; drawing = null; render(); refreshCounts();
   }
-  function hitNode(cx, cy){ if (selected == null || !doc.shapes[selected]) return null; const r = canvas.getBoundingClientRect(); const pts = shapePoints(doc.shapes[selected]); for (let i = 0; i < pts.length; i++){ const d = mm2px(pts[i]); if (Math.hypot(d.x-(cx-r.left), d.y-(cy-r.top)) < 8) return i; } return null; }
+  function hitNode(cx, cy){ if (selected == null || !doc.shapes[selected]) return null; const r = canvas.getBoundingClientRect(); const hs = nodeHandles(doc.shapes[selected]); for (let i = 0; i < hs.length; i++){ const d = mm2px(hs[i].p); if (Math.hypot(d.x-(cx-r.left), d.y-(cy-r.top)) < 8) return i; } return null; }
   function handleCalibClick(e){
     const r = canvas.getBoundingClientRect();
     camPts.push([e.clientX - r.left, e.clientY - r.top]);
@@ -590,7 +608,7 @@
     $("readout").textContent = `x ${m.x.toFixed(1)}  y ${m.y.toFixed(1)} mm`;
     if (tool==="pen" && penDrag && penAnchors.length){ const a = penAnchors[penAnchors.length-1]; a.hOut={x:m.x,y:m.y}; a.hIn={x:2*a.p.x-m.x,y:2*a.p.y-m.y}; drawing=penPreview(); render(); return; }
     if (!start) return;
-    if (tool==="node" && dragNode!=null && doc.shapes[selected]){ const pts=shapePoints(doc.shapes[selected]); if (pts[dragNode]) pts[dragNode]=p(m.x,m.y); render(); return; }
+    if (tool==="node" && dragNode!=null && doc.shapes[selected]){ const hs=nodeHandles(doc.shapes[selected]); const h=hs[dragNode]; if (h){ h.p.x=+m.x.toFixed(3); h.p.y=+m.y.toFixed(3); } render(); return; }
     if (tool==="select" && dragShape!=null){ moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y); render(); return; }
     if (tool==="rect" || tool==="ellipse"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=PALETTE[activeLayer%PALETTE.length];
       drawing = tool==="rect" ? `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`
@@ -1220,6 +1238,7 @@
     else if (act==="arraycircular"){ doc.shapes=[rect(66,18,18,12,0)]; selected=0; arrayCircular(9,30); openArrange(); }
     else if (act==="alignbed"){ doc.shapes=[rect(8,8,26,18,0)]; selected=0; alignBed("center"); openArrange(); }
     else if (act==="text"){ doc.shapes=[...engineTextShapes("LaserCraft 2026", 12, 95, 13, 0), ...engineTextShapes("SN-0042 / 19.5mm", 12, 60, 10, 1), ...engineTextShapes("ABCDEFG HIJKLM", 12, 30, 9, 2)]; selected=null; render(); refreshCounts(); }
+    else if (act==="nodes"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:25,y:35}, segments:[{Cubic:{c1:{x:40,y:80},c2:{x:95,y:80},to:{x:120,y:35}}},{Cubic:{c1:{x:95,y:-5},c2:{x:40,y:-5},to:{x:25,y:35}}}], closed:true } } }]; selected=0; const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); render(); refreshCounts(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
