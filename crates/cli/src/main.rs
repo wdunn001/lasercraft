@@ -18,6 +18,7 @@ use lasercraft_engine::{
     estimate_job_time, plan_frame, plan_line_fill, plan_project, plan_raster, project_to_svg,
 };
 use lasercraft_gcode::{Dialect, GCodeDialect};
+use lasercraft_i18n::{builtin_catalog, normalize_locale};
 use lasercraft_laser_doc::CutSetting;
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams};
@@ -28,8 +29,28 @@ use std::path::PathBuf;
 #[derive(Debug, Parser)]
 #[command(name = "lasercraft-cli", version, about)]
 struct Cli {
+    /// Interface language as a BCP-47 tag, for example `de` or `pt-BR`.
+    /// Defaults to the `LC_ALL` or `LANG` environment, then English.
+    #[arg(long, global = true)]
+    locale: Option<String>,
     #[command(subcommand)]
     command: Commands,
+}
+
+/// The locale to show messages in: the `--locale` flag, then `LC_ALL` or
+/// `LANG` from the environment, then the catalog default.
+fn resolve_locale(flag: Option<String>, default: &str) -> String {
+    if let Some(tag) = flag {
+        return normalize_locale(&tag);
+    }
+    for var in ["LC_ALL", "LANG"] {
+        if let Ok(value) = std::env::var(var)
+            && !value.is_empty()
+        {
+            return normalize_locale(&value);
+        }
+    }
+    default.to_string()
 }
 
 /// The controller dialect to emit.
@@ -146,6 +167,10 @@ enum Commands {
 
 fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
+    let catalog = builtin_catalog();
+    let loc = resolve_locale(cli.locale, catalog.default_locale());
+    // Translate `key` for the resolved locale with the given placeholder values.
+    let msg = |key: &str, args: &[(&str, &str)]| -> String { catalog.tr_args(&loc, key, args) };
     match cli.command {
         Commands::Linefill {
             width,
@@ -170,6 +195,7 @@ fn main() -> std::process::ExitCode {
                 power_max: power,
                 num_passes: 1,
                 air_assist: true,
+                galvo: None,
             };
             let motion = motion_for(max_speed);
             let gcode = plan_line_fill(
@@ -194,7 +220,16 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::SUCCESS
             }
             Err(error) => {
-                eprintln!("could not load {}: {error}", project.display());
+                eprintln!(
+                    "{}",
+                    msg(
+                        "cli.error.load",
+                        &[
+                            ("path", &project.display().to_string()),
+                            ("error", &error.to_string())
+                        ]
+                    )
+                );
                 std::process::ExitCode::FAILURE
             }
         },
@@ -204,11 +239,29 @@ fn main() -> std::process::ExitCode {
                     let seconds = estimate_job_time(&doc, &motion_for(max_speed));
                     let minutes = (seconds / 60.0) as u64;
                     let rem = seconds - (minutes as f64) * 60.0;
-                    println!("Estimated cutting time: {minutes}m {rem:.1}s ({seconds:.1}s)");
+                    println!(
+                        "{}",
+                        msg(
+                            "cli.estimate.time",
+                            &[
+                                ("minutes", &minutes.to_string()),
+                                ("seconds", &format!("{rem:.1}"))
+                            ]
+                        )
+                    );
                     std::process::ExitCode::SUCCESS
                 }
                 Err(error) => {
-                    eprintln!("could not load {}: {error}", project.display());
+                    eprintln!(
+                        "{}",
+                        msg(
+                            "cli.error.load",
+                            &[
+                                ("path", &project.display().to_string()),
+                                ("error", &error.to_string())
+                            ]
+                        )
+                    );
                     std::process::ExitCode::FAILURE
                 }
             }
@@ -219,7 +272,16 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::SUCCESS
             }
             Err(error) => {
-                eprintln!("could not load {}: {error}", project.display());
+                eprintln!(
+                    "{}",
+                    msg(
+                        "cli.error.load",
+                        &[
+                            ("path", &project.display().to_string()),
+                            ("error", &error.to_string())
+                        ]
+                    )
+                );
                 std::process::ExitCode::FAILURE
             }
         },
@@ -229,7 +291,16 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::SUCCESS
             }
             Err(error) => {
-                eprintln!("could not load {}: {error}", project.display());
+                eprintln!(
+                    "{}",
+                    msg(
+                        "cli.error.load",
+                        &[
+                            ("path", &project.display().to_string()),
+                            ("error", &error.to_string())
+                        ]
+                    )
+                );
                 std::process::ExitCode::FAILURE
             }
         },
@@ -245,14 +316,29 @@ fn main() -> std::process::ExitCode {
             let bytes = match std::fs::read(&image) {
                 Ok(bytes) => bytes,
                 Err(error) => {
-                    eprintln!("could not read {}: {error}", image.display());
+                    eprintln!(
+                        "{}",
+                        msg(
+                            "cli.error.read",
+                            &[
+                                ("path", &image.display().to_string()),
+                                ("error", &error.to_string())
+                            ]
+                        )
+                    );
                     return std::process::ExitCode::FAILURE;
                 }
             };
             let gray = match GrayImage::from_pgm(&bytes) {
                 Ok(gray) => gray,
                 Err(error) => {
-                    eprintln!("could not parse {}: {error}", image.display());
+                    eprintln!(
+                        "{}",
+                        msg(
+                            "cli.error.parse",
+                            &[("path", &image.display().to_string()), ("error", error)]
+                        )
+                    );
                     return std::process::ExitCode::FAILURE;
                 }
             };

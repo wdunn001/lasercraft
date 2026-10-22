@@ -60,6 +60,7 @@ mod tests {
                 power_max: 35.0,
                 num_passes: 1,
                 air_assist: false,
+                galvo: None,
             }],
         };
         let path = std::env::temp_dir().join("lasercraft_persist_round_trip.json");

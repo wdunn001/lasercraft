@@ -147,6 +147,7 @@ mod tests {
                 power_max: 90.0,
                 num_passes: 1,
                 air_assist: true,
+                galvo: None,
             },
             notes: String::new(),
         }

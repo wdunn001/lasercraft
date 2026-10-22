@@ -177,6 +177,226 @@ pub struct CutSetting {
     pub num_passes: u32,
     /// Whether air assist runs for this layer.
     pub air_assist: bool,
+    /// Galvo and fiber layer settings. Present when the machine is a galvo.
+    /// A GCode machine leaves this `None`. Older projects without the field load
+    /// as `None`.
+    #[serde(default)]
+    pub galvo: Option<GalvoSettings>,
+}
+
+/// How a layer fills or outlines its shapes. The names in the LaserCraft
+/// interface are plain. The doc comments carry the LightBurn and EZCAD aliases.
+/// See `docs/terminology-ezcad-lightburn.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum FillMode {
+    /// Trace the outline of each shape. LightBurn "Line".
+    #[default]
+    Line,
+    /// Sweep back and forth to fill a region. LightBurn "Fill", EZCAD hatch type 2.
+    Fill,
+    /// Fill inward along offsets of the outline. LightBurn "Offset Fill", EZCAD type 3.
+    Concentric,
+    /// Engrave a raster image. LightBurn "Image".
+    Image,
+}
+
+/// Fill shaping for the Fill and Concentric modes.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FillParams {
+    /// Gap between fill lines in millimetres. LightBurn "Line Interval", EZCAD "Line Space".
+    pub line_interval_mm: f64,
+    /// Direction of the fill lines in degrees. LightBurn "Angle", EZCAD "Hatch Angle".
+    pub hatch_angle_deg: f64,
+    /// Angle added to each successive pass in degrees. LightBurn "Angle Increment".
+    pub angle_increment_deg: f64,
+    /// Advance the angle every time the job runs. LightBurn "Auto-Rotate".
+    pub auto_rotate: bool,
+    /// Shorten scan lines to offset beam width. LightBurn "Dot Width Adjust".
+    pub dot_width_adjust: bool,
+    /// The beam-width compensation in millimetres.
+    pub dot_width_mm: f64,
+    /// Taper the edge over this distance in millimetres. LightBurn "Ramp Length".
+    pub ramp_length_mm: f64,
+    /// Ramp the outer edge as well as the inner. LightBurn "Ramp Outer Edge".
+    pub ramp_outer_edge: bool,
+}
+
+impl Default for FillParams {
+    fn default() -> Self {
+        Self {
+            line_interval_mm: 0.1,
+            hatch_angle_deg: 0.0,
+            angle_increment_deg: 0.0,
+            auto_rotate: false,
+            dot_width_adjust: false,
+            dot_width_mm: 0.08,
+            ramp_length_mm: 0.0,
+            ramp_outer_edge: false,
+        }
+    }
+}
+
+/// Line shaping for the Line mode.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct LineParams {
+    /// Shift the cut to hold final size, in millimetres. LightBurn "Kerf offset".
+    pub kerf_offset_mm: f64,
+    /// Cut a dashed line when on. LightBurn "Perforation Mode".
+    pub perforation: bool,
+    /// The cut length of a perforation dash in millimetres.
+    pub perforation_cut_mm: f64,
+    /// The skipped gap of a perforation dash in millimetres.
+    pub perforation_skip_mm: f64,
+}
+
+impl Default for LineParams {
+    fn default() -> Self {
+        Self {
+            kerf_offset_mm: 0.0,
+            perforation: false,
+            perforation_cut_mm: 0.1,
+            perforation_skip_mm: 0.1,
+        }
+    }
+}
+
+/// Tabs and bridges: small uncut spans that hold the part in the sheet.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Tabs {
+    /// Whether tabs are generated for this layer. LightBurn "Tabs / Bridges".
+    pub enabled: bool,
+    /// Place tabs automatically. The alternative is manual placement.
+    pub automatic: bool,
+    /// The length of each tab in millimetres. LightBurn "Tab Size".
+    pub size_mm: f64,
+    /// The distance between tabs in millimetres. LightBurn "Spacing".
+    pub spacing_mm: f64,
+    /// The number of tabs on each shape. LightBurn "Tabs Per Shape".
+    pub tabs_per_shape: u32,
+    /// Leave the inner shapes untabbed. LightBurn "Skip Inner Shapes".
+    pub skip_inner_shapes: bool,
+    /// The power at a tab as a percentage of max power. LightBurn "Tab Cut Power".
+    pub cut_power_pct: f64,
+}
+
+impl Default for Tabs {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            automatic: true,
+            size_mm: 0.5,
+            spacing_mm: 50.0,
+            tabs_per_shape: 1,
+            skip_inner_shapes: false,
+            cut_power_pct: 0.0,
+        }
+    }
+}
+
+/// Wobble: trace small circles along the path to widen the line.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Wobble {
+    /// Whether wobble is on. LightBurn "Wobble", EZCAD "Dithering".
+    pub enabled: bool,
+    /// The spacing of the circles along the path in millimetres.
+    pub step_mm: f64,
+    /// The diameter of the circles in millimetres.
+    pub size_mm: f64,
+}
+
+impl Default for Wobble {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            step_mm: 0.05,
+            size_mm: 0.1,
+        }
+    }
+}
+
+/// A per-layer override of the device galvo timings. LightBurn "Override Default
+/// Timings". The fields mirror the device defaults in `lasercraft-profile`. TC is
+/// a dwell in microseconds that compensates for the mirror lag.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CutTiming {
+    /// Travel speed between marks in millimetres per second. LightBurn "Jump Speed".
+    pub jump_speed_mm_s: f64,
+    /// Settle time after a short jump in microseconds. LightBurn "Min Jump Delay".
+    pub min_jump_delay_us: f64,
+    /// Settle time after a long jump in microseconds. LightBurn "Max Jump Delay".
+    pub max_jump_delay_us: f64,
+    /// Distance above which the max delay applies, in millimetres. LightBurn "Jump Distance Limit".
+    pub jump_distance_limit_mm: f64,
+    /// Wait after the mirrors start before firing, in microseconds. LightBurn "Laser On TC".
+    pub laser_on_tc_us: f64,
+    /// Wait after a mark ends before the laser stops, in microseconds. LightBurn "Laser Off TC".
+    pub laser_off_tc_us: f64,
+    /// Wait at the end of a mark segment, in microseconds. LightBurn "End TC".
+    pub end_tc_us: f64,
+    /// Pause at a corner between two segments, in microseconds. LightBurn "Polygon TC".
+    pub polygon_tc_us: f64,
+    /// Wait before the sub-layer starts, in milliseconds. LightBurn "Pause Before".
+    pub pause_before_ms: f64,
+    /// Wait after the sub-layer ends, in milliseconds. LightBurn "Pause After".
+    pub pause_after_ms: f64,
+}
+
+impl Default for CutTiming {
+    fn default() -> Self {
+        Self {
+            jump_speed_mm_s: 4000.0,
+            min_jump_delay_us: 500.0,
+            max_jump_delay_us: 500.0,
+            jump_distance_limit_mm: 0.0,
+            laser_on_tc_us: -300.0,
+            laser_off_tc_us: 100.0,
+            end_tc_us: 300.0,
+            polygon_tc_us: 100.0,
+            pause_before_ms: 0.0,
+            pause_after_ms: 0.0,
+        }
+    }
+}
+
+/// Galvo and fiber layer settings. These back the Cut Settings editor's mode
+/// selector, its shared parameter card, and its Cut and Timings tabs. See
+/// `docs/cut-settings-design.md`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GalvoSettings {
+    /// The fill or outline mode. The editor shows this as a segmented selector.
+    pub mode: FillMode,
+    /// Pulse repetition rate in kHz. LightBurn "Frequency".
+    pub frequency_khz: f64,
+    /// Pulse duration in nanoseconds, MOPA and UV only. LightBurn "Q-Pulse Width".
+    pub q_pulse_width_ns: f64,
+    /// Repeats of every sub-layer in sequence. LightBurn "Global Passes".
+    pub global_passes: u32,
+    /// Fill shaping, read by the Cut tab in Fill and Concentric modes.
+    pub fill: FillParams,
+    /// Line shaping, read by the Cut tab in Line mode.
+    pub line: LineParams,
+    /// Tabs and bridges, read by the Cut tab in Line mode.
+    pub tabs: Tabs,
+    /// Wobble, shared by Line and Fill.
+    pub wobble: Wobble,
+    /// A per-layer timing override. `None` uses the device defaults.
+    pub timing_override: Option<CutTiming>,
+}
+
+impl Default for GalvoSettings {
+    fn default() -> Self {
+        Self {
+            mode: FillMode::Line,
+            frequency_khz: 30.0,
+            q_pulse_width_ns: 200.0,
+            global_passes: 1,
+            fill: FillParams::default(),
+            line: LineParams::default(),
+            tabs: Tabs::default(),
+            wobble: Wobble::default(),
+            timing_override: None,
+        }
+    }
 }
 
 impl Project {
@@ -287,6 +507,7 @@ mod tests {
                 power_max: 80.0,
                 num_passes: 1,
                 air_assist: true,
+                galvo: None,
             }],
         };
         let shape = &project.shapes[0];

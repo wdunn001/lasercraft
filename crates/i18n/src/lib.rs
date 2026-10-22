@@ -48,10 +48,16 @@ impl Catalog {
 
     /// Translate `key` for `locale`.
     ///
-    /// Resolution order is the requested locale, then the default locale, then the
-    /// key itself. The key is returned borrowed so a miss is never silently blank.
+    /// Resolution order is the requested locale, then its language prefix (so
+    /// `de-DE` finds the `de` table), then the default locale, then the key
+    /// itself. The key is returned borrowed so a miss is never silently blank.
     pub fn tr<'a>(&'a self, locale: &str, key: &'a str) -> &'a str {
         if let Some(value) = self.lookup(locale, key) {
+            return value;
+        }
+        if let Some((language, _region)) = locale.split_once('-')
+            && let Some(value) = self.lookup(language, key)
+        {
             return value;
         }
         if let Some(value) = self.lookup(&self.default_locale, key) {
@@ -60,11 +66,41 @@ impl Catalog {
         key
     }
 
+    /// Translate `key` for `locale`, then substitute `{name}` placeholders from
+    /// `args` with their values. A placeholder with no matching arg is left in
+    /// place so a wiring mistake stays visible. Resolution matches [`Catalog::tr`].
+    pub fn tr_args(&self, locale: &str, key: &str, args: &[(&str, &str)]) -> String {
+        let mut text = self.tr(locale, key).to_string();
+        for (name, value) in args {
+            text = text.replace(&format!("{{{name}}}"), value);
+        }
+        text
+    }
+
     fn lookup(&self, locale: &str, key: &str) -> Option<&str> {
         self.tables
             .get(locale)
             .and_then(|table| table.get(key))
             .map(String::as_str)
+    }
+}
+
+/// Normalise a system locale string such as `de_DE.UTF-8` or `pt_BR` to a
+/// catalog tag such as `de-DE` or `pt-BR`. The part before a `.` or `@` is
+/// kept, `_` becomes `-`, the language is lowercased and the region, when
+/// present, is uppercased. [`Catalog::tr`] then resolves the region form down
+/// to the language table when only the language is translated.
+pub fn normalize_locale(raw: &str) -> Locale {
+    let base = raw
+        .split(['.', '@'])
+        .next()
+        .unwrap_or(raw)
+        .replace('_', "-");
+    let mut parts = base.split('-');
+    let language = parts.next().unwrap_or("").to_ascii_lowercase();
+    match parts.next() {
+        Some(region) if !region.is_empty() => format!("{language}-{}", region.to_ascii_uppercase()),
+        _ => language,
     }
 }
 
@@ -131,5 +167,49 @@ mod tests {
         assert_eq!(catalog.tr("pt-BR", "layer.power"), "Potência");
         // An untranslated key falls back to the English default.
         assert_eq!(catalog.tr("de", "mode.scan"), "Scannen");
+    }
+
+    #[test]
+    fn interpolates_named_placeholders() {
+        let catalog = builtin_catalog();
+        let msg = catalog.tr_args(
+            "en",
+            "cli.error.load",
+            &[("path", "job.lbrn"), ("error", "no such file")],
+        );
+        assert_eq!(msg, "could not load job.lbrn: no such file");
+    }
+
+    #[test]
+    fn interpolates_in_a_translated_locale() {
+        let catalog = builtin_catalog();
+        let msg = catalog.tr_args(
+            "es",
+            "cli.estimate.time",
+            &[("minutes", "3"), ("seconds", "12.0")],
+        );
+        assert_eq!(msg, "Tiempo de corte estimado: 3m 12.0s");
+    }
+
+    #[test]
+    fn missing_placeholder_arg_is_left_visible() {
+        let catalog = builtin_catalog();
+        let msg = catalog.tr_args("en", "cli.error.load", &[("path", "a.lbrn")]);
+        assert_eq!(msg, "could not load a.lbrn: {error}");
+    }
+
+    #[test]
+    fn region_locale_falls_back_to_language() {
+        let catalog = builtin_catalog();
+        // There is no de-DE table, but the de table carries the key.
+        assert_eq!(catalog.tr("de-DE", "menu.file"), "Datei");
+    }
+
+    #[test]
+    fn normalizes_system_locale_strings() {
+        assert_eq!(normalize_locale("de_DE.UTF-8"), "de-DE");
+        assert_eq!(normalize_locale("pt_BR"), "pt-BR");
+        assert_eq!(normalize_locale("fr"), "fr");
+        assert_eq!(normalize_locale("en_US@posix"), "en-US");
     }
 }

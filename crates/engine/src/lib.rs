@@ -34,8 +34,8 @@ pub enum EngineError {
 pub enum Command {
     /// Record the authoring application version.
     SetAppVersion(String),
-    /// Add a cut setting to the job.
-    AddCutSetting(CutSetting),
+    /// Add a cut setting to the job. Boxed because a galvo cut setting is large.
+    AddCutSetting(Box<CutSetting>),
     /// Add a shape to the job.
     AddShape(Shape),
     /// Remove all shapes and cut settings.
@@ -63,7 +63,7 @@ impl Engine {
     pub fn execute(&mut self, command: Command) -> Result<(), EngineError> {
         match command {
             Command::SetAppVersion(version) => self.project.app_version = version,
-            Command::AddCutSetting(setting) => self.project.cut_settings.push(setting),
+            Command::AddCutSetting(setting) => self.project.cut_settings.push(*setting),
             Command::AddShape(shape) => {
                 if self.project.cut_setting_for(&shape).is_none() {
                     return Err(EngineError::UnknownCutIndex(shape.cut_index));
@@ -299,6 +299,7 @@ pub fn material_test(spec: &MaterialTestSpec) -> Project {
                 power_max: power,
                 num_passes: 1,
                 air_assist: true,
+                galvo: None,
             });
             project.shapes.push(Shape {
                 kind: ShapeKind::Rect,
@@ -504,6 +505,7 @@ mod tests {
             power_max: 80.0,
             num_passes: 1,
             air_assist: true,
+            galvo: None,
         }
     }
 
@@ -519,7 +521,11 @@ mod tests {
             engine.execute(Command::AddShape(shape.clone())),
             Err(EngineError::UnknownCutIndex(0))
         ));
-        assert!(engine.execute(Command::AddCutSetting(cut())).is_ok());
+        assert!(
+            engine
+                .execute(Command::AddCutSetting(Box::new(cut())))
+                .is_ok()
+        );
         assert!(engine.execute(Command::AddShape(shape)).is_ok());
         assert_eq!(engine.project().shapes.len(), 1);
     }
@@ -605,6 +611,7 @@ mod tests {
                 power_max: 80.0,
                 num_passes: 1,
                 air_assist: true,
+                galvo: None,
             }],
         };
         let seconds = estimate_job_time(&project, &motion);
