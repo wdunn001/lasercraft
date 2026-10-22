@@ -235,8 +235,13 @@ impl CorrectionTable {
         }
         let points = data_len / 8;
         let size = (points as f64).sqrt().round() as usize;
-        if size * size != points {
+        // checked_mul guards the 32-bit usize on wasm32, where size * size could wrap.
+        if size.checked_mul(size) != Some(points) {
             return Err("cor grid is not square");
+        }
+        // Bilinear sampling needs at least a 2x2 grid, so a degenerate table is rejected.
+        if size < 2 {
+            return Err("cor grid too small");
         }
         let scale_bytes: [u8; 4] = bytes
             .get(32..36)

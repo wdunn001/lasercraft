@@ -62,9 +62,9 @@ impl GrayImage {
         let count = (width as usize)
             .checked_mul(height as usize)
             .ok_or("PGM dimensions overflow")?;
-        let data = bytes
-            .get(pos..pos + count)
-            .ok_or("truncated PGM pixel data")?;
+        // checked_add guards the 32-bit usize on wasm32, where pos + count could wrap.
+        let end = pos.checked_add(count).ok_or("PGM pixel offset overflow")?;
+        let data = bytes.get(pos..end).ok_or("truncated PGM pixel data")?;
         let pixels = if maxval == 255 {
             data.to_vec()
         } else {
