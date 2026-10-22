@@ -4,7 +4,11 @@ LaserCraft is the thirteenth Craft app. It follows the house architecture: a ven
 
 ## Build status (2026-10-22)
 
-Eleven crates build green on .57 with `fmt`, `clippy -D warnings`, and `test`: `device`, `laser-doc`, `gcode`, `motion`, `dsp`, `galvo`, `xtool`, `trace`, `toolpath`, `engine`, and `cli`. The `engine` crate composes the document, toolpath, motion, and gcode crates behind the `engine.execute` seam. The `cli` binary runs and emits valid GRBL GCode for a line-fill job. The interfaces are evidence-grounded scaffolds. The depth behind them (real art import, raster modes, byte-level DSP framing, galvo calibration) is the work still ahead.
+Thirteen crates build green on .57 with `fmt`, `clippy -D warnings`, and `test`: `device`, `laser-doc`, `gcode`, `motion`, `dsp`, `galvo`, `xtool`, `trace`, `toolpath`, `engine`, `cli`, `i18n`, and `persist`. The `engine` crate composes the document, toolpath, motion, and gcode crates behind the `engine.execute` seam. The `cli` binary runs and emits valid GRBL GCode for a line-fill job.
+
+Four of the seven goal dimensions are done and verified. The wasm target builds for all ten library crates. The `i18n` crate ships five locales with English fallback. The security pass adds a threat model and a clean `cargo deny` audit. The `persist` crate is the first craft-libs consumption, saving projects through `craft-atomic`. Reverse engineering is about ninety percent, with only the byte-level DSP framing still blocked on the exe snapshot reopen.
+
+The interfaces are evidence-grounded scaffolds. The depth behind them is the work still ahead: real shape geometry, arbitrary-path toolpaths, raster engraving, the egui GUI on `craft-ui`, art and `.lbrn` import, galvo calibration, and byte-level DSP framing.
 
 ## Subsystem map: LightBurn to LaserCraft crates
 
