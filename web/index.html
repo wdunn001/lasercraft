@@ -436,8 +436,18 @@
   function galvoBytes(){ return generate_galvo_lmc(JSON.stringify(toProject()), 110, 16, 30, 100, 2048); }
   function hex(a){ return Array.from(a).map(b=>b.toString(16).padStart(2,"0")).join(" "); }
 
-  const USB = { dev:null, ep:2 };
+  // BJJCZ control opcodes (galvoplotter consts.py).
+  const OP = { EnableLaser:0x0004, ExecuteList:0x0005, SetPwmPulseWidth:0x0006, GetVersion:0x0007,
+    GetSerialNo:0x0009, ResetList:0x0012, SetFirstPulseKiller:0x001A, SetLaserMode:0x001B,
+    SetControlMode:0x0016, SetDelayMode:0x0017, SetTiming:0x001C, SetStandby:0x001D,
+    SetPwmHalfPeriod:0x001E, WriteAnalogPort1:0x0022, SetFpkParam2:0x002E, SetFlyRes:0x0032,
+    Fiber_SetMo:0x0033, EnableZ:0x003A, Reset:0x0040 };
+
+  const USB = { dev:null, ep:2, epIn:8 };
   function setDev(msg){ $("devstat").textContent = msg; }
+  function cmd12(op, v1=0,v2=0,v3=0,v4=0,v5=0){ const b=new Uint8Array(12); const dv=new DataView(b.buffer); dv.setUint16(0,op,true); dv.setUint16(2,v1&0xFFFF,true); dv.setUint16(4,v2&0xFFFF,true); dv.setUint16(6,v3&0xFFFF,true); dv.setUint16(8,v4&0xFFFF,true); dv.setUint16(10,v5&0xFFFF,true); return b; }
+  async function ctl(op, ...p){ await USB.dev.transferOut(USB.ep, cmd12(op, ...p)); try { await USB.dev.transferIn(USB.epIn, 8); } catch(e){} }
+
   async function connectGalvo(){
     if (!("usb" in navigator)) { setDev("WebUSB is not available. Use Chrome or Edge over HTTPS."); return; }
     try {
@@ -446,21 +456,49 @@
       if (dev.configuration === null) await dev.selectConfiguration(1);
       const itf = dev.configuration.interfaces[0];
       await dev.claimInterface(itf.interfaceNumber);
-      let epOut = 2;
-      for (const alt of itf.alternates) for (const e of alt.endpoints) if (e.direction === "out" && e.type === "bulk") epOut = e.endpointNumber;
-      USB.dev = dev; USB.ep = epOut;
+      let epOut = 2, epIn = 8;
+      for (const alt of itf.alternates) for (const e of alt.endpoints) {
+        if (e.type === "bulk" && e.direction === "out") epOut = e.endpointNumber;
+        if (e.type === "bulk" && e.direction === "in") epIn = e.endpointNumber;
+      }
+      USB.dev = dev; USB.ep = epOut; USB.epIn = epIn;
       $("sendBtn").disabled = false;
       $("connectBtn").textContent = "Connected";
-      setDev(`Connected: ${dev.productName || "BJJCZ galvo"} (vendor 0x9588, bulk OUT EP ${epOut}).`);
-    } catch (e) { setDev("Connect cancelled or failed: " + e.message + (e.message.includes("No device")?"":" — on Windows the board may need the WinUSB driver (Zadig).")); }
+      setDev(`Connected: ${dev.productName || "BJJCZ galvo"} (vendor 0x9588, bulk OUT EP ${epOut}, IN EP ${epIn}).`);
+    } catch (e) { setDev("Connect failed: " + e.message + " — on Windows the board usually needs the WinUSB driver (Zadig), and EZCAD/LightBurn cannot be using it at the same time."); }
+  }
+
+  // The init_laser control sequence (galvoplotter defaults), then reset -> write
+  // the list in 0xC00 chunks -> ExecuteList. EXPERIMENTAL: not hardware-verified,
+  // no correction file uploaded yet, and the fiber MO handling is a best guess.
+  async function initLaser(){
+    await ctl(OP.GetSerialNo); await ctl(OP.GetVersion); await ctl(OP.Reset);
+    await ctl(OP.EnableLaser);
+    await ctl(OP.SetControlMode, 0); await ctl(OP.SetLaserMode, 1);
+    await ctl(OP.SetDelayMode, 1); await ctl(OP.SetTiming, 1);
+    await ctl(OP.SetStandby, 2000, 20); await ctl(OP.SetFirstPulseKiller, 200);
+    await ctl(OP.SetPwmHalfPeriod, 125); await ctl(OP.SetPwmPulseWidth, 125);
+    await ctl(OP.Fiber_SetMo, 0);
+    await ctl(OP.SetFpkParam2, 0xFFB, 1, 409, 100);
+    await ctl(OP.SetFlyRes, 0, 99, 1000, 25);
+    await ctl(OP.EnableZ); await ctl(OP.WriteAnalogPort1, 0x7FF); await ctl(OP.EnableZ);
   }
   async function sendGalvo(){
     if (!USB.dev) { setDev("Connect the galvo first."); return; }
     try {
+      setDev("Running init sequence…");
+      await initLaser();
+      await ctl(OP.ResetList);
       const bytes = galvoBytes();
-      const res = await USB.dev.transferOut(USB.ep, bytes);
-      setDev(`Sent ${res.bytesWritten} bytes (the list buffer) to the galvo. Note: this writes the mark list only. The full init and execute handshake is not hardware-verified yet.`);
-    } catch (e) { setDev("Send failed: " + e.message); }
+      let written = 0;
+      for (let i = 0; i < bytes.length; i += 3072) {
+        const r = await USB.dev.transferOut(USB.ep, bytes.slice(i, i + 3072));
+        written += r.bytesWritten;
+      }
+      await ctl(OP.Fiber_SetMo, 1);       // open MO so the fiber can emit (best guess)
+      await ctl(OP.ExecuteList);
+      setDev(`Sent full session: init, list (${written} bytes), ExecuteList. EXPERIMENTAL and unverified on hardware — if it does not mark, tell me where it stalled and I will adjust the sequence.`);
+    } catch (e) { setDev("Send failed at the USB layer: " + e.message); }
   }
   $("connectBtn") && ($("connectBtn").onclick = connectGalvo);
   $("sendBtn") && ($("sendBtn").onclick = sendGalvo);
