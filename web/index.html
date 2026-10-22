@@ -160,7 +160,8 @@
     <div class="tools" id="tools"></div>
 
     <div class="canvas-wrap">
-      <svg id="canvas"></svg>
+      <video id="cam" autoplay playsinline muted style="position:absolute;left:0;top:0;display:none;transform-origin:0 0;pointer-events:none"></video>
+      <svg id="canvas" style="position:relative"></svg>
       <div class="readout" id="readout">x 0.0  y 0.0 mm</div>
       <div class="zoomctl">
         <button class="btn" data-zoom="out">&minus;</button>
@@ -173,6 +174,7 @@
       <div class="docktabs">
         <button class="active" data-dock="design" data-i18n="tab.design">Design</button>
         <button data-dock="move" data-i18n="tab.move">Move</button>
+        <button data-dock="camera" data-i18n="tab.camera">Camera</button>
       </div>
       <div id="designPane" class="dpane">
       <div class="section">
@@ -217,6 +219,19 @@
           <button class="btn fire" id="jogFire">Fire (1%)</button>
         </div>
         <div class="stat" id="moveStat" style="margin-top:12px;color:var(--muted)">Jog drives the connected galvo. Connect it on the Design tab first.</div>
+      </div>
+
+      <div id="cameraPane" class="dpane" style="display:none;padding:16px;overflow:auto;gap:12px">
+        <div class="devrow">
+          <button class="btn" id="camEnable" style="flex:1" data-i18n="cam.enable">Enable camera</button>
+        </div>
+        <select id="camDevice" style="display:none"></select>
+        <div class="f" style="margin-top:4px"><label data-i18n="cam.opacity">Overlay opacity</label><input id="camOpacity" type="range" min="0" max="100" value="55" style="width:100%"></div>
+        <div class="devrow">
+          <button class="btn" id="camCalib" style="flex:1" data-i18n="cam.calib">Calibrate (click 4 bed corners)</button>
+          <button class="btn" id="camReset" data-i18n="cam.reset">Reset</button>
+        </div>
+        <div class="stat" id="camStat" style="color:var(--muted)">The camera overlays the bed so you can place a design on the material. Calibrate by clicking the four bed corners on the image.</div>
       </div>
     </div>
   </div>
@@ -375,12 +390,14 @@
   function mm2px(pt){ return { x: pt.x*view.s + view.x, y: (BED.h-pt.y)*view.s + view.y }; }
   function px2mm(cx, cy){ const r = canvas.getBoundingClientRect(); const x=(cx-r.left-view.x)/view.s; const y=BED.h-(cy-r.top-view.y)/view.s; return { x, y }; }
 
+  function camOn(){ const v = document.getElementById("cam"); return v && v.style.display !== "none" && v.srcObject; }
   function render() {
     const r = canvas.getBoundingClientRect();
-    let s = `<rect x="0" y="0" width="${r.width}" height="${r.height}" fill="#060709"/>`;
+    const cam = camOn();
+    let s = cam ? "" : `<rect x="0" y="0" width="${r.width}" height="${r.height}" fill="#060709"/>`;
     // bed
     const o = mm2px(p(0,0)), far = mm2px(p(BED.w,BED.h));
-    s += `<rect x="${far.x}" y="${far.y}" width="${(BED.w)*view.s}" height="${(BED.h)*view.s}" fill="var(--bed)" stroke="#2e3340"/>`;
+    s += `<rect x="${far.x}" y="${far.y}" width="${(BED.w)*view.s}" height="${(BED.h)*view.s}" fill="${cam?"none":"var(--bed)"}" stroke="#2e3340"/>`;
     // grid every 10mm
     for (let g=0; g<=BED.w; g+=10){ const a=mm2px(p(g,0)), b=mm2px(p(g,BED.h)); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#171a22"/>`; }
     for (let g=0; g<=BED.h; g+=10){ const a=mm2px(p(0,g)), b=mm2px(p(BED.w,g)); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#171a22"/>`; }
@@ -411,6 +428,7 @@
     }
     if (drawing) s += drawing;
     canvas.innerHTML = s;
+    if (typeof positionCam === "function") positionCam();
   }
   function shapePoints(sh){ return sh.geometry.Polyline ? sh.geometry.Polyline.points : []; }
   function bbox(sh){ const pts = shapePoints(sh); let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const q of pts){x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);} return {x0,y0,x1,y1}; }
@@ -418,7 +436,19 @@
   // ---- interaction ----
   let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null;
   function hitNode(cx, cy){ if (selected == null || !doc.shapes[selected]) return null; const r = canvas.getBoundingClientRect(); const pts = shapePoints(doc.shapes[selected]); for (let i = 0; i < pts.length; i++){ const d = mm2px(pts[i]); if (Math.hypot(d.x-(cx-r.left), d.y-(cy-r.top)) < 8) return i; } return null; }
+  function handleCalibClick(e){
+    const r = canvas.getBoundingClientRect();
+    camPts.push([e.clientX - r.left, e.clientY - r.top]);
+    const names = ["bottom-left","bottom-right","top-right","top-left"];
+    if (camPts.length < 4){ $("camStat").textContent = `Click bed corner ${camPts.length+1} of 4 (${names[camPts.length]}) on the image.`; return; }
+    const dst = [ mm2px(p(0,0)), mm2px(p(BED.w,0)), mm2px(p(BED.w,BED.h)), mm2px(p(0,BED.h)) ].map(q => [q.x, q.y]);
+    const mat = homography(camPts, dst);
+    camCalibrating = false;
+    if (!mat){ $("camStat").textContent = "Calibration failed. Try again with four distinct corners."; return; }
+    $("cam").style.transform = mat; $("camStat").textContent = "Aligned. The camera now matches the bed. Reset to redo it.";
+  }
   canvas.addEventListener("mousedown", e => {
+    if (camCalibrating){ handleCalibClick(e); return; }
     const m = px2mm(e.clientX, e.clientY); start = m;
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
@@ -694,7 +724,56 @@
     document.querySelectorAll(".docktabs button").forEach(x => x.classList.toggle("active", x === b));
     $("designPane").style.display = b.dataset.dock === "design" ? "flex" : "none";
     $("movePane").style.display = b.dataset.dock === "move" ? "flex" : "none";
+    $("cameraPane").style.display = b.dataset.dock === "camera" ? "flex" : "none";
   });
+
+  // ---- Camera overlay + 4-corner alignment ----
+  let camStream = null, camCalibrating = false, camPts = [];
+  $("camOpacity").oninput = () => { $("cam").style.opacity = $("camOpacity").value / 100; };
+  $("cam").style.opacity = 0.55;
+  function positionCam(){
+    const v = $("cam");
+    if (v.style.display === "none") return;
+    if (v.style.transform && v.style.transform.startsWith("matrix3d")) return;  // calibrated
+    const a = mm2px(p(0, BED.h)), b = mm2px(p(BED.w, 0));
+    v.style.left = a.x + "px"; v.style.top = a.y + "px"; v.style.width = (b.x-a.x) + "px"; v.style.height = (b.y-a.y) + "px"; v.style.objectFit = "fill";
+  }
+  async function enableCamera(){
+    if (!navigator.mediaDevices?.getUserMedia){ $("camStat").textContent = "The camera API is not available. Use Chrome or Edge over HTTPS."; return; }
+    try {
+      const sel = $("camDevice").value;
+      camStream = await navigator.mediaDevices.getUserMedia({ video: sel ? { deviceId: { exact: sel } } : { facingMode: "environment" } });
+      const v = $("cam"); v.srcObject = camStream; v.style.display = "block"; v.style.transform = "none"; positionCam();
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+      const dsel = $("camDevice"); dsel.innerHTML = devs.map(d => `<option value="${d.deviceId}">${d.label || "Camera"}</option>`).join(""); dsel.style.display = "block";
+      $("camEnable").textContent = "Camera on"; $("camStat").textContent = "Camera on. Set the opacity, then Calibrate and click the four bed corners on the image.";
+    } catch(e){ $("camStat").textContent = "Camera failed: " + e.message; }
+  }
+  // Solve an 8x8 linear system by Gaussian elimination (homography parameters).
+  function solve8(A, b){
+    const n = 8;
+    for (let c = 0; c < n; c++){
+      let piv = c; for (let r = c+1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      [A[c], A[piv]] = [A[piv], A[c]]; [b[c], b[piv]] = [b[piv], b[c]];
+      const d = A[c][c]; if (Math.abs(d) < 1e-9) return null;
+      for (let r = 0; r < n; r++){ if (r === c) continue; const f = A[r][c]/d; for (let k = c; k < n; k++) A[r][k] -= f*A[c][k]; b[r] -= f*b[c]; }
+    }
+    return b.map((v,i) => v/A[i][i]);
+  }
+  function homography(src, dst){
+    const A = [], b = [];
+    for (let i = 0; i < 4; i++){ const [x,y]=src[i], [u,v]=dst[i];
+      A.push([x,y,1,0,0,0,-u*x,-u*y]); b.push(u);
+      A.push([0,0,0,x,y,1,-v*x,-v*y]); b.push(v);
+    }
+    const h = solve8(A, b); if (!h) return null;
+    // CSS matrix3d is column-major; H is [a b c; d e f; g h 1].
+    const [a,bb,c,d,e,f,g,hh] = h;
+    return `matrix3d(${a},${d},0,${g}, ${bb},${e},0,${hh}, 0,0,1,0, ${c},${f},0,1)`;
+  }
+  $("camEnable").onclick = enableCamera;
+  $("camReset").onclick = () => { const v=$("cam"); v.style.transform="none"; positionCam(); camCalibrating=false; camPts=[]; $("camStat").textContent="Alignment reset."; };
+  $("camCalib").onclick = () => { if (!camStream){ $("camStat").textContent="Enable the camera first."; return; } camCalibrating=true; camPts=[]; const v=$("cam"); v.style.transform="none"; v.style.left="0px"; v.style.top="0px"; const r=canvas.getBoundingClientRect(); v.style.width=r.width+"px"; v.style.height=r.height+"px"; $("camStat").textContent="Click bed corner 1 of 4 (bottom-left) on the image."; };
   ["0.1","1","10","50"].forEach(d => { const c = document.createElement("span"); c.className = "chip" + (+d === jogDist ? " on" : ""); c.textContent = d; c.onclick = () => { jogDist = +d; document.querySelectorAll("#distChips .chip").forEach(x => x.classList.toggle("on", x === c)); }; $("distChips").appendChild(c); });
   function buildJog(){
     const cx = 140, cy = 140, bands = [{ri:42,ro:78,l:"1"},{ri:83,ro:120,l:"10"}];
@@ -746,6 +825,10 @@
   Object.assign(I18N.de, { "action.weld":"Verschmelzen","action.concentric":"Konzentrische Füllung" });
   Object.assign(I18N.fr, { "action.weld":"Souder (union)","action.concentric":"Remplissage concentrique" });
   Object.assign(I18N["pt-BR"], { "action.weld":"Soldar (união)","action.concentric":"Preenchimento concêntrico" });
+  Object.assign(I18N.es, { "tab.camera":"Cámara","cam.enable":"Activar cámara","cam.opacity":"Opacidad de la capa","cam.calib":"Calibrar (clic en 4 esquinas)","cam.reset":"Restablecer" });
+  Object.assign(I18N.de, { "tab.camera":"Kamera","cam.enable":"Kamera aktivieren","cam.opacity":"Deckkraft","cam.calib":"Kalibrieren (4 Ecken klicken)","cam.reset":"Zurücksetzen" });
+  Object.assign(I18N.fr, { "tab.camera":"Caméra","cam.enable":"Activer la caméra","cam.opacity":"Opacité","cam.calib":"Calibrer (4 coins)","cam.reset":"Réinitialiser" });
+  Object.assign(I18N["pt-BR"], { "tab.camera":"Câmera","cam.enable":"Ativar câmera","cam.opacity":"Opacidade","cam.calib":"Calibrar (4 cantos)","cam.reset":"Redefinir" });
   let curLang = "en";
   function trMode(m){ const t = I18N[curLang] || {}; return t["mode." + String(m).toLowerCase()] || m; }
   document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
@@ -767,7 +850,8 @@
   const urlLang = params.get("lang");
   if (urlLang && I18N[urlLang]) $("lang").value = urlLang;
   applyLang($("lang").value);
-  if (params.get("tab") === "move") document.querySelector('.docktabs button[data-dock="move"]').click();
+  const urlTab = params.get("tab");
+  if (urlTab) { const tb = document.querySelector(`.docktabs button[data-dock="${urlTab}"]`); if (tb) tb.click(); }
   const urlTool = params.get("tool");
   if (urlTool) { const tb = document.querySelector(`.tool[data-tool="${urlTool}"]`); if (tb) tb.click(); if (urlTool === "node") { selected = 0; render(); } }
   fit(); layout();
