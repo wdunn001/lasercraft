@@ -198,6 +198,7 @@
             <button class="btn" id="sendBtn" disabled data-i18n="galvo.send">Send</button>
           </div>
           <div class="stat" id="devstat" style="display:none">Galvo not connected. Plug in the board and click Connect.</div>
+          <button class="btn" id="matBtn" style="width:100%" data-i18n="mat.open">Material Library&hellip;</button>
           <div class="gcode"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
           <div class="stat"><span>Lines <b id="lineCount">0</b></span><span>Shapes <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
@@ -269,6 +270,15 @@
         </div>
       </div>
       <div class="mfoot"><button class="btn" id="csReset">Reset layer</button><span class="spacer"></span><button class="btn" id="csCancel">Cancel</button><button class="btn primary" id="csOk">OK</button></div>
+    </div>
+  </div>
+
+  <!-- material library -->
+  <div class="modal-bg" id="matBg">
+    <div class="modal" style="width:580px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="mat.title">Material Library</h2><span class="spacer"></span><span class="btn" id="matClose">&times;</span></div>
+      <div class="mbody" id="matList" style="max-height:60vh;overflow:auto"></div>
+      <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="mat.note">Starting points only. Always test on scrap first.</span><button class="btn" id="matCancel" data-i18n="action.cancel">Close</button></div>
     </div>
   </div>
 
@@ -530,6 +540,51 @@
   $("csClose").onclick=$("csCancel").onclick=closeCS;
   document.querySelectorAll("[data-cstab]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-cstab]").forEach(x=>x.classList.toggle("active",x===b)); $("cstab-cut").classList.toggle("hidden",b.dataset.cstab!=="cut"); $("cstab-timings").classList.toggle("hidden",b.dataset.cstab!=="timings"); });
   $("csOk").onclick=()=>{ const L=doc.layers[editing]; L.mode=L._mode||L.mode; L.speed_mm_s=+$("cs_speed").value; L.power_max=+$("cs_power").value; L.num_passes=+$("cs_passes").value; L.freq=+$("cs_freq").value; L.qpulse=+$("cs_qpulse").value; L.power_min=+$("cs_pmin").value; L.interval=+$("cs_interval").value; L.angle=+$("cs_angle").value; L.air_assist=$("cs_air").value==="true"; L.on_us=+$("cs_onus").value; L.off_us=+$("cs_offus").value; L.poly_us=+$("cs_polyus").value; closeCS(); snapshot(); renderLayers(); render(); generate(); };
+
+  // ---- material library (starting-point settings per material) ----
+  const MATERIALS = {
+    "Fiber (galvo)": [
+      { name:"Anodized aluminium (mark)", speed:2000, power:40, passes:1, freq:30 },
+      { name:"Stainless (dark mark)", speed:300, power:80, passes:1, freq:60 },
+      { name:"Stainless (anneal)", speed:150, power:60, passes:2, freq:200 },
+      { name:"Brass (engrave)", speed:500, power:70, passes:1, freq:40 },
+      { name:"Plastic (mark)", speed:1000, power:30, passes:1, freq:30 },
+    ],
+    "CO2 / Diode": [
+      { name:"Plywood 3 mm (cut)", speed:10, power:90, passes:2 },
+      { name:"Plywood 3 mm (engrave)", speed:150, power:30, passes:1 },
+      { name:"Acrylic 3 mm (cut)", speed:8, power:95, passes:1 },
+      { name:"Acrylic (engrave)", speed:200, power:35, passes:1 },
+      { name:"Leather 2 mm (cut)", speed:30, power:60, passes:1 },
+      { name:"Cardstock (cut)", speed:60, power:40, passes:1 },
+      { name:"Paper (score)", speed:120, power:15, passes:1 },
+    ],
+  };
+  function openMaterials(){
+    const host = $("matList"); host.innerHTML = "";
+    for (const [cat, items] of Object.entries(MATERIALS)){
+      const h = document.createElement("h3"); h.textContent = cat; h.style.cssText = "font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin:12px 0 7px"; host.appendChild(h);
+      items.forEach(m => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer";
+        row.innerHTML = `<span style="flex:1;font-weight:600">${m.name}</span><span style="color:var(--muted);font-size:12px">${m.speed} mm/s &middot; ${m.power}%${m.passes>1?` &middot; ${m.passes}&times;`:""}${m.freq?` &middot; ${m.freq} kHz`:""}</span>`;
+        row.onmouseenter = () => row.style.borderColor = "var(--accent)";
+        row.onmouseleave = () => row.style.borderColor = "var(--line)";
+        row.onclick = () => applyMaterial(m);
+        host.appendChild(row);
+      });
+    }
+    $("matBg").classList.add("show");
+  }
+  function applyMaterial(m){
+    const L = doc.layers[activeLayer];
+    L.speed_mm_s = m.speed; L.power_max = m.power; L.num_passes = m.passes || 1;
+    if (m.freq) L.freq = m.freq;
+    $("matBg").classList.remove("show");
+    snapshot(); renderLayers(); render(); generate();
+  }
+  $("matBtn").onclick = openMaterials;
+  $("matClose").onclick = $("matCancel").onclick = () => $("matBg").classList.remove("show");
 
   // ---- export to engine project JSON ----
   function toProject(){
@@ -868,10 +923,10 @@
   Object.assign(I18N.de, { "tab.camera":"Kamera","cam.enable":"Kamera aktivieren","cam.opacity":"Deckkraft","cam.calib":"Kalibrieren (4 Ecken klicken)","cam.reset":"Zurücksetzen" });
   Object.assign(I18N.fr, { "tab.camera":"Caméra","cam.enable":"Activer la caméra","cam.opacity":"Opacité","cam.calib":"Calibrer (4 coins)","cam.reset":"Réinitialiser" });
   Object.assign(I18N["pt-BR"], { "tab.camera":"Câmera","cam.enable":"Ativar câmera","cam.opacity":"Opacidade","cam.calib":"Calibrar (4 cantos)","cam.reset":"Redefinir" });
-  Object.assign(I18N.es, { "action.undo":"Deshacer","action.redo":"Rehacer" });
-  Object.assign(I18N.de, { "action.undo":"Rückgängig","action.redo":"Wiederholen" });
-  Object.assign(I18N.fr, { "action.undo":"Annuler","action.redo":"Rétablir" });
-  Object.assign(I18N["pt-BR"], { "action.undo":"Desfazer","action.redo":"Refazer" });
+  Object.assign(I18N.es, { "action.undo":"Deshacer","action.redo":"Rehacer","mat.open":"Biblioteca de materiales…","mat.title":"Biblioteca de materiales","mat.note":"Solo puntos de partida. Pruebe siempre en material de descarte.","action.cancel":"Cerrar" });
+  Object.assign(I18N.de, { "action.undo":"Rückgängig","action.redo":"Wiederholen","mat.open":"Materialbibliothek…","mat.title":"Materialbibliothek","mat.note":"Nur Startwerte. Immer an Abfallmaterial testen.","action.cancel":"Schließen" });
+  Object.assign(I18N.fr, { "action.undo":"Annuler","action.redo":"Rétablir","mat.open":"Bibliothèque de matériaux…","mat.title":"Bibliothèque de matériaux","mat.note":"Valeurs de départ uniquement. Testez toujours sur une chute.","action.cancel":"Fermer" });
+  Object.assign(I18N["pt-BR"], { "action.undo":"Desfazer","action.redo":"Refazer","mat.open":"Biblioteca de materiais…","mat.title":"Biblioteca de materiais","mat.note":"Apenas pontos de partida. Teste sempre em material de descarte.","action.cancel":"Fechar" });
   let curLang = "en";
   function trMode(m){ const t = I18N[curLang] || {}; return t["mode." + String(m).toLowerCase()] || m; }
   document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
@@ -906,6 +961,7 @@
     if (act==="concentric"){ selected=0; concentricFill(); render(); refreshCounts(); }
     else if (act==="weld"){ doc.shapes.push(rect(70,45,70,45,0)); weldActive(); render(); refreshCounts(); }
     else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selected=0; booleanWith("difference"); render(); refreshCounts(); }
+    else if (act==="materials"){ openMaterials(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
