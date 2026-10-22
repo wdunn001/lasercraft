@@ -353,7 +353,7 @@ pub fn plan_raster(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lasercraft_gcode::Grbl;
+    use lasercraft_gcode::GCodeDialect;
     use lasercraft_laser_doc::{Point2, ShapeKind};
 
     fn cut() -> CutSetting {
@@ -398,7 +398,7 @@ mod tests {
             accel_mm_s2: 1000.0,
             accel_to_decel_mm_s2: 500.0,
         };
-        let out = plan_line_fill(&bbox, &cut(), &motion, 5.0, &Grbl::new());
+        let out = plan_line_fill(&bbox, &cut(), &motion, 5.0, &GCodeDialect::grbl());
         // 20 mm/s clamps under 100 and renders as 1200 mm/min; 80 percent is S800.
         assert!(out.contains("F1200 S800"));
         assert!(out.contains("G1"));
@@ -427,7 +427,7 @@ mod tests {
             }],
             cut_settings: vec![cut()],
         };
-        let out = plan_project(&project, &motion, &Grbl::new());
+        let out = plan_project(&project, &motion, &GCodeDialect::grbl());
         // Three edges of the closed triangle become three cutting moves.
         let cut_moves = out.lines().filter(|l| l.starts_with("G1 ")).count();
         assert_eq!(cut_moves, 3);
@@ -491,7 +491,7 @@ mod tests {
             }],
             cut_settings: vec![cut()],
         };
-        let out = plan_frame(&project, &Grbl::new());
+        let out = plan_frame(&project, &GCodeDialect::grbl());
         // Five rapids trace the bounding rectangle (2,3)-(20,18) and return.
         let rapids = out.lines().filter(|l| l.starts_with("G0 ")).count();
         // Four corners, the closing corner, plus GRBL's footer homing rapid.
@@ -538,7 +538,7 @@ mod tests {
             }],
             cut_settings: vec![setting],
         };
-        let out = plan_project(&project, &motion, &Grbl::new());
+        let out = plan_project(&project, &motion, &GCodeDialect::grbl());
         // Three edges cut twice is six moves.
         let cut_moves = out.lines().filter(|l| l.starts_with("G1 ")).count();
         assert_eq!(cut_moves, 6);
@@ -593,7 +593,7 @@ mod tests {
             threshold: 128,
             speed_mm_s: 200.0,
         };
-        let out = plan_raster(&image, &params, &motion, &Grbl::new());
+        let out = plan_raster(&image, &params, &motion, &GCodeDialect::grbl());
         // The two dark pixels merge into one engrave move at full power.
         let cut_moves = out.lines().filter(|l| l.starts_with("G1 ")).count();
         assert_eq!(cut_moves, 1);

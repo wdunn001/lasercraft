@@ -84,142 +84,84 @@ pub fn program(dialect: &dyn Dialect, ops: &[Op]) -> String {
     out
 }
 
-/// The GRBL dialect, the most common controller family.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct Grbl {
-    /// The S value that maps to 100 percent power, set by the `$30` max spindle value.
-    pub spindle_max: u32,
+/// How a dialect writes laser power into its `S` word.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PowerStyle {
+    /// Integer `S` scaled to a maximum, for example GRBL's 1000 or Marlin's 255.
+    IntScale(u32),
+    /// Fractional `S` from 0.0 to 1.0, as Smoothieware expects.
+    Fraction,
 }
 
-impl Grbl {
-    /// A GRBL dialect with the stock `$30` value of 1000.
-    pub fn new() -> Self {
-        Self { spindle_max: 1000 }
-    }
-
-    fn spindle_for(&self, power: f64) -> u32 {
-        let clamped = power.clamp(0.0, 100.0);
-        let scaled = clamped / 100.0 * f64::from(self.spindle_max);
-        scaled.round() as u32
-    }
-}
-
-impl Dialect for Grbl {
-    fn flavor(&self) -> Flavor {
-        Flavor::Grbl
-    }
-
-    fn header(&self) -> String {
-        // Absolute positioning, millimetre units, dynamic-power laser mode.
-        "G90\nG21\nM4 S0\n".to_string()
-    }
-
-    fn footer(&self) -> String {
-        "M5\nG0 X0 Y0\n".to_string()
-    }
-
-    fn emit(&self, op: &Op) -> String {
-        match op {
-            Op::RapidTo { x, y } => format!("G0 X{x:.3} Y{y:.3}"),
-            Op::CutTo {
-                x,
-                y,
-                feed_mm_s,
-                power,
-            } => {
-                let feed_mm_min = feed_mm_s * 60.0;
-                let s = self.spindle_for(*power);
-                format!("G1 X{x:.3} Y{y:.3} F{feed_mm_min:.0} S{s}")
-            }
-            Op::LaserOff => "M5".to_string(),
-        }
-    }
-}
-
-/// The Marlin dialect for diode and CO2 lasers running Marlin firmware.
+/// A configurable GCode dialect.
 ///
-/// Marlin drives the laser with `M3`/`M5` inline spindle commands and scales power
-/// to the configured `spindle_max`, which defaults to 255 on stock Marlin laser
-/// builds. The move grammar matches GRBL otherwise.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct Marlin {
-    /// The S value that maps to 100 percent power. Stock Marlin laser mode is 255.
-    pub spindle_max: u32,
+/// The GCode controllers differ only in a few details: the laser mode line in the
+/// header and how power maps to the `S` word. This one type carries those as data,
+/// so a new controller is a constructor, not a copied emitter. That mirrors the
+/// single-base, per-dialect shape recovered from LightBurn.
+#[derive(Debug, Clone, Copy)]
+pub struct GCodeDialect {
+    flavor: Flavor,
+    laser_mode: &'static str,
+    power: PowerStyle,
 }
 
-impl Marlin {
-    /// A Marlin dialect with the stock power range of 255.
-    pub fn new() -> Self {
-        Self { spindle_max: 255 }
+impl GCodeDialect {
+    /// GRBL with dynamic-power `M4` mode and `S` scaled to 1000.
+    pub fn grbl() -> Self {
+        Self {
+            flavor: Flavor::Grbl,
+            laser_mode: "M4 S0",
+            power: PowerStyle::IntScale(1000),
+        }
     }
 
-    fn spindle_for(&self, power: f64) -> u32 {
-        let clamped = power.clamp(0.0, 100.0);
-        (clamped / 100.0 * f64::from(self.spindle_max)).round() as u32
-    }
-}
-
-impl Dialect for Marlin {
-    fn flavor(&self) -> Flavor {
-        Flavor::Marlin
+    /// GRBL constant-power `M3` mode (1.1e and earlier, diode controllers).
+    pub fn grbl_m3() -> Self {
+        Self {
+            flavor: Flavor::Grbl,
+            laser_mode: "M3 S0",
+            power: PowerStyle::IntScale(1000),
+        }
     }
 
-    fn header(&self) -> String {
-        "G90\nG21\nM3 S0\n".to_string()
+    /// Marlin, `M3`/`M5` with `S` scaled to the stock 255.
+    pub fn marlin() -> Self {
+        Self {
+            flavor: Flavor::Marlin,
+            laser_mode: "M3 S0",
+            power: PowerStyle::IntScale(255),
+        }
     }
 
-    fn footer(&self) -> String {
-        "M5\nG0 X0 Y0\n".to_string()
+    /// Smoothieware, `M3`/`M5` with fractional `S` from 0.0 to 1.0.
+    pub fn smoothie() -> Self {
+        Self {
+            flavor: Flavor::Smoothie,
+            laser_mode: "M3",
+            power: PowerStyle::Fraction,
+        }
     }
 
-    fn emit(&self, op: &Op) -> String {
-        match op {
-            Op::RapidTo { x, y } => format!("G0 X{x:.3} Y{y:.3}"),
-            Op::CutTo {
-                x,
-                y,
-                feed_mm_s,
-                power,
-            } => {
-                let feed_mm_min = feed_mm_s * 60.0;
-                let s = self.spindle_for(*power);
-                format!("G1 X{x:.3} Y{y:.3} F{feed_mm_min:.0} S{s}")
+    fn power_word(&self, power: f64) -> String {
+        let pct = power.clamp(0.0, 100.0);
+        match self.power {
+            PowerStyle::IntScale(max) => {
+                format!("S{}", (pct / 100.0 * f64::from(max)).round() as u32)
             }
-            Op::LaserOff => "M5".to_string(),
+            PowerStyle::Fraction => format!("S{:.3}", pct / 100.0),
         }
     }
 }
 
-/// The GRBL constant-power (`M3`) dialect, for GRBL 1.1e and earlier and for
-/// diode controllers that lack dynamic power. It matches [`Grbl`] except the
-/// header enables `M3` constant-power laser mode instead of `M4` dynamic mode, so
-/// power does not scale with speed. That is the right choice when a controller has
-/// no dynamic mode.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct GrblM3 {
-    /// The S value that maps to 100 percent power.
-    pub spindle_max: u32,
-}
-
-impl GrblM3 {
-    /// A GRBL-M3 dialect with the stock `$30` value of 1000.
-    pub fn new() -> Self {
-        Self { spindle_max: 1000 }
-    }
-
-    fn spindle_for(&self, power: f64) -> u32 {
-        (power.clamp(0.0, 100.0) / 100.0 * f64::from(self.spindle_max)).round() as u32
-    }
-}
-
-impl Dialect for GrblM3 {
+impl Dialect for GCodeDialect {
     fn flavor(&self) -> Flavor {
-        Flavor::Grbl
+        self.flavor
     }
 
     fn header(&self) -> String {
-        // M3 is constant-power laser mode, unlike GRBL's dynamic M4.
-        "G90\nG21\nM3 S0\n".to_string()
+        // Absolute positioning, millimetre units, then the laser mode.
+        format!("G90\nG21\n{}\n", self.laser_mode)
     }
 
     fn footer(&self) -> String {
@@ -236,8 +178,10 @@ impl Dialect for GrblM3 {
                 power,
             } => {
                 let feed_mm_min = feed_mm_s * 60.0;
-                let s = self.spindle_for(*power);
-                format!("G1 X{x:.3} Y{y:.3} F{feed_mm_min:.0} S{s}")
+                format!(
+                    "G1 X{x:.3} Y{y:.3} F{feed_mm_min:.0} {}",
+                    self.power_word(*power)
+                )
             }
             Op::LaserOff => "M5".to_string(),
         }
@@ -248,45 +192,50 @@ impl Dialect for GrblM3 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn grbl_m3_uses_constant_power_header() {
-        let out = program(&GrblM3::new(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
-        // Constant-power mode is M3, not M4.
-        assert!(out.starts_with("G90\nG21\nM3 S0\n"));
-        assert!(!out.contains("M4"));
-    }
-
-    #[test]
-    fn grbl_cut_scales_power_and_feed() {
-        let grbl = Grbl::new();
-        let line = grbl.emit(&Op::CutTo {
+    fn cut_50() -> Op {
+        Op::CutTo {
             x: 10.0,
             y: 5.0,
             feed_mm_s: 20.0,
             power: 50.0,
-        });
-        assert_eq!(line, "G1 X10.000 Y5.000 F1200 S500");
+        }
+    }
+
+    #[test]
+    fn grbl_cut_scales_power_and_feed() {
+        assert_eq!(
+            GCodeDialect::grbl().emit(&cut_50()),
+            "G1 X10.000 Y5.000 F1200 S500"
+        );
     }
 
     #[test]
     fn program_wraps_header_and_footer() {
-        let grbl = Grbl::new();
-        let out = program(&grbl, &[Op::RapidTo { x: 0.0, y: 0.0 }]);
+        let out = program(&GCodeDialect::grbl(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
         assert!(out.starts_with("G90\nG21\nM4 S0\n"));
         assert!(out.trim_end().ends_with("G0 X0 Y0"));
     }
 
     #[test]
+    fn grbl_m3_uses_constant_power_header() {
+        let out = program(&GCodeDialect::grbl_m3(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
+        assert!(out.starts_with("G90\nG21\nM3 S0\n"));
+        assert!(!out.contains("M4"));
+    }
+
+    #[test]
     fn marlin_scales_power_to_its_own_range() {
-        let marlin = Marlin::new();
+        let marlin = GCodeDialect::marlin();
         assert_eq!(marlin.flavor(), Flavor::Marlin);
-        let line = marlin.emit(&Op::CutTo {
-            x: 10.0,
-            y: 5.0,
-            feed_mm_s: 20.0,
-            power: 50.0,
-        });
-        // 50 percent of Marlin's 255 range is S128, feed still in mm/min.
-        assert_eq!(line, "G1 X10.000 Y5.000 F1200 S128");
+        // 50 percent of Marlin's 255 range is S128.
+        assert_eq!(marlin.emit(&cut_50()), "G1 X10.000 Y5.000 F1200 S128");
+    }
+
+    #[test]
+    fn smoothie_uses_fractional_power() {
+        let smoothie = GCodeDialect::smoothie();
+        assert_eq!(smoothie.flavor(), Flavor::Smoothie);
+        // Smoothieware power is a 0.0 to 1.0 fraction.
+        assert_eq!(smoothie.emit(&cut_50()), "G1 X10.000 Y5.000 F1200 S0.500");
     }
 }
