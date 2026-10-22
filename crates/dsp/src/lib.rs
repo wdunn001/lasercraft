@@ -152,6 +152,90 @@ impl RuidaScramble {
     }
 }
 
+/// Ruida command framing.
+///
+/// Ruida commands are opcode bytes followed by encoded operands, then the whole
+/// stream is scrambled by [`RuidaScramble`] for the wire. Absolute coordinates are
+/// 35-bit micrometre values packed big-endian as five 7-bit groups; 14-bit values
+/// (power, short params) pack as two 7-bit groups. The opcodes and encoding are the
+/// publicly documented Ruida format (jnweiger, Meerk40t, EduTech wiki). This is a
+/// clean reimplementation.
+pub mod command {
+    /// Pack a 35-bit micrometre coordinate as five big-endian 7-bit groups.
+    pub fn encode_abs(micrometres: i64) -> [u8; 5] {
+        let v = (micrometres as u64) & 0x7_ffff_ffff;
+        [
+            ((v >> 28) & 0x7f) as u8,
+            ((v >> 21) & 0x7f) as u8,
+            ((v >> 14) & 0x7f) as u8,
+            ((v >> 7) & 0x7f) as u8,
+            (v & 0x7f) as u8,
+        ]
+    }
+
+    /// Pack a 14-bit value as two big-endian 7-bit groups.
+    pub fn encode_u14(value: u16) -> [u8; 2] {
+        [((value >> 7) & 0x7f) as u8, (value & 0x7f) as u8]
+    }
+
+    /// `88` move absolute to (x, y) in micrometres, laser off.
+    pub fn move_abs(x_um: i64, y_um: i64) -> Vec<u8> {
+        let mut out = vec![0x88];
+        out.extend_from_slice(&encode_abs(x_um));
+        out.extend_from_slice(&encode_abs(y_um));
+        out
+    }
+
+    /// `a8` cut absolute to (x, y) in micrometres, laser on.
+    pub fn cut_abs(x_um: i64, y_um: i64) -> Vec<u8> {
+        let mut out = vec![0xa8];
+        out.extend_from_slice(&encode_abs(x_um));
+        out.extend_from_slice(&encode_abs(y_um));
+        out
+    }
+
+    /// `c6 01` set laser source 1 minimum power as a percentage.
+    ///
+    /// Power scales onto the 14-bit range `0..=0x3fff`.
+    pub fn set_power_min(percent: f64) -> Vec<u8> {
+        let value = (percent.clamp(0.0, 100.0) / 100.0 * 16383.0).round() as u16;
+        let mut out = vec![0xc6, 0x01];
+        out.extend_from_slice(&encode_u14(value));
+        out
+    }
+}
+
+#[cfg(test)]
+mod command_tests {
+    use super::command::*;
+
+    #[test]
+    fn abs_coordinate_packs_big_endian_7bit() {
+        // 1000 um = 7*128 + 104, so the low two groups are 0x07 and 0x68.
+        assert_eq!(encode_abs(1000), [0x00, 0x00, 0x00, 0x07, 0x68]);
+        assert_eq!(encode_abs(0), [0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn u14_and_power_encode() {
+        assert_eq!(encode_u14(0x3fff), [0x7f, 0x7f]);
+        assert_eq!(encode_u14(0), [0, 0]);
+        // 100 percent is the full 0x3fff.
+        assert_eq!(set_power_min(100.0), vec![0xc6, 0x01, 0x7f, 0x7f]);
+        // 50 percent rounds to 0x2000 -> groups 0x40, 0x00.
+        assert_eq!(set_power_min(50.0), vec![0xc6, 0x01, 0x40, 0x00]);
+    }
+
+    #[test]
+    fn move_and_cut_carry_their_opcodes() {
+        let m = move_abs(1000, 0);
+        assert_eq!(m[0], 0x88);
+        assert_eq!(m.len(), 11);
+        assert_eq!(&m[1..6], &[0, 0, 0, 0x07, 0x68]);
+        assert_eq!(cut_abs(0, 0)[0], 0xa8);
+    }
+}
+
 #[cfg(test)]
 mod ruida_tests {
     use super::*;
