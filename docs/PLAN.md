@@ -78,8 +78,14 @@ The controller protocols are the keystone. LightBurn drives existing controller 
 
 Rust builds run in Docker on .57. Windows binaries cross-compile on .57 with cargo-xwin. The WASM build follows the Craft precompressed convention. These placements come from existing lab rules and are not relitigated here.
 
+## Crate location decision
+
+`craft-libs/AGENTS.md` requires every crate there to be useful to more than one app. The laser crates (device, gcode, dsp, galvo, motion, toolpath, trace, laser-doc, xtool) are laser-specific, so they do not qualify. They live in this LaserCraft repo as a Cargo workspace. LaserCraft consumes `craft-libs` for the shared parts (`craft-ui`, `craft-cloud`, `craft-cloud-client`, `craft-collab`, `craft-settings`, `craft-atomic`). If any laser crate later proves useful to another app, it folds into `craft-libs` the way `craft-nextcloud` did.
+
+The workspace mirrors the craft-libs conventions: edition 2024, `unsafe_code = "forbid"`, and every `lib.rs` opens with the never-crash deny block (`unwrap_used`, `expect_used`, `panic`, `unimplemented`, `todo`, `unreachable`). The merge gate is the same three commands. Builds run in Docker on .57.
+
 ## Open decisions
 
-1. Final project name. `lasercraft` is provisional.
-2. Whether LaserCraft lives in its own repo like the other apps, with the laser crates folded into `craft-libs`, matching how `craft-nextcloud` was added.
-3. MetaMCP onboarding shape for REA, given REA must run where LightBurn lives. See `rea-workflow.md`.
+1. MetaMCP onboarding shape for REA, given REA must run where LightBurn lives. See `rea-workflow.md`.
+2. Pinning strategy for `craft-libs` (git rev versus path) once the first LaserCraft crate depends on it.
+3. Byte-level DSP protocol decompilation needs the Ghidra heap raised, since the full exe snapshot reopen is killed on load.
