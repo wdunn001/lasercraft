@@ -19,8 +19,9 @@
 
 use lasercraft_engine::{
     FrameStyle, MaterialTestSpec, estimate_job_time, material_test, plan_frame_styled,
-    plan_project, project_to_svg,
+    plan_galvo_lmc, plan_project, project_to_svg,
 };
+use lasercraft_galvo::GalvoParam;
 use lasercraft_gcode::GCodeDialect;
 use lasercraft_laser_doc::Project;
 use lasercraft_motion::MotionConfig;
@@ -83,6 +84,34 @@ pub fn estimate_seconds(project_json: &str, motion_json: &str) -> Result<f64, Js
     let project: Project = parse(project_json, "project")?;
     let motion: MotionConfig = parse(motion_json, "motion config")?;
     Ok(estimate_job_time(&project, &motion))
+}
+
+/// Plan a galvo project as BJJCZ LMC board bytes, ready for a WebUSB bulk write.
+///
+/// The field is a square of `field_mm` at `resolution_bits` (sixteen for most
+/// boards). `mark_speed` and `power_ratio` are the board's raw values. The result
+/// is the padded list buffer as a byte array, which the page writes to the galvo
+/// controller's bulk endpoint.
+#[wasm_bindgen]
+pub fn generate_galvo_lmc(
+    project_json: &str,
+    field_mm: f64,
+    resolution_bits: u32,
+    frequency_khz: f64,
+    mark_speed: u32,
+    power_ratio: u32,
+) -> Result<Vec<u8>, JsError> {
+    let project: Project = parse(project_json, "project")?;
+    let param = GalvoParam {
+        field_size_mm: field_mm,
+        resolution_bits,
+    };
+    let hz = (frequency_khz * 1000.0)
+        .round()
+        .clamp(0.0, f64::from(u32::MAX)) as u32;
+    let speed = mark_speed.min(u32::from(u16::MAX)) as u16;
+    let power = power_ratio.min(u32::from(u16::MAX)) as u16;
+    Ok(plan_galvo_lmc(&project, &param, hz, speed, power))
 }
 
 /// Build a material-test grid project from `spec` and return it as project JSON.

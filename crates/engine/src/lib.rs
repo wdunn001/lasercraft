@@ -14,7 +14,7 @@
 //! controller output by composing the vendor-free crates: the document model, the
 //! toolpath generator, the motion limits, and a GCode dialect.
 
-use lasercraft_galvo::{GalvoCommand, GalvoParam, MarkRun, mark_polyline, mark_scanlines};
+use lasercraft_galvo::{GalvoCommand, GalvoParam, MarkRun, lmc, mark_polyline, mark_scanlines};
 use lasercraft_gcode::{Dialect, Op, program};
 use lasercraft_laser_doc::{CutSetting, Geometry, Point2, Project, Shape, ShapeKind};
 use lasercraft_motion::MotionConfig;
@@ -407,6 +407,24 @@ pub fn plan_galvo_raster(
     mark_scanlines(param, &runs, frequency_hz)
 }
 
+/// Plan an entire galvo project as BJJCZ LMC board bytes.
+///
+/// This is the galvo analogue of [`plan_project`] carried all the way to the
+/// wire. It maps every shape through the field with [`plan_galvo_project`], then
+/// serialises the marking commands into the LMC list format for the bulk write to
+/// the controller. `mark_speed` and `power_ratio` are the board's own raw values,
+/// which the device profile and its calibration supply.
+pub fn plan_galvo_lmc(
+    project: &Project,
+    param: &GalvoParam,
+    frequency_hz: u32,
+    mark_speed: u16,
+    power_ratio: u16,
+) -> Vec<u8> {
+    let commands = plan_galvo_project(project, param, frequency_hz);
+    lmc::compile(&commands, mark_speed, power_ratio)
+}
+
 /// Estimate the cutting time of a project in seconds.
 ///
 /// Each shape is flattened and every segment is timed with the trapezoidal
@@ -694,6 +712,34 @@ mod tests {
             moves(&contour),
             moves(&bounds)
         );
+    }
+
+    #[test]
+    fn a_galvo_project_compiles_to_lmc_chunks() {
+        let mut project = Project::new();
+        project.cut_settings.push(cut());
+        project.shapes.push(Shape {
+            kind: ShapeKind::Path,
+            cut_index: 0,
+            geometry: Geometry::Polyline {
+                points: vec![
+                    Point2 { x: -10.0, y: -10.0 },
+                    Point2 { x: 10.0, y: -10.0 },
+                    Point2 { x: 10.0, y: 10.0 },
+                ],
+                closed: true,
+            },
+        });
+        let param = GalvoParam {
+            field_size_mm: 110.0,
+            resolution_bits: 16,
+        };
+        let bytes = plan_galvo_lmc(&project, &param, 30_000, 100, 0x0800);
+        assert!(!bytes.is_empty());
+        // The buffer is whole 0xC00 list chunks.
+        assert_eq!(bytes.len() % 0xC00, 0);
+        // It opens with the marking-speed command 0x800C.
+        assert_eq!(&bytes[0..2], &0x800Cu16.to_le_bytes());
     }
 
     #[test]
