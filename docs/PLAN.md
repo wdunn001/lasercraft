@@ -80,7 +80,7 @@ Rust builds run in Docker on .57. Windows binaries cross-compile on .57 with car
 
 ## Crate location decision
 
-`craft-libs/AGENTS.md` requires every crate there to be useful to more than one app. The laser crates (device, gcode, dsp, galvo, motion, toolpath, trace, laser-doc, xtool) are laser-specific, so they do not qualify. They live in this LaserCraft repo as a Cargo workspace. LaserCraft consumes `craft-libs` for the shared parts (`craft-ui`, `craft-cloud`, `craft-cloud-client`, `craft-collab`, `craft-settings`, `craft-atomic`). If any laser crate later proves useful to another app, it folds into `craft-libs` the way `craft-nextcloud` did.
+`craft-libs/AGENTS.md` requires every crate there to be useful to more than one app. The laser crates (device, gcode, dsp, galvo, motion, toolpath, trace, laser-doc, xtool) are laser-specific. They do not qualify. They live in this LaserCraft repo as a Cargo workspace. LaserCraft consumes `craft-libs` for the shared parts (`craft-ui`, `craft-cloud`, `craft-cloud-client`, `craft-collab`, `craft-settings`, `craft-atomic`). If any laser crate later proves useful to another app, it folds into `craft-libs` the way `craft-nextcloud` did.
 
 The workspace mirrors the craft-libs conventions: edition 2024, `unsafe_code = "forbid"`, and every `lib.rs` opens with the never-crash deny block (`unwrap_used`, `expect_used`, `panic`, `unimplemented`, `todo`, `unreachable`). The merge gate is the same three commands. Builds run in Docker on .57.
 
