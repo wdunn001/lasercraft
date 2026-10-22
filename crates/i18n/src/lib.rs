@@ -68,6 +68,29 @@ impl Catalog {
     }
 }
 
+/// The locales shipped with LaserCraft, embedded at compile time.
+const BUILTIN_LOCALES: &[(&str, &str)] = &[
+    ("en", include_str!("../locales/en.json")),
+    ("es", include_str!("../locales/es.json")),
+    ("de", include_str!("../locales/de.json")),
+    ("fr", include_str!("../locales/fr.json")),
+    ("pt-BR", include_str!("../locales/pt-BR.json")),
+];
+
+/// Build the catalog shipped with LaserCraft, with English as the fallback.
+///
+/// The locale tables are embedded JSON. A table that fails to parse is skipped so
+/// a packaging mistake degrades to the fallback rather than crashing.
+pub fn builtin_catalog() -> Catalog {
+    let mut catalog = Catalog::new("en");
+    for (locale, json) in BUILTIN_LOCALES {
+        if let Ok(table) = serde_json::from_str::<BTreeMap<String, String>>(json) {
+            catalog.add_table(*locale, table);
+        }
+    }
+    catalog
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,5 +119,17 @@ mod tests {
         assert_eq!(catalog.tr("es", "menu.cut"), "Cut");
         // Missing everywhere returns the key.
         assert_eq!(catalog.tr("fr", "menu.unknown"), "menu.unknown");
+    }
+
+    #[test]
+    fn builtin_catalog_has_real_translations() {
+        let catalog = builtin_catalog();
+        assert_eq!(catalog.tr("en", "app.name"), "LaserCraft");
+        assert_eq!(catalog.tr("de", "menu.file"), "Datei");
+        assert_eq!(catalog.tr("es", "mode.engrave"), "Grabar");
+        assert_eq!(catalog.tr("fr", "action.save"), "Enregistrer");
+        assert_eq!(catalog.tr("pt-BR", "layer.power"), "Potência");
+        // An untranslated key falls back to the English default.
+        assert_eq!(catalog.tr("de", "mode.scan"), "Scannen");
     }
 }

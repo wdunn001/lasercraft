@@ -1,0 +1,21 @@
+{
+  "app.name": "LaserCraft",
+  "menu.file": "File",
+  "menu.edit": "Edit",
+  "menu.view": "View",
+  "menu.help": "Help",
+  "action.open": "Open",
+  "action.save": "Save",
+  "action.start": "Start",
+  "action.pause": "Pause",
+  "action.stop": "Stop",
+  "action.frame": "Frame",
+  "action.home": "Home",
+  "layer.speed": "Speed",
+  "layer.power": "Power",
+  "layer.passes": "Passes",
+  "layer.air_assist": "Air Assist",
+  "mode.cut": "Cut",
+  "mode.engrave": "Engrave",
+  "mode.scan": "Scan"
+}

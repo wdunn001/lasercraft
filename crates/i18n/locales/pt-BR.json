@@ -1,0 +1,21 @@
+{
+  "app.name": "LaserCraft",
+  "menu.file": "Arquivo",
+  "menu.edit": "Editar",
+  "menu.view": "Exibir",
+  "menu.help": "Ajuda",
+  "action.open": "Abrir",
+  "action.save": "Salvar",
+  "action.start": "Iniciar",
+  "action.pause": "Pausar",
+  "action.stop": "Parar",
+  "action.frame": "Moldura",
+  "action.home": "Início",
+  "layer.speed": "Velocidade",
+  "layer.power": "Potência",
+  "layer.passes": "Passagens",
+  "layer.air_assist": "Assistência de ar",
+  "mode.cut": "Cortar",
+  "mode.engrave": "Gravar",
+  "mode.scan": "Digitalizar"
+}
