@@ -246,30 +246,30 @@
       <div class="mbody">
         <div class="seg" id="csMode"></div>
         <div class="grid3">
-          <div class="f"><label>Speed</label><span class="aka">LightBurn Speed &middot; EZCAD Mark Speed</span><input id="cs_speed" type="number" step="1"></div>
-          <div class="f"><label>Power</label><span class="aka">LB Max Power &middot; EZCAD Power</span><input id="cs_power" type="number" step="1"></div>
-          <div class="f"><label>Passes</label><span class="aka">LB Number of Passes</span><input id="cs_passes" type="number" step="1"></div>
-          <div class="f"><label>Pulse Frequency</label><span class="aka">LB Frequency</span><input id="cs_freq" type="number" step="0.1"></div>
-          <div class="f"><label>Pulse Width</label><span class="aka">LB Q-Pulse &middot; EZCAD Q Pulse</span><input id="cs_qpulse" type="number" step="1"></div>
-          <div class="f"><label>Min Power</label><span class="aka">LB Min Power</span><input id="cs_pmin" type="number" step="1"></div>
+          <div class="f"><label data-i18n="layer.speed">Speed</label><span class="aka">LightBurn Speed &middot; EZCAD Mark Speed</span><input id="cs_speed" type="number" step="1"></div>
+          <div class="f"><label data-i18n="layer.power">Power</label><span class="aka">LB Max Power &middot; EZCAD Power</span><input id="cs_power" type="number" step="1"></div>
+          <div class="f"><label data-i18n="layer.passes">Passes</label><span class="aka">LB Number of Passes</span><input id="cs_passes" type="number" step="1"></div>
+          <div class="f"><label data-i18n="cs.freq">Pulse Frequency</label><span class="aka">LB Frequency</span><input id="cs_freq" type="number" step="0.1"></div>
+          <div class="f"><label data-i18n="cs.qpulse">Pulse Width</label><span class="aka">LB Q-Pulse &middot; EZCAD Q Pulse</span><input id="cs_qpulse" type="number" step="1"></div>
+          <div class="f"><label data-i18n="cs.pmin">Min Power</label><span class="aka">LB Min Power</span><input id="cs_pmin" type="number" step="1"></div>
         </div>
-        <div class="tabrow"><button class="active" data-cstab="cut">Cut</button><button data-cstab="timings">Timings</button></div>
+        <div class="tabrow"><button class="active" data-cstab="cut" data-i18n="cs.tabcut">Cut</button><button data-cstab="timings" data-i18n="cs.tabtimings">Timings</button></div>
         <div id="cstab-cut" style="padding-top:14px">
           <div class="grid3">
-            <div class="f"><label>Line Interval</label><span class="aka">LB Line Interval &middot; EZCAD Line Space</span><input id="cs_interval" type="number" step="0.01"></div>
-            <div class="f"><label>Hatch Angle</label><span class="aka">LB Angle</span><input id="cs_angle" type="number" step="1"></div>
-            <div class="f"><label>Air Assist</label><span class="aka">on / off</span><select id="cs_air"><option value="true">On</option><option value="false">Off</option></select></div>
+            <div class="f"><label data-i18n="cs.interval">Line Interval</label><span class="aka">LB Line Interval &middot; EZCAD Line Space</span><input id="cs_interval" type="number" step="0.01"></div>
+            <div class="f"><label data-i18n="cs.angle">Hatch Angle</label><span class="aka">LB Angle</span><input id="cs_angle" type="number" step="1"></div>
+            <div class="f"><label data-i18n="layer.air_assist">Air Assist</label><span class="aka">on / off</span><select id="cs_air"><option value="true" data-i18n="cs.on">On</option><option value="false" data-i18n="cs.off">Off</option></select></div>
           </div>
         </div>
         <div id="cstab-timings" class="hidden" style="padding-top:14px">
           <div class="grid3">
-            <div class="f"><label>Laser On Delay</label><span class="aka">LB Laser On TC (us)</span><input id="cs_onus" type="number" step="1"></div>
-            <div class="f"><label>Laser Off Delay</label><span class="aka">LB Laser Off TC (us)</span><input id="cs_offus" type="number" step="1"></div>
-            <div class="f"><label>Corner Delay</label><span class="aka">LB Polygon TC (us)</span><input id="cs_polyus" type="number" step="1"></div>
+            <div class="f"><label data-i18n="cs.onus">Laser On Delay</label><span class="aka">LB Laser On TC (us)</span><input id="cs_onus" type="number" step="1"></div>
+            <div class="f"><label data-i18n="cs.offus">Laser Off Delay</label><span class="aka">LB Laser Off TC (us)</span><input id="cs_offus" type="number" step="1"></div>
+            <div class="f"><label data-i18n="cs.polyus">Corner Delay</label><span class="aka">LB Polygon TC (us)</span><input id="cs_polyus" type="number" step="1"></div>
           </div>
         </div>
       </div>
-      <div class="mfoot"><button class="btn" id="csReset">Reset layer</button><span class="spacer"></span><button class="btn" id="csCancel">Cancel</button><button class="btn primary" id="csOk">OK</button></div>
+      <div class="mfoot"><button class="btn" id="csReset" data-i18n="cs.reset">Reset layer</button><span class="spacer"></span><button class="btn" id="csCancel" data-i18n="action.cancel">Cancel</button><button class="btn primary" id="csOk" data-i18n="action.ok">OK</button></div>
     </div>
   </div>
 
@@ -526,9 +526,9 @@
   const MODES=[["Line","outline"],["Fill","hatch"],["Concentric","offset"],["Image","bitmap"]];
   function openCutSettings(i){
     editing=i; const L=doc.layers[i];
-    $("csTitle").textContent=`Cut Settings — Layer ${String(L.index).padStart(2,"0")} (${L.name})`;
+    $("csTitle").textContent = `${(I18N[curLang] && I18N[curLang]["cs.title"]) || "Cut Settings"} ${String(L.index).padStart(2,"0")} (${L.name})`;
     const seg=$("csMode"); seg.innerHTML="";
-    MODES.forEach(([m,aka])=>{ const b=document.createElement("button"); b.className=(L.mode===m?"active":""); b.innerHTML=`${m}<span class="aka">${aka}</span>`; b.onclick=()=>{ seg.querySelectorAll("button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); L._mode=m; }; seg.appendChild(b); });
+    MODES.forEach(([m,aka])=>{ const b=document.createElement("button"); b.className=(L.mode===m?"active":""); b.innerHTML=`${trMode(m)}<span class="aka">${aka}</span>`; b.onclick=()=>{ seg.querySelectorAll("button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); L._mode=m; }; seg.appendChild(b); });
     L._mode=L.mode;
     $("cs_speed").value=L.speed_mm_s; $("cs_power").value=L.power_max; $("cs_passes").value=L.num_passes;
     $("cs_freq").value=L.freq; $("cs_qpulse").value=L.qpulse; $("cs_pmin").value=L.power_min;
@@ -927,6 +927,14 @@
   Object.assign(I18N.de, { "action.undo":"Rückgängig","action.redo":"Wiederholen","mat.open":"Materialbibliothek…","mat.title":"Materialbibliothek","mat.note":"Nur Startwerte. Immer an Abfallmaterial testen.","action.cancel":"Schließen" });
   Object.assign(I18N.fr, { "action.undo":"Annuler","action.redo":"Rétablir","mat.open":"Bibliothèque de matériaux…","mat.title":"Bibliothèque de matériaux","mat.note":"Valeurs de départ uniquement. Testez toujours sur une chute.","action.cancel":"Fermer" });
   Object.assign(I18N["pt-BR"], { "action.undo":"Desfazer","action.redo":"Refazer","mat.open":"Biblioteca de materiais…","mat.title":"Biblioteca de materiais","mat.note":"Apenas pontos de partida. Teste sempre em material de descarte.","action.cancel":"Fechar" });
+  Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
+  Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
+  Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
+  Object.assign(I18N["pt-BR"], { "layer.speed":"Velocidade","layer.power":"Potência","layer.passes":"Passagens","layer.air_assist":"Assistência de ar" });
+  Object.assign(I18N.es, { "cs.title":"Ajustes de corte","cs.freq":"Frecuencia de pulso","cs.qpulse":"Ancho de pulso","cs.pmin":"Potencia mín.","cs.interval":"Intervalo de líneas","cs.angle":"Ángulo de trama","cs.on":"Activado","cs.off":"Desactivado","cs.onus":"Retardo láser on","cs.offus":"Retardo láser off","cs.polyus":"Retardo de esquina","cs.tabcut":"Corte","cs.tabtimings":"Tiempos","cs.reset":"Restablecer capa" });
+  Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","cs.freq":"Pulsfrequenz","cs.qpulse":"Pulsbreite","cs.pmin":"Min. Leistung","cs.interval":"Linienabstand","cs.angle":"Schraffurwinkel","cs.on":"Ein","cs.off":"Aus","cs.onus":"Laser-Ein-Verzögerung","cs.offus":"Laser-Aus-Verzögerung","cs.polyus":"Eckverzögerung","cs.tabcut":"Schnitt","cs.tabtimings":"Zeiten","cs.reset":"Ebene zurücksetzen" });
+  Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","cs.freq":"Fréquence d'impulsion","cs.qpulse":"Largeur d'impulsion","cs.pmin":"Puissance min.","cs.interval":"Intervalle de lignes","cs.angle":"Angle de hachure","cs.on":"Activé","cs.off":"Désactivé","cs.onus":"Délai laser activé","cs.offus":"Délai laser désactivé","cs.polyus":"Délai d'angle","cs.tabcut":"Coupe","cs.tabtimings":"Temps","cs.reset":"Réinitialiser le calque" });
+  Object.assign(I18N["pt-BR"], { "cs.title":"Configurações de corte","cs.freq":"Frequência de pulso","cs.qpulse":"Largura de pulso","cs.pmin":"Potência mín.","cs.interval":"Intervalo de linhas","cs.angle":"Ângulo de hachura","cs.on":"Ligado","cs.off":"Desligado","cs.onus":"Atraso laser ligado","cs.offus":"Atraso laser desligado","cs.polyus":"Atraso de canto","cs.tabcut":"Corte","cs.tabtimings":"Tempos","cs.reset":"Redefinir camada" });
   let curLang = "en";
   function trMode(m){ const t = I18N[curLang] || {}; return t["mode." + String(m).toLowerCase()] || m; }
   document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
@@ -962,6 +970,7 @@
     else if (act==="weld"){ doc.shapes.push(rect(70,45,70,45,0)); weldActive(); render(); refreshCounts(); }
     else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selected=0; booleanWith("difference"); render(); refreshCounts(); }
     else if (act==="materials"){ openMaterials(); }
+    else if (act==="cs"){ openCutSettings(2); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
