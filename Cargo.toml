@@ -18,6 +18,8 @@ lasercraft-galvo = { path = "crates/galvo" }
 lasercraft-gcode = { path = "crates/gcode" }
 lasercraft-laser-doc = { path = "crates/laser-doc" }
 lasercraft-motion = { path = "crates/motion" }
+lasercraft-toolpath = { path = "crates/toolpath" }
+lasercraft-trace = { path = "crates/trace" }
 lasercraft-xtool = { path = "crates/xtool" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
