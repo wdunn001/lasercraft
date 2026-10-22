@@ -462,6 +462,122 @@ pub fn plan_frame(project: &Project, dialect: &dyn Dialect) -> String {
     program(dialect, &ops)
 }
 
+/// How the framing pass traces the job. LightBurn "Bounds", "Hull", "Contour".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FrameStyle {
+    /// The bounding rectangle around everything. LightBurn "Bounds".
+    #[default]
+    Bounds,
+    /// The convex hull of all geometry, a tight wrap. LightBurn "Hull".
+    Hull,
+    /// The outline of every shape in turn. LightBurn "Contour".
+    Contour,
+}
+
+/// The flattened vertices of one shape, in document coordinates.
+fn shape_points(shape: &Shape) -> Vec<Point> {
+    const CURVE_STEPS: u32 = 24;
+    let pts = match &shape.geometry {
+        Geometry::Polyline { points, .. } => points.clone(),
+        Geometry::Path(path) => path.flatten(CURVE_STEPS),
+        Geometry::Empty => return Vec::new(),
+    };
+    pts.iter().map(|p| Point { x: p.x, y: p.y }).collect()
+}
+
+/// The convex hull of a point set, counter-clockwise, by Andrew's monotone
+/// chain. Returns the input when there are fewer than three distinct points.
+fn convex_hull(points: &[Point]) -> Vec<Point> {
+    let mut pts: Vec<Point> = points.to_vec();
+    pts.sort_by(|a, b| {
+        a.x.partial_cmp(&b.x)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    pts.dedup_by(|a, b| a.x == b.x && a.y == b.y);
+    if pts.len() < 3 {
+        return pts;
+    }
+    let cross =
+        |o: Point, a: Point, b: Point| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    let build = |iter: &mut dyn Iterator<Item = Point>| -> Vec<Point> {
+        let mut chain: Vec<Point> = Vec::new();
+        for p in iter {
+            while chain.len() >= 2 {
+                let n = chain.len();
+                let (Some(&a), Some(&b)) = (chain.get(n - 2), chain.get(n - 1)) else {
+                    break;
+                };
+                if cross(a, b, p) <= 0.0 {
+                    chain.pop();
+                } else {
+                    break;
+                }
+            }
+            chain.push(p);
+        }
+        chain.pop();
+        chain
+    };
+    let mut lower = build(&mut pts.iter().copied());
+    let upper = build(&mut pts.iter().rev().copied());
+    lower.extend(upper);
+    lower
+}
+
+/// Plan a framing pass in the given style.
+///
+/// Bounds traces the bounding rectangle. Hull traces the convex hull of all
+/// geometry. Contour traces each shape's own outline. Every move is a rapid with
+/// the laser off, so the operator sees where the job lands before marking.
+pub fn plan_frame_styled(project: &Project, style: FrameStyle, dialect: &dyn Dialect) -> String {
+    let empty = || {
+        let mut s = dialect.header();
+        s.push_str(&dialect.footer());
+        s
+    };
+    match style {
+        FrameStyle::Bounds => plan_frame(project, dialect),
+        FrameStyle::Hull => {
+            let points: Vec<Point> = project.shapes.iter().flat_map(shape_points).collect();
+            let hull = convex_hull(&points);
+            let Some(&first) = hull.first() else {
+                return empty();
+            };
+            if hull.len() < 2 {
+                return empty();
+            }
+            let mut ops: Vec<Op> = hull
+                .iter()
+                .map(|p| Op::RapidTo { x: p.x, y: p.y })
+                .collect();
+            ops.push(Op::RapidTo {
+                x: first.x,
+                y: first.y,
+            });
+            program(dialect, &ops)
+        }
+        FrameStyle::Contour => {
+            let mut ops: Vec<Op> = Vec::new();
+            for shape in &project.shapes {
+                let pts = shape_points(shape);
+                let Some(&first) = pts.first() else { continue };
+                for p in &pts {
+                    ops.push(Op::RapidTo { x: p.x, y: p.y });
+                }
+                ops.push(Op::RapidTo {
+                    x: first.x,
+                    y: first.y,
+                });
+            }
+            if ops.is_empty() {
+                return empty();
+            }
+            program(dialect, &ops)
+        }
+    }
+}
+
 /// Generate controller output to raster-engrave an image.
 ///
 /// Each constant-power scan run becomes a rapid to its start with the laser off,
@@ -528,6 +644,56 @@ mod tests {
         );
         assert!(engine.execute(Command::AddShape(shape)).is_ok());
         assert_eq!(engine.project().shapes.len(), 1);
+    }
+
+    #[test]
+    fn framing_styles_trace_bounds_hull_and_contour() {
+        let dialect = GCodeDialect::grbl();
+        let mut project = Project::new();
+        project.cut_settings.push(cut());
+        // A triangle and a separate square.
+        project.shapes.push(Shape {
+            kind: ShapeKind::Path,
+            cut_index: 0,
+            geometry: Geometry::Polyline {
+                points: vec![
+                    Point2 { x: 0.0, y: 0.0 },
+                    Point2 { x: 10.0, y: 0.0 },
+                    Point2 { x: 5.0, y: 8.0 },
+                ],
+                closed: true,
+            },
+        });
+        project.shapes.push(Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: Geometry::Polyline {
+                points: vec![
+                    Point2 { x: 20.0, y: 0.0 },
+                    Point2 { x: 30.0, y: 0.0 },
+                    Point2 { x: 30.0, y: 8.0 },
+                    Point2 { x: 20.0, y: 8.0 },
+                ],
+                closed: true,
+            },
+        });
+        // Each rapid move writes one X coordinate, so counting X tracks the move count.
+        let moves = |s: &str| s.matches('X').count();
+        // Bounds frames the overall rectangle: four corners and a close.
+        let bounds = plan_frame_styled(&project, FrameStyle::Bounds, &dialect);
+        assert!(moves(&bounds) >= 5, "bounds moves {}", moves(&bounds));
+        assert!(bounds.contains("X30") && bounds.contains("Y8"));
+        // Hull wraps all the outer points in one loop.
+        let hull = plan_frame_styled(&project, FrameStyle::Hull, &dialect);
+        assert!(moves(&hull) >= 4, "hull moves {}", moves(&hull));
+        // Contour traces both shapes, so it has more moves than the single bounds loop.
+        let contour = plan_frame_styled(&project, FrameStyle::Contour, &dialect);
+        assert!(
+            moves(&contour) > moves(&bounds),
+            "contour {} bounds {}",
+            moves(&contour),
+            moves(&bounds)
+        );
     }
 
     #[test]

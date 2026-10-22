@@ -18,7 +18,8 @@
 //! `serde_json` and returns a [`JsError`] on bad input rather than trapping.
 
 use lasercraft_engine::{
-    MaterialTestSpec, estimate_job_time, material_test, plan_frame, plan_project, project_to_svg,
+    FrameStyle, MaterialTestSpec, estimate_job_time, material_test, plan_frame_styled,
+    plan_project, project_to_svg,
 };
 use lasercraft_gcode::GCodeDialect;
 use lasercraft_laser_doc::Project;
@@ -54,12 +55,19 @@ pub fn generate_gcode(
     Ok(plan_project(&project, &motion, &dialect(flavor)))
 }
 
-/// Plan the framing pass: the bounding travel the laser traces, off, so the
-/// operator can see where the job lands on the material.
+/// Plan the framing pass the laser traces with the beam off, so the operator can
+/// see where the job lands on the material.
+///
+/// `style` is `bounds`, `hull` or `contour`. An unknown value frames the bounds.
 #[wasm_bindgen]
-pub fn generate_frame(project_json: &str, flavor: &str) -> Result<String, JsError> {
+pub fn generate_frame(project_json: &str, style: &str, flavor: &str) -> Result<String, JsError> {
     let project: Project = parse(project_json, "project")?;
-    Ok(plan_frame(&project, &dialect(flavor)))
+    let style = match style {
+        "hull" => FrameStyle::Hull,
+        "contour" => FrameStyle::Contour,
+        _ => FrameStyle::Bounds,
+    };
+    Ok(plan_frame_styled(&project, style, &dialect(flavor)))
 }
 
 /// Render `project` to an SVG preview string for display in the page.

@@ -490,15 +490,180 @@ impl Default for GalvoConfig {
     }
 }
 
-/// A rotary attachment, for engraving cylinders.
+/// How a rotary grips the work. LightBurn "Rotary Type".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum RotaryType {
+    /// A chuck holds the end of the work. LightBurn "Chuck".
+    #[default]
+    Chuck,
+    /// Rollers spin the work from below. LightBurn "Roller".
+    Roller,
+}
+
+/// Rotary motor and speed settings. LightBurn "Rotary settings" and "Motor speed settings".
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RotaryMotor {
+    /// Which motor output drives the rotary. LightBurn "Motor to move".
+    pub motor: u8,
+    /// Steps for one full rotation. LightBurn "steps per rotation".
+    pub steps_per_rotation: f64,
+    /// Minimum speed in pulses per second. LightBurn "Min Speed".
+    pub min_speed_pps: f64,
+    /// Maximum speed in pulses per second. LightBurn "Max Speed".
+    pub max_speed_pps: f64,
+    /// Acceleration time in milliseconds. LightBurn "Acceleration Time".
+    pub accel_time_ms: f64,
+    /// Return speed in pulses per second. LightBurn "Return Speed".
+    pub return_speed_pps: f64,
+}
+
+impl Default for RotaryMotor {
+    fn default() -> Self {
+        Self {
+            motor: 1,
+            steps_per_rotation: 5000.0,
+            min_speed_pps: 500.0,
+            max_speed_pps: 3000.0,
+            accel_time_ms: 100.0,
+            return_speed_pps: 3000.0,
+        }
+    }
+}
+
+/// Splitting a job that is wider than the field, rolled in sections. LightBurn "Split Setup".
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct RotarySplit {
+    /// The width of one section in millimetres. LightBurn "Split size".
+    pub split_size_mm: f64,
+    /// The overlap between sections in millimetres. LightBurn "Overlap".
+    pub overlap_mm: f64,
+}
+
+impl Default for RotarySplit {
+    fn default() -> Self {
+        Self {
+            split_size_mm: 5.0,
+            overlap_mm: 0.0,
+        }
+    }
+}
+
+/// A rotary attachment, for engraving cylinders. LightBurn "Rotary Setup".
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RotaryConfig {
     /// Which machine axis the rotary replaces, for example `A` or `Y`.
     pub axis: char,
-    /// Travel in millimetres for one full rotation of the roller or chuck.
+    /// Travel in millimetres for one full rotation, for a GCode rotary.
     pub mm_per_rotation: f64,
-    /// The object diameter in millimetres, used to map surface distance to rotation.
+    /// The object diameter in millimetres. LightBurn "Object Diameter".
     pub object_diameter_mm: f64,
+    /// Chuck or roller. LightBurn "Rotary Type".
+    #[serde(default)]
+    pub rotary_type: RotaryType,
+    /// Whether the rotary is on. LightBurn "Enable Rotary".
+    #[serde(default)]
+    pub enabled: bool,
+    /// Reverse the rotation direction. LightBurn "Reverse Rotary Direction".
+    #[serde(default)]
+    pub reverse: bool,
+    /// Return to the starting point after the job. LightBurn "Return to starting point".
+    #[serde(default = "default_true")]
+    pub return_to_start: bool,
+    /// The motor and speed settings.
+    #[serde(default)]
+    pub motor: RotaryMotor,
+    /// The split setup for oversized jobs.
+    #[serde(default)]
+    pub split: RotarySplit,
+}
+
+/// Cylinder correction for marking a curved surface flat. LightBurn "Cylinder
+/// Correction Setup". The field is warped so a design lands undistorted on the
+/// curve.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CylinderCorrection {
+    /// Whether cylinder correction is on. LightBurn "Enable Cylinder Correction".
+    pub enabled: bool,
+    /// The distance from the mirror to the surface in millimetres. LightBurn "Mirror Distance".
+    pub mirror_distance_mm: f64,
+    /// The object diameter in millimetres. LightBurn "Object Diameter".
+    pub object_diameter_mm: f64,
+    /// Correct along X when true, along Y when false. LightBurn "Along X Axis".
+    pub along_x: bool,
+    /// Convex when true, concave when false. LightBurn "Convex" and "Concave".
+    pub convex: bool,
+}
+
+impl Default for CylinderCorrection {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mirror_distance_mm: 100.0,
+            object_diameter_mm: 50.0,
+            along_x: true,
+            convex: true,
+        }
+    }
+}
+
+/// Split marking for a job larger than the field, moving an axis between
+/// sections. LightBurn "Split Marking Setup".
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SplitMarking {
+    /// Whether split marking is on. LightBurn "Enable Split Marking".
+    pub enabled: bool,
+    /// Which motor moves between sections. LightBurn "Motor #".
+    pub motor: u8,
+    /// A rotating axis when true, a linear axis when false. LightBurn "Axis type".
+    pub rotating: bool,
+    /// Reverse the axis direction. LightBurn "Reverse direction".
+    pub reverse: bool,
+    /// Steps for one unit of travel. LightBurn "Steps".
+    pub steps: f64,
+    /// Rotations or units per section. LightBurn "Rotations".
+    pub rotations: f64,
+    /// Minimum speed in steps per second. LightBurn "Min Speed".
+    pub min_speed_sps: f64,
+    /// Maximum speed in steps per second. LightBurn "Max Speed".
+    pub max_speed_sps: f64,
+    /// Acceleration time in milliseconds. LightBurn "Acceleration time".
+    pub accel_time_ms: f64,
+    /// Return to the start position after the job. LightBurn "Return to start position".
+    pub return_to_start: bool,
+    /// Return speed in steps per second. LightBurn "Return Speed".
+    pub return_speed_sps: f64,
+    /// Home the axis when the job starts. LightBurn "Home on start".
+    pub home_on_start: bool,
+    /// Homing speed in steps per second. LightBurn homing "Speed".
+    pub home_speed_sps: f64,
+    /// Homing timeout in seconds. LightBurn homing "Timeout".
+    pub home_timeout_s: f64,
+}
+
+impl Default for SplitMarking {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            motor: 1,
+            rotating: true,
+            reverse: false,
+            steps: 5000.0,
+            rotations: 1.0,
+            min_speed_sps: 500.0,
+            max_speed_sps: 3000.0,
+            accel_time_ms: 100.0,
+            return_to_start: true,
+            return_speed_sps: 3000.0,
+            home_on_start: false,
+            home_speed_sps: 500.0,
+            home_timeout_s: 10.0,
+        }
+    }
+}
+
+/// A serde default helper for a boolean that defaults to true.
+fn default_true() -> bool {
+    true
 }
 
 /// A configurable input or output port.
@@ -599,6 +764,12 @@ pub struct DeviceProfile {
     /// A rotary attachment, when fitted.
     #[serde(default)]
     pub rotary: Option<RotaryConfig>,
+    /// Cylinder correction, for marking a curved surface flat.
+    #[serde(default)]
+    pub cylinder_correction: Option<CylinderCorrection>,
+    /// Split marking, for a job larger than the field.
+    #[serde(default)]
+    pub split_marking: Option<SplitMarking>,
     /// Extra motion axes beyond X and Y, for example `["Z", "U"]`.
     #[serde(default)]
     pub extra_axes: Vec<String>,
@@ -741,6 +912,8 @@ mod tests {
             galvo: None,
             laser_source: Some(LaserSource::Diode),
             rotary: None,
+            cylinder_correction: None,
+            split_marking: None,
             extra_axes: Vec::new(),
             io_ports: Vec::new(),
             camera: None,
@@ -778,7 +951,15 @@ mod tests {
                 axis: 'A',
                 mm_per_rotation: 100.0,
                 object_diameter_mm: 31.8,
+                rotary_type: RotaryType::Chuck,
+                enabled: true,
+                reverse: false,
+                return_to_start: true,
+                motor: RotaryMotor::default(),
+                split: RotarySplit::default(),
             }),
+            cylinder_correction: None,
+            split_marking: Some(SplitMarking::default()),
             extra_axes: vec!["Z".to_string()],
             io_ports: vec![IoPort {
                 name: "Air Assist".to_string(),
