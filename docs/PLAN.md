@@ -23,6 +23,12 @@ Each LightBurn subsystem becomes a new vendor-free `craft-*` crate or reuses an 
 | Collaborative editing | not reverse engineered, reused | `craft-collab` | existing |
 | Localization | translation tables | craft i18n convention | existing |
 
+## Provenance of the sibling DLLs
+
+A pass over the DLL version metadata on 2026-10-22 informs which binaries are worth reverse engineering. `transfer.dll`, `executor.dll`, `acclplanner.dll`, `param.dll`, and `utils.dll` carry no version resource and are named like internal modules, consistent with LightBurn's own code. These are the primary RE targets. `potrace.dll` is Peter Selinger's open-source Potrace. `craft-trace` uses the public Potrace algorithm directly, so no RE of that DLL is needed. `lcs2dll.dll` and `lcs2dllx64.dll` are a third-party galvo control SDK, version 1.0.0.6219 dated 2024, for JCZ-style LMC boards. Galvo support is a later phase and leans on the board's documented protocol.
+
+## Controller protocols
+
 The controller protocols are the keystone. LightBurn drives existing controller protocols. `craft-gcode`, `craft-ruida`, and `craft-grbl` are reimplementations of those public or semi-public wire formats, informed by REA observation of how LightBurn frames them.
 
 ## Phases
