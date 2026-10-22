@@ -2,6 +2,10 @@
 
 LaserCraft is the thirteenth Craft app. It follows the house architecture: a vendor-free headless engine, an egui GUI, a CLI, and a WebAssembly build, all standing on the shared `craft-libs` workspace. The engine speaks the `engine.execute` control protocol used across the suite. The merge gate is `craftrules`: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`.
 
+## Build status (2026-10-22)
+
+Eleven crates build green on .57 with `fmt`, `clippy -D warnings`, and `test`: `device`, `laser-doc`, `gcode`, `motion`, `dsp`, `galvo`, `xtool`, `trace`, `toolpath`, `engine`, and `cli`. The `engine` crate composes the document, toolpath, motion, and gcode crates behind the `engine.execute` seam. The `cli` binary runs and emits valid GRBL GCode for a line-fill job. The interfaces are evidence-grounded scaffolds. The depth behind them (real art import, raster modes, byte-level DSP framing, galvo calibration) is the work still ahead.
+
 ## Subsystem map: LightBurn to LaserCraft crates
 
 Each LightBurn subsystem becomes a new vendor-free `craft-*` crate or reuses an existing one. Laser-specific crates are new. Shell, cloud, collaboration, and fonts come from `craft-libs`.
