@@ -1,0 +1,27 @@
+# cargo-deny policy for LaserCraft. Run with `cargo deny check`.
+
+[advisories]
+# Fail on any crate with a known security advisory.
+yanked = "deny"
+
+[licenses]
+# The project is MIT OR Apache-2.0 and only pulls permissive dependencies.
+# Extend this list as new dependencies introduce other permissive licenses.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Flag duplicate major versions so the dependency graph stays lean.
+multiple-versions = "warn"
+# Deny external wildcard version requirements, but allow the internal path
+# dependencies between the workspace crates, which carry no version.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
