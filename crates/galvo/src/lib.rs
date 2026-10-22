@@ -201,6 +201,149 @@ pub fn mark_scanlines(
     commands
 }
 
+/// A galvo lens correction table parsed from an EZCAD `JCZ_COR_2_1` `.cor` file.
+///
+/// The file is a signature, a short header carrying a scale float, then a square
+/// grid of per-cell `(dx, dy)` device-unit offsets that straighten the lens
+/// distortion across the field. Sampling bilinearly between cells gives the
+/// correction to add at any field position. Format confirmed against a real
+/// ComMarker B6 `jcz15.cor` (65x65 grid, 40-byte header).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CorrectionTable {
+    /// The grid side length, for example 65.
+    pub size: usize,
+    /// The scale factor from the header.
+    pub scale: f32,
+    cells: Vec<(i32, i32)>,
+}
+
+const COR_SIGNATURE: &[u8] = b"JCZ_COR_2_1";
+const COR_HEADER_LEN: usize = 40;
+
+impl CorrectionTable {
+    /// Parse a `.cor` file. Errors on a bad signature or a non-square grid.
+    pub fn parse(bytes: &[u8]) -> Result<Self, &'static str> {
+        if bytes.len() < COR_HEADER_LEN {
+            return Err("cor file too short");
+        }
+        if bytes.get(..COR_SIGNATURE.len()) != Some(COR_SIGNATURE) {
+            return Err("not a JCZ_COR correction file");
+        }
+        let data_len = bytes.len() - COR_HEADER_LEN;
+        if !data_len.is_multiple_of(8) {
+            return Err("cor data is not whole (dx, dy) pairs");
+        }
+        let points = data_len / 8;
+        let size = (points as f64).sqrt().round() as usize;
+        if size * size != points {
+            return Err("cor grid is not square");
+        }
+        let scale_bytes: [u8; 4] = bytes
+            .get(32..36)
+            .and_then(|s| s.try_into().ok())
+            .ok_or("cor header truncated")?;
+        let scale = f32::from_le_bytes(scale_bytes);
+        let mut cells = Vec::with_capacity(points);
+        for i in 0..points {
+            let o = COR_HEADER_LEN + i * 8;
+            let dx = read_i32(bytes, o)?;
+            let dy = read_i32(bytes, o + 4)?;
+            cells.push((dx, dy));
+        }
+        Ok(Self { size, scale, cells })
+    }
+
+    fn cell(&self, gx: usize, gy: usize) -> (i32, i32) {
+        self.cells
+            .get(gy * self.size + gx)
+            .copied()
+            .unwrap_or((0, 0))
+    }
+
+    /// Bilinearly sample the `(dx, dy)` correction for normalized field coordinates,
+    /// where `u` and `v` run from 0.0 to 1.0 across the field. Out-of-range inputs
+    /// clamp to the edge.
+    pub fn correction_at(&self, u: f64, v: f64) -> (f64, f64) {
+        if self.size < 2 {
+            return (0.0, 0.0);
+        }
+        let max_index = (self.size - 1) as f64;
+        let fx = u.clamp(0.0, 1.0) * max_index;
+        let fy = v.clamp(0.0, 1.0) * max_index;
+        let x0 = fx.floor() as usize;
+        let y0 = fy.floor() as usize;
+        let x1 = (x0 + 1).min(self.size - 1);
+        let y1 = (y0 + 1).min(self.size - 1);
+        let tx = fx - x0 as f64;
+        let ty = fy - y0 as f64;
+        let lerp = |a: f64, b: f64, t: f64| a + (b - a) * t;
+        let (c00, c10, c01, c11) = (
+            self.cell(x0, y0),
+            self.cell(x1, y0),
+            self.cell(x0, y1),
+            self.cell(x1, y1),
+        );
+        let dx = lerp(
+            lerp(f64::from(c00.0), f64::from(c10.0), tx),
+            lerp(f64::from(c01.0), f64::from(c11.0), tx),
+            ty,
+        );
+        let dy = lerp(
+            lerp(f64::from(c00.1), f64::from(c10.1), tx),
+            lerp(f64::from(c01.1), f64::from(c11.1), tx),
+            ty,
+        );
+        (dx, dy)
+    }
+}
+
+fn read_i32(bytes: &[u8], offset: usize) -> Result<i32, &'static str> {
+    bytes
+        .get(offset..offset + 4)
+        .and_then(|s| s.try_into().ok())
+        .map(i32::from_le_bytes)
+        .ok_or("cor data truncated")
+}
+
+#[cfg(test)]
+mod cor_tests {
+    use super::*;
+
+    fn synthetic_cor() -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend_from_slice(b"JCZ_COR_2_1\0");
+        b.resize(32, 0);
+        b.extend_from_slice(&1.0f32.to_le_bytes());
+        b.resize(COR_HEADER_LEN, 0);
+        // A 2x2 grid of corrections.
+        for (dx, dy) in [(0i32, 0i32), (100, 0), (0, 100), (100, 100)] {
+            b.extend_from_slice(&dx.to_le_bytes());
+            b.extend_from_slice(&dy.to_le_bytes());
+        }
+        b
+    }
+
+    #[test]
+    fn parses_and_samples_a_cor_grid() {
+        let table = CorrectionTable::parse(&synthetic_cor());
+        assert!(table.is_ok());
+        if let Ok(table) = table {
+            assert_eq!(table.size, 2);
+            assert_eq!(table.scale, 1.0);
+            // Corners read the grid cells directly.
+            assert_eq!(table.correction_at(0.0, 0.0), (0.0, 0.0));
+            assert_eq!(table.correction_at(1.0, 1.0), (100.0, 100.0));
+            // The centre bilinearly averages to (50, 50).
+            assert_eq!(table.correction_at(0.5, 0.5), (50.0, 50.0));
+        }
+    }
+
+    #[test]
+    fn rejects_a_non_cor_file() {
+        assert!(CorrectionTable::parse(b"not a cor file at all......").is_err());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
