@@ -33,7 +33,7 @@ pub fn load_project(path: &Path) -> io::Result<Project> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lasercraft_laser_doc::{CutSetting, Shape, ShapeKind};
+    use lasercraft_laser_doc::{CutSetting, Geometry, Shape, ShapeKind};
 
     #[test]
     fn project_round_trips_through_an_atomic_save() -> io::Result<()> {
@@ -42,6 +42,15 @@ mod tests {
             shapes: vec![Shape {
                 kind: ShapeKind::Rect,
                 cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        lasercraft_laser_doc::Point2 { x: 0.0, y: 0.0 },
+                        lasercraft_laser_doc::Point2 { x: 5.0, y: 0.0 },
+                        lasercraft_laser_doc::Point2 { x: 5.0, y: 5.0 },
+                        lasercraft_laser_doc::Point2 { x: 0.0, y: 5.0 },
+                    ],
+                    closed: true,
+                },
             }],
             cut_settings: vec![CutSetting {
                 index: 0,

@@ -27,6 +27,33 @@ pub struct Project {
     pub cut_settings: Vec<CutSetting>,
 }
 
+/// A point in millimetres in the work coordinate system.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Point2 {
+    /// X in millimetres.
+    pub x: f64,
+    /// Y in millimetres.
+    pub y: f64,
+}
+
+/// The concrete geometry a shape carries.
+///
+/// Polylines come first because every vector shape reduces to one once curves are
+/// flattened. Bezier and primitive forms land on top of this later.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub enum Geometry {
+    /// No geometry yet, for example an empty group.
+    #[default]
+    Empty,
+    /// An ordered run of points, optionally closed back to the first.
+    Polyline {
+        /// The vertices in order.
+        points: Vec<Point2>,
+        /// Whether the last point connects back to the first.
+        closed: bool,
+    },
+}
+
 /// One piece of geometry. `cut_index` selects the [`CutSetting`] that drives it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
@@ -34,6 +61,9 @@ pub struct Shape {
     pub kind: ShapeKind,
     /// Index into [`Project::cut_settings`], mirroring the `CutIndex` attribute.
     pub cut_index: u32,
+    /// The concrete geometry. Defaults to [`Geometry::Empty`].
+    #[serde(default)]
+    pub geometry: Geometry,
 }
 
 /// The supported shape kinds.
@@ -100,6 +130,14 @@ mod tests {
             shapes: vec![Shape {
                 kind: ShapeKind::Path,
                 cut_index: 2,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 0.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 10.0 },
+                    ],
+                    closed: true,
+                },
             }],
             cut_settings: vec![CutSetting {
                 index: 2,

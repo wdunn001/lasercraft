@@ -15,9 +15,9 @@
 //! toolpath generator, the motion limits, and a GCode dialect.
 
 use lasercraft_gcode::{Dialect, Op, program};
-use lasercraft_laser_doc::{CutSetting, Project, Shape};
+use lasercraft_laser_doc::{CutSetting, Geometry, Project, Shape};
 use lasercraft_motion::MotionConfig;
-use lasercraft_toolpath::{BBox, line_fill};
+use lasercraft_toolpath::{BBox, Point, follow_polyline, line_fill};
 
 /// Errors the engine can return while executing a command.
 #[derive(Debug, thiserror::Error)]
@@ -109,11 +109,48 @@ pub fn plan_line_fill(
     program(dialect, &ops)
 }
 
+/// Generate controller output for an entire project.
+///
+/// Each shape with polyline geometry is cut in order: a rapid move to the first
+/// point with the laser off, then a cut along every segment at the layer feed and
+/// power. Closed polylines return to their start. Shapes with no geometry or no
+/// resolvable cut setting are skipped. This is the vector path of the pipeline,
+/// alongside [`plan_line_fill`] for filled regions.
+pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dialect) -> String {
+    let mut ops = Vec::new();
+    for shape in &project.shapes {
+        let Geometry::Polyline { points, closed } = &shape.geometry else {
+            continue;
+        };
+        let Some(setting) = project.cut_setting_for(shape) else {
+            continue;
+        };
+        let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+        let segments = follow_polyline(&path, *closed);
+        let feed = motion.clamp_feed(setting.speed_mm_s);
+        if let Some(first) = segments.first() {
+            ops.push(Op::RapidTo {
+                x: first.start.x,
+                y: first.start.y,
+            });
+        }
+        for segment in &segments {
+            ops.push(Op::CutTo {
+                x: segment.end.x,
+                y: segment.end.y,
+                feed_mm_s: feed,
+                power: setting.power_max,
+            });
+        }
+    }
+    program(dialect, &ops)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use lasercraft_gcode::Grbl;
-    use lasercraft_laser_doc::ShapeKind;
+    use lasercraft_laser_doc::{Point2, ShapeKind};
 
     fn cut() -> CutSetting {
         CutSetting {
@@ -133,6 +170,7 @@ mod tests {
         let shape = Shape {
             kind: ShapeKind::Path,
             cut_index: 0,
+            geometry: Geometry::Empty,
         };
         assert!(matches!(
             engine.execute(Command::AddShape(shape.clone())),
@@ -160,5 +198,36 @@ mod tests {
         // 20 mm/s clamps under 100 and renders as 1200 mm/min; 80 percent is S800.
         assert!(out.contains("F1200 S800"));
         assert!(out.contains("G1"));
+    }
+
+    #[test]
+    fn plan_project_cuts_a_closed_polyline() {
+        let motion = MotionConfig {
+            max_speed_mm_s: 100.0,
+            accel_mm_s2: 1000.0,
+            accel_to_decel_mm_s2: 500.0,
+        };
+        let project = Project {
+            app_version: "0.1.0".to_string(),
+            shapes: vec![Shape {
+                kind: ShapeKind::Path,
+                cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 0.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 10.0 },
+                    ],
+                    closed: true,
+                },
+            }],
+            cut_settings: vec![cut()],
+        };
+        let out = plan_project(&project, &motion, &Grbl::new());
+        // Three edges of the closed triangle become three cutting moves.
+        let cut_moves = out.lines().filter(|l| l.starts_with("G1 ")).count();
+        assert_eq!(cut_moves, 3);
+        // The cut runs at the layer feed and power.
+        assert!(out.contains("F1200 S800"));
     }
 }

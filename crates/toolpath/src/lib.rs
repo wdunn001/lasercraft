@@ -88,6 +88,34 @@ pub fn line_fill(bbox: &BBox, interval_mm: f64) -> Vec<Segment> {
     segments
 }
 
+/// Trace a polyline as consecutive cutting segments.
+///
+/// Each pair of adjacent points becomes one segment. A `closed` polyline adds a
+/// final segment from the last point back to the first. A polyline with fewer
+/// than two points yields nothing.
+pub fn follow_polyline(points: &[Point], closed: bool) -> Vec<Segment> {
+    let mut segments = Vec::new();
+    if points.len() < 2 {
+        return segments;
+    }
+    for pair in points.windows(2) {
+        segments.push(Segment {
+            start: pair[0],
+            end: pair[1],
+        });
+    }
+    if closed {
+        match (points.last(), points.first()) {
+            (Some(last), Some(first)) if last != first => segments.push(Segment {
+                start: *last,
+                end: *first,
+            }),
+            _ => {}
+        }
+    }
+    segments
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +143,26 @@ mod tests {
     fn non_positive_interval_yields_nothing() {
         assert!(line_fill(&unit_box(), 0.0).is_empty());
         assert!(line_fill(&unit_box(), -1.0).is_empty());
+    }
+
+    #[test]
+    fn follow_closed_triangle_makes_three_segments() {
+        let points = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 5.0, y: 8.0 },
+        ];
+        let open = follow_polyline(&points, false);
+        assert_eq!(open.len(), 2);
+        let closed = follow_polyline(&points, true);
+        assert_eq!(closed.len(), 3);
+        // The closing segment returns to the first point.
+        assert_eq!(closed[2].end, points[0]);
+    }
+
+    #[test]
+    fn follow_degenerate_polyline_yields_nothing() {
+        assert!(follow_polyline(&[Point { x: 1.0, y: 1.0 }], true).is_empty());
+        assert!(follow_polyline(&[], false).is_empty());
     }
 }
