@@ -162,6 +162,67 @@ pub fn wobble_path(points: &[Point], step_mm: f64, size_mm: f64) -> Vec<Point> {
     out
 }
 
+/// Generate a grid of dot positions across `bbox` at `interval_mm` spacing.
+///
+/// This is LightBurn's dot fill. Each dot is a position the caller pulses the
+/// laser at, row by row from the bottom left. A non-positive interval, or a box
+/// with no area, yields nothing. The count is capped so a tiny interval over a
+/// huge box cannot run away.
+pub fn dot_fill(bbox: &BBox, interval_mm: f64) -> Vec<Point> {
+    let mut dots = Vec::new();
+    if interval_mm <= 0.0 || bbox.max_x < bbox.min_x || bbox.max_y < bbox.min_y {
+        return dots;
+    }
+    let max_dots = 4_000_000usize;
+    let mut y = bbox.min_y;
+    while y <= bbox.max_y + f64::EPSILON && dots.len() < max_dots {
+        let mut x = bbox.min_x;
+        while x <= bbox.max_x + f64::EPSILON && dots.len() < max_dots {
+            dots.push(Point { x, y });
+            x += interval_mm;
+        }
+        y += interval_mm;
+    }
+    dots
+}
+
+/// Generate contour-parallel offset passes inward from `bbox`.
+///
+/// This is LightBurn's offset fill for a rectangular region. Each ring insets by
+/// `interval_mm` from the one outside it and is four segments. Rings stop when the
+/// next would cross the centre. A non-positive interval yields nothing. Arbitrary
+/// outlines need a polygon offset, which the shared path-operations crate carries.
+pub fn offset_fill(bbox: &BBox, interval_mm: f64) -> Vec<Segment> {
+    let mut segments = Vec::new();
+    if interval_mm <= 0.0 {
+        return segments;
+    }
+    let max_rings = 1_000_000usize;
+    let mut inset = 0.0;
+    let mut rings = 0usize;
+    loop {
+        let (x0, y0) = (bbox.min_x + inset, bbox.min_y + inset);
+        let (x1, y1) = (bbox.max_x - inset, bbox.max_y - inset);
+        if x1 <= x0 || y1 <= y0 || rings >= max_rings {
+            break;
+        }
+        let corners = [
+            Point { x: x0, y: y0 },
+            Point { x: x1, y: y0 },
+            Point { x: x1, y: y1 },
+            Point { x: x0, y: y1 },
+            Point { x: x0, y: y0 },
+        ];
+        for pair in corners.windows(2) {
+            let [a, b] = pair else { continue };
+            segments.push(Segment { start: *a, end: *b });
+        }
+        inset += interval_mm;
+        rings += 1;
+    }
+    segments
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,6 +252,30 @@ mod tests {
         let line = [Point { x: 0.0, y: 0.0 }, Point { x: 10.0, y: 0.0 }];
         assert_eq!(wobble_path(&line, 0.0, 0.5).len(), 2);
         assert_eq!(wobble_path(&line, 1.0, 0.0).len(), 2);
+    }
+
+    #[test]
+    fn dot_fill_makes_a_grid() {
+        let dots = dot_fill(&unit_box(), 2.0);
+        // x and y each at 0, 2, 4, 6, 8, 10 is six positions, so thirty-six dots.
+        assert_eq!(dots.len(), 36);
+    }
+
+    #[test]
+    fn dot_fill_rejects_a_non_positive_interval() {
+        assert!(dot_fill(&unit_box(), 0.0).is_empty());
+    }
+
+    #[test]
+    fn offset_fill_rings_inward() {
+        let segments = offset_fill(&unit_box(), 2.0);
+        // Rings at inset 0, 2 and 4 before the centre is crossed, four segments each.
+        assert_eq!(segments.len(), 12);
+    }
+
+    #[test]
+    fn offset_fill_rejects_a_non_positive_interval() {
+        assert!(offset_fill(&unit_box(), 0.0).is_empty());
     }
 
     fn unit_box() -> BBox {
