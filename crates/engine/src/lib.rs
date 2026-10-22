@@ -156,6 +156,28 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
     program(dialect, &ops)
 }
 
+/// Generate a framing pass that traces the job's bounding box.
+///
+/// Framing moves the head around the extent of the job with the laser off so the
+/// operator can position the material before cutting. The head rapids around the
+/// four corners and back to the start. A project with no geometry frames nothing.
+pub fn plan_frame(project: &Project, dialect: &dyn Dialect) -> String {
+    let Some((min, max)) = project.bounds() else {
+        let mut empty = dialect.header();
+        empty.push_str(&dialect.footer());
+        return empty;
+    };
+    let corners = [
+        (min.x, min.y),
+        (max.x, min.y),
+        (max.x, max.y),
+        (min.x, max.y),
+        (min.x, min.y),
+    ];
+    let ops: Vec<Op> = corners.iter().map(|&(x, y)| Op::RapidTo { x, y }).collect();
+    program(dialect, &ops)
+}
+
 /// Generate controller output to raster-engrave an image.
 ///
 /// Each constant-power scan run becomes a rapid to its start with the laser off,
@@ -268,6 +290,35 @@ mod tests {
         assert_eq!(cut_moves, 3);
         // The cut runs at the layer feed and power.
         assert!(out.contains("F1200 S800"));
+    }
+
+    #[test]
+    fn plan_frame_traces_the_job_bounds() {
+        let project = Project {
+            app_version: "0.1.0".to_string(),
+            shapes: vec![Shape {
+                kind: ShapeKind::Path,
+                cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 2.0, y: 3.0 },
+                        Point2 { x: 20.0, y: 3.0 },
+                        Point2 { x: 11.0, y: 18.0 },
+                    ],
+                    closed: true,
+                },
+            }],
+            cut_settings: vec![cut()],
+        };
+        let out = plan_frame(&project, &Grbl::new());
+        // Five rapids trace the bounding rectangle (2,3)-(20,18) and return.
+        let rapids = out.lines().filter(|l| l.starts_with("G0 ")).count();
+        // Four corners, the closing corner, plus GRBL's footer homing rapid.
+        assert_eq!(rapids, 6);
+        assert!(out.contains("G0 X2.000 Y3.000"));
+        assert!(out.contains("G0 X20.000 Y18.000"));
+        // Framing never fires the laser.
+        assert!(!out.contains("G1 "));
     }
 
     #[test]

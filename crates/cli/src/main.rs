@@ -14,7 +14,7 @@
 //! which exercises the document, persistence, engine, and dialect crates together.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use lasercraft_engine::{plan_line_fill, plan_project, plan_raster};
+use lasercraft_engine::{plan_frame, plan_line_fill, plan_project, plan_raster};
 use lasercraft_gcode::{Dialect, Grbl, Marlin};
 use lasercraft_laser_doc::CutSetting;
 use lasercraft_motion::MotionConfig;
@@ -82,6 +82,15 @@ enum Commands {
         /// Machine maximum speed in millimetres per second.
         #[arg(long, default_value_t = 300.0)]
         max_speed: f64,
+        /// Controller dialect.
+        #[arg(long, value_enum, default_value_t = Flavor::Grbl)]
+        flavor: Flavor,
+    },
+    /// Load a saved project and print a framing pass tracing its bounds.
+    Frame {
+        /// Path to the project file.
+        #[arg(long)]
+        project: PathBuf,
         /// Controller dialect.
         #[arg(long, value_enum, default_value_t = Flavor::Grbl)]
         flavor: Flavor,
@@ -159,6 +168,16 @@ fn main() -> std::process::ExitCode {
                 let motion = motion_for(max_speed);
                 let gcode = plan_project(&doc, &motion, flavor.dialect().as_ref());
                 print!("{gcode}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("could not load {}: {error}", project.display());
+                std::process::ExitCode::FAILURE
+            }
+        },
+        Commands::Frame { project, flavor } => match lasercraft_persist::load_project(&project) {
+            Ok(doc) => {
+                print!("{}", plan_frame(&doc, flavor.dialect().as_ref()));
                 std::process::ExitCode::SUCCESS
             }
             Err(error) => {

@@ -191,6 +191,51 @@ impl Project {
             .iter()
             .find(|c| c.index == shape.cut_index)
     }
+
+    /// The axis-aligned bounds of all geometry as `(min, max)`, or `None` when the
+    /// project has no geometry.
+    ///
+    /// Bezier segments contribute their control points, which is a conservative
+    /// superset of the true curve bounds. That is exactly what a framing pass wants,
+    /// since it must enclose the whole job.
+    pub fn bounds(&self) -> Option<(Point2, Point2)> {
+        let mut points = self
+            .shapes
+            .iter()
+            .flat_map(|s| geometry_points(&s.geometry));
+        let first = points.next()?;
+        let mut min = first;
+        let mut max = first;
+        for p in points {
+            min.x = min.x.min(p.x);
+            min.y = min.y.min(p.y);
+            max.x = max.x.max(p.x);
+            max.y = max.y.max(p.y);
+        }
+        Some((min, max))
+    }
+}
+
+/// Every point that contributes to a geometry's bounds.
+fn geometry_points(geometry: &Geometry) -> Vec<Point2> {
+    match geometry {
+        Geometry::Empty => Vec::new(),
+        Geometry::Polyline { points, .. } => points.clone(),
+        Geometry::Path(path) => {
+            let mut points = vec![path.start];
+            for segment in &path.segments {
+                match segment {
+                    PathSeg::Line { to } => points.push(*to),
+                    PathSeg::Cubic { c1, c2, to } => {
+                        points.push(*c1);
+                        points.push(*c2);
+                        points.push(*to);
+                    }
+                }
+            }
+            points
+        }
+    }
 }
 
 #[cfg(test)]
