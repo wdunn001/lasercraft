@@ -353,6 +353,7 @@
   // ---- toolbar ----
   const TOOLS = [
     ["select","M4 2l9 16 2-7 7-2z"],
+    ["node","M5 5h3v3H5z M16 16h3v3h-3z M7 7l10 10"],
     ["rect","M3 5h18v14H3z"],
     ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"],
     ["poly","M12 3l9 7-3 11H6L3 10z"],
@@ -400,6 +401,14 @@
         s += `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="#3b82f6" stroke-dasharray="4 3"/>`;
       }
     });
+    // node-edit handles on the selected shape
+    if (tool === "node" && selected != null && doc.shapes[selected]) {
+      shapePoints(doc.shapes[selected]).forEach((q, ni) => {
+        const d = mm2px(q);
+        const on = (ni === dragNode);
+        s += `<rect x="${d.x-4}" y="${d.y-4}" width="8" height="8" fill="${on?"#ff5a3c":"#3b82f6"}" stroke="#fff" stroke-width="1.2"/>`;
+      });
+    }
     if (drawing) s += drawing;
     canvas.innerHTML = s;
   }
@@ -407,9 +416,15 @@
   function bbox(sh){ const pts = shapePoints(sh); let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const q of pts){x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);} return {x0,y0,x1,y1}; }
 
   // ---- interaction ----
-  let drawing = null, start = null, dragShape = null, dragOff = null;
+  let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null;
+  function hitNode(cx, cy){ if (selected == null || !doc.shapes[selected]) return null; const r = canvas.getBoundingClientRect(); const pts = shapePoints(doc.shapes[selected]); for (let i = 0; i < pts.length; i++){ const d = mm2px(pts[i]); if (Math.hypot(d.x-(cx-r.left), d.y-(cy-r.top)) < 8) return i; } return null; }
   canvas.addEventListener("mousedown", e => {
     const m = px2mm(e.clientX, e.clientY); start = m;
+    if (tool === "node") {
+      dragNode = hitNode(e.clientX, e.clientY);
+      if (dragNode == null) { selected = hitTest(m); }   // no node hit: pick a shape to edit
+      render(); return;
+    }
     if (tool === "select") {
       selected = hitTest(m); dragShape = selected;
       if (selected!=null){ const bb=bbox(doc.shapes[selected]); dragOff = { x: m.x-bb.x0, y: m.y-bb.y0 }; }
@@ -420,6 +435,7 @@
     const m = px2mm(e.clientX, e.clientY);
     $("readout").textContent = `x ${m.x.toFixed(1)}  y ${m.y.toFixed(1)} mm`;
     if (!start) return;
+    if (tool==="node" && dragNode!=null && doc.shapes[selected]){ const pts=shapePoints(doc.shapes[selected]); if (pts[dragNode]) pts[dragNode]=p(m.x,m.y); render(); return; }
     if (tool==="select" && dragShape!=null){ moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y); render(); return; }
     if (tool==="rect" || tool==="ellipse"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=PALETTE[activeLayer%PALETTE.length];
       drawing = tool==="rect" ? `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`
@@ -431,7 +447,7 @@
     const m = px2mm(e.clientX, e.clientY);
     if (tool==="rect" && Math.abs(m.x-start.x)>1){ doc.shapes.push(rect(Math.min(start.x,m.x),Math.min(start.y,m.y),Math.abs(m.x-start.x),Math.abs(m.y-start.y),doc.layers[activeLayer].index)); selected=doc.shapes.length-1; }
     else if (tool==="ellipse" && Math.abs(m.x-start.x)>1){ doc.shapes.push(ellipse((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,doc.layers[activeLayer].index)); selected=doc.shapes.length-1; }
-    start=null; drawing=null; dragShape=null; render(); refreshCounts();
+    start=null; drawing=null; dragShape=null; dragNode=null; render(); refreshCounts();
   });
   function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
   function moveShapeTo(i, nx, ny){ const sh=doc.shapes[i]; const bb=bbox(sh); const dx=nx-bb.x0, dy=ny-bb.y0; for (const q of shapePoints(sh)){ q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); } }
@@ -451,7 +467,7 @@
       const cls = L.mode==="Fill"?"fill":(L.mode==="Image"?"img":"line");
       const el=document.createElement("div"); el.className="row"+(i===activeLayer?" sel":"");
       el.innerHTML=`<div class="lyr"><span class="sw" style="background:${col}"></span><span class="n">${String(L.index).padStart(2,"0")}</span></div>`
-        +`<span class="badge ${cls}">${L.mode}</span>`
+        +`<span class="badge ${cls}">${trMode(L.mode)}</span>`
         +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`
         +`<span class="sw-toggle"></span><span class="sw-toggle"></span>`;
       el.onclick=()=>{ activeLayer=i; renderLayers(); renderPalette(); };
@@ -697,12 +713,20 @@
   Object.assign(I18N.de, { "tab.design":"Entwurf","tab.move":"Bewegen" });
   Object.assign(I18N.fr, { "tab.design":"Conception","tab.move":"Déplacer" });
   Object.assign(I18N["pt-BR"], { "tab.design":"Design","tab.move":"Mover" });
+  Object.assign(I18N.es, { "mode.line":"Línea","mode.fill":"Relleno","mode.concentric":"Concéntrico","mode.image":"Imagen" });
+  Object.assign(I18N.de, { "mode.line":"Linie","mode.fill":"Füllung","mode.concentric":"Konzentrisch","mode.image":"Bild" });
+  Object.assign(I18N.fr, { "mode.line":"Ligne","mode.fill":"Remplissage","mode.concentric":"Concentrique","mode.image":"Image" });
+  Object.assign(I18N["pt-BR"], { "mode.line":"Linha","mode.fill":"Preenchimento","mode.concentric":"Concêntrico","mode.image":"Imagem" });
+  let curLang = "en";
+  function trMode(m){ const t = I18N[curLang] || {}; return t["mode." + String(m).toLowerCase()] || m; }
   document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
   document.querySelectorAll("[data-i18n-ph]").forEach(el => I18N.en[el.dataset.i18nPh] = el.getAttribute("placeholder"));
   function applyLang(lang){
+    curLang = lang;
     const t = I18N[lang] || {}, en = I18N.en;
     document.querySelectorAll("[data-i18n]").forEach(el => { const k = el.dataset.i18n; el.textContent = t[k] !== undefined ? t[k] : (en[k] || el.textContent); });
     document.querySelectorAll("[data-i18n-ph]").forEach(el => { const k = el.dataset.i18nPh; el.placeholder = t[k] !== undefined ? t[k] : (en[k] || el.placeholder); });
+    renderLayers();
   }
   $("lang").onchange = () => applyLang($("lang").value);
 
@@ -715,6 +739,8 @@
   if (urlLang && I18N[urlLang]) $("lang").value = urlLang;
   applyLang($("lang").value);
   if (params.get("tab") === "move") document.querySelector('.docktabs button[data-dock="move"]').click();
+  const urlTool = params.get("tool");
+  if (urlTool) { const tb = document.querySelector(`.tool[data-tool="${urlTool}"]`); if (tb) tb.click(); if (urlTool === "node") { selected = 0; render(); } }
   fit(); layout();
 
   init().then(()=>{ ready=true; $("wasmok").textContent="WASM ready"; generate(); }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
