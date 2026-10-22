@@ -14,7 +14,7 @@
 //! which exercises the document, persistence, engine, and dialect crates together.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use lasercraft_engine::{plan_frame, plan_line_fill, plan_project, plan_raster};
+use lasercraft_engine::{estimate_job_time, plan_frame, plan_line_fill, plan_project, plan_raster};
 use lasercraft_gcode::{Dialect, GCodeDialect};
 use lasercraft_laser_doc::CutSetting;
 use lasercraft_motion::MotionConfig;
@@ -91,6 +91,15 @@ enum Commands {
         /// Controller dialect.
         #[arg(long, value_enum, default_value_t = Flavor::Grbl)]
         flavor: Flavor,
+    },
+    /// Load a saved project and print the estimated cutting time.
+    Estimate {
+        /// Path to the project file.
+        #[arg(long)]
+        project: PathBuf,
+        /// Machine maximum speed in millimetres per second.
+        #[arg(long, default_value_t = 300.0)]
+        max_speed: f64,
     },
     /// Load a saved project and print a framing pass tracing its bounds.
     Frame {
@@ -181,6 +190,21 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::FAILURE
             }
         },
+        Commands::Estimate { project, max_speed } => {
+            match lasercraft_persist::load_project(&project) {
+                Ok(doc) => {
+                    let seconds = estimate_job_time(&doc, &motion_for(max_speed));
+                    let minutes = (seconds / 60.0) as u64;
+                    let rem = seconds - (minutes as f64) * 60.0;
+                    println!("Estimated cutting time: {minutes}m {rem:.1}s ({seconds:.1}s)");
+                    std::process::ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("could not load {}: {error}", project.display());
+                    std::process::ExitCode::FAILURE
+                }
+            }
+        }
         Commands::Frame { project, flavor } => match lasercraft_persist::load_project(&project) {
             Ok(doc) => {
                 print!("{}", plan_frame(&doc, flavor.dialect().as_ref()));
