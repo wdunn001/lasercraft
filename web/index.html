@@ -318,13 +318,15 @@
           <button class="btn" data-align="top" data-i18n="ar.a.top">Top</button>
           <button class="btn" data-align="bottom" data-i18n="ar.a.bottom">Bottom</button>
         </div>
+        <div style="font-size:12px;color:var(--muted);margin:14px 0 6px" data-i18n="ar.offset">Offset shapes</div>
+        <div class="grid3"><div class="f"><label data-i18n="ar.dist">Distance mm</label><input id="ar_dist" type="number" min="0" step="0.5" value="2" style="width:100%"></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_outset" style="width:100%" data-i18n="ar.outset">Outset</button></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_inset" style="width:100%" data-i18n="ar.inset">Inset</button></div></div>
       </div>
       <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="ar.note">Select a shape first. Array copies the selection.</span><button class="btn" id="arCancel" data-i18n="action.cancel">Close</button></div>
     </div>
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset } from "./pkg/lasercraft_wasm.js";
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
@@ -724,6 +726,8 @@
   $("arClose").onclick = $("arCancel").onclick = () => $("arBg").classList.remove("show");
   $("ar_grid").onclick = () => arrayGrid(Math.max(1,+$("ar_cols").value||1), Math.max(1,+$("ar_rows").value||1), +$("ar_dx").value||0, +$("ar_dy").value||0);
   $("ar_circ").onclick = () => arrayCircular(Math.max(2,+$("ar_count").value||2), +$("ar_radius").value||0);
+  $("ar_outset").onclick = () => offsetSelected(Math.abs(+$("ar_dist").value||0));
+  $("ar_inset").onclick = () => offsetSelected(-Math.abs(+$("ar_dist").value||0));
   document.querySelectorAll("#arBg [data-align]").forEach(b => b.onclick = () => alignBed(b.dataset.align));
 
   // ---- machine profiles (built-in + custom, saved locally) ----
@@ -860,6 +864,19 @@
     const interval = L.interval > 0 ? L.interval : 1;
     let rings; try { rings = JSON.parse(concentric(JSON.stringify(outline), interval, 80)); } catch(e){ return; }
     rings.forEach(ring => doc.shapes.push({ kind:"Path", cut_index:sh.cut_index, geometry:{ Polyline:{ points: ring.map(a => p(a[0], a[1])), closed:true } } }));
+  }
+  // Offset Shapes: a new outline a signed distance off the selected closed shape.
+  // Positive grows outward, negative shrinks inward. Cubic paths are flattened first.
+  function offsetSelected(delta){
+    if (!ready || selected == null) return;
+    const sh = doc.shapes[selected]; if (!sh) return;
+    let outline = null;
+    if (sh.geometry.Polyline && sh.geometry.Polyline.closed) outline = sh.geometry.Polyline.points.map(q => [q.x, q.y]);
+    else if (sh.geometry.Path && sh.geometry.Path.closed) outline = shapeFlatPts(sh).map(q => [q.x, q.y]);
+    if (!outline || outline.length < 3) return;
+    let rings; try { rings = JSON.parse(offset(JSON.stringify(outline), delta)); } catch(e){ console.error(e); return; }
+    rings.forEach(ring => doc.shapes.push({ kind:"Path", cut_index:sh.cut_index, geometry:{ Polyline:{ points: ring.map(a => p(a[0], a[1])), closed:true } } }));
+    render(); refreshCounts();
   }
 
   $("addText").onclick = () => {
@@ -1173,10 +1190,10 @@
   Object.assign(I18N.de, { "action.undo":"Rückgängig","action.redo":"Wiederholen","mat.open":"Materialbibliothek…","mat.title":"Materialbibliothek","mat.note":"Nur Startwerte. Immer an Abfallmaterial testen.","action.cancel":"Schließen" });
   Object.assign(I18N.fr, { "action.undo":"Annuler","action.redo":"Rétablir","mat.open":"Bibliothèque de matériaux…","mat.title":"Bibliothèque de matériaux","mat.note":"Valeurs de départ uniquement. Testez toujours sur une chute.","action.cancel":"Fermer" });
   Object.assign(I18N["pt-BR"], { "action.undo":"Desfazer","action.redo":"Refazer","mat.open":"Biblioteca de materiais…","mat.title":"Biblioteca de materiais","mat.note":"Apenas pontos de partida. Teste sempre em material de descarte.","action.cancel":"Fechar" });
-  Object.assign(I18N.es, { "action.arrange":"Organizar…","ar.title":"Organizar","ar.grid":"Matriz en cuadrícula","ar.cols":"Columnas","ar.rows":"Filas","ar.dx":"Espacio X mm","ar.dy":"Espacio Y mm","ar.apply":"Aplicar","ar.circ":"Matriz circular","ar.count":"Cantidad","ar.radius":"Radio mm","ar.align":"Alinear a la mesa","ar.a.center":"Centrar","ar.a.cx":"Centrar X","ar.a.cy":"Centrar Y","ar.a.left":"Izquierda","ar.a.right":"Derecha","ar.a.top":"Arriba","ar.a.bottom":"Abajo","ar.note":"Seleccione una forma. La matriz copia la selección." });
-  Object.assign(I18N.de, { "action.arrange":"Anordnen…","ar.title":"Anordnen","ar.grid":"Rasteranordnung","ar.cols":"Spalten","ar.rows":"Zeilen","ar.dx":"Abstand X mm","ar.dy":"Abstand Y mm","ar.apply":"Anwenden","ar.circ":"Kreisanordnung","ar.count":"Anzahl","ar.radius":"Radius mm","ar.align":"An Arbeitsfläche ausrichten","ar.a.center":"Zentrieren","ar.a.cx":"X zentrieren","ar.a.cy":"Y zentrieren","ar.a.left":"Links","ar.a.right":"Rechts","ar.a.top":"Oben","ar.a.bottom":"Unten","ar.note":"Zuerst eine Form wählen. Die Anordnung kopiert die Auswahl." });
-  Object.assign(I18N.fr, { "action.arrange":"Agencer…","ar.title":"Agencer","ar.grid":"Réseau en grille","ar.cols":"Colonnes","ar.rows":"Lignes","ar.dx":"Écart X mm","ar.dy":"Écart Y mm","ar.apply":"Appliquer","ar.circ":"Réseau circulaire","ar.count":"Nombre","ar.radius":"Rayon mm","ar.align":"Aligner sur le plateau","ar.a.center":"Centrer","ar.a.cx":"Centrer X","ar.a.cy":"Centrer Y","ar.a.left":"Gauche","ar.a.right":"Droite","ar.a.top":"Haut","ar.a.bottom":"Bas","ar.note":"Sélectionnez une forme. Le réseau copie la sélection." });
-  Object.assign(I18N["pt-BR"], { "action.arrange":"Organizar…","ar.title":"Organizar","ar.grid":"Matriz em grade","ar.cols":"Colunas","ar.rows":"Linhas","ar.dx":"Espaço X mm","ar.dy":"Espaço Y mm","ar.apply":"Aplicar","ar.circ":"Matriz circular","ar.count":"Quantidade","ar.radius":"Raio mm","ar.align":"Alinhar à mesa","ar.a.center":"Centralizar","ar.a.cx":"Centralizar X","ar.a.cy":"Centralizar Y","ar.a.left":"Esquerda","ar.a.right":"Direita","ar.a.top":"Topo","ar.a.bottom":"Base","ar.note":"Selecione uma forma. A matriz copia a seleção." });
+  Object.assign(I18N.es, { "action.arrange":"Organizar…","ar.title":"Organizar","ar.grid":"Matriz en cuadrícula","ar.cols":"Columnas","ar.rows":"Filas","ar.dx":"Espacio X mm","ar.dy":"Espacio Y mm","ar.apply":"Aplicar","ar.circ":"Matriz circular","ar.count":"Cantidad","ar.radius":"Radio mm","ar.align":"Alinear a la mesa","ar.a.center":"Centrar","ar.a.cx":"Centrar X","ar.a.cy":"Centrar Y","ar.a.left":"Izquierda","ar.a.right":"Derecha","ar.a.top":"Arriba","ar.a.bottom":"Abajo","ar.note":"Seleccione una forma. La matriz copia la selección.","ar.offset":"Desplazar formas","ar.dist":"Distancia mm","ar.outset":"Expandir","ar.inset":"Contraer" });
+  Object.assign(I18N.de, { "action.arrange":"Anordnen…","ar.title":"Anordnen","ar.grid":"Rasteranordnung","ar.cols":"Spalten","ar.rows":"Zeilen","ar.dx":"Abstand X mm","ar.dy":"Abstand Y mm","ar.apply":"Anwenden","ar.circ":"Kreisanordnung","ar.count":"Anzahl","ar.radius":"Radius mm","ar.align":"An Arbeitsfläche ausrichten","ar.a.center":"Zentrieren","ar.a.cx":"X zentrieren","ar.a.cy":"Y zentrieren","ar.a.left":"Links","ar.a.right":"Rechts","ar.a.top":"Oben","ar.a.bottom":"Unten","ar.note":"Zuerst eine Form wählen. Die Anordnung kopiert die Auswahl.","ar.offset":"Formen versetzen","ar.dist":"Abstand mm","ar.outset":"Vergrößern","ar.inset":"Verkleinern" });
+  Object.assign(I18N.fr, { "action.arrange":"Agencer…","ar.title":"Agencer","ar.grid":"Réseau en grille","ar.cols":"Colonnes","ar.rows":"Lignes","ar.dx":"Écart X mm","ar.dy":"Écart Y mm","ar.apply":"Appliquer","ar.circ":"Réseau circulaire","ar.count":"Nombre","ar.radius":"Rayon mm","ar.align":"Aligner sur le plateau","ar.a.center":"Centrer","ar.a.cx":"Centrer X","ar.a.cy":"Centrer Y","ar.a.left":"Gauche","ar.a.right":"Droite","ar.a.top":"Haut","ar.a.bottom":"Bas","ar.note":"Sélectionnez une forme. Le réseau copie la sélection.","ar.offset":"Décaler les formes","ar.dist":"Distance mm","ar.outset":"Agrandir","ar.inset":"Réduire" });
+  Object.assign(I18N["pt-BR"], { "action.arrange":"Organizar…","ar.title":"Organizar","ar.grid":"Matriz em grade","ar.cols":"Colunas","ar.rows":"Linhas","ar.dx":"Espaço X mm","ar.dy":"Espaço Y mm","ar.apply":"Aplicar","ar.circ":"Matriz circular","ar.count":"Quantidade","ar.radius":"Raio mm","ar.align":"Alinhar à mesa","ar.a.center":"Centralizar","ar.a.cx":"Centralizar X","ar.a.cy":"Centralizar Y","ar.a.left":"Esquerda","ar.a.right":"Direita","ar.a.top":"Topo","ar.a.bottom":"Base","ar.note":"Selecione uma forma. A matriz copia a seleção.","ar.offset":"Deslocar formas","ar.dist":"Distância mm","ar.outset":"Expandir","ar.inset":"Reduzir" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -1239,6 +1256,7 @@
     else if (act==="alignbed"){ doc.shapes=[rect(8,8,26,18,0)]; selected=0; alignBed("center"); openArrange(); }
     else if (act==="text"){ doc.shapes=[...engineTextShapes("LaserCraft 2026", 12, 95, 13, 0), ...engineTextShapes("SN-0042 / 19.5mm", 12, 60, 10, 1), ...engineTextShapes("ABCDEFG HIJKLM", 12, 30, 9, 2)]; selected=null; render(); refreshCounts(); }
     else if (act==="nodes"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:25,y:35}, segments:[{Cubic:{c1:{x:40,y:80},c2:{x:95,y:80},to:{x:120,y:35}}},{Cubic:{c1:{x:95,y:-5},c2:{x:40,y:-5},to:{x:25,y:35}}}], closed:true } } }]; selected=0; const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); render(); refreshCounts(); }
+    else if (act==="offset"){ doc.shapes=[{ kind:"Rect", cut_index:0, geometry:{ Polyline:{ points:[p(60,60),p(100,60),p(100,95),p(60,95)], closed:true } } }]; selected=0; offsetSelected(6); offsetSelected(-6); openArrange(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>

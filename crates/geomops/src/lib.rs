@@ -90,6 +90,20 @@ pub fn intersect(a: &[(f64, f64)], b: &[(f64, f64)]) -> Vec<Vec<(f64, f64)>> {
     to_polylines(&out)
 }
 
+/// Offset a closed outline by one signed distance. Positive grows the outline
+/// outward, negative shrinks it inward. This is the Offset Shapes operation, a
+/// cut line set a fixed distance off an outline. The result is one polyline per
+/// resulting subpath, and a collapsed offset comes back empty.
+pub fn offset(outline: &[(f64, f64)], delta: f64) -> Vec<Vec<(f64, f64)>> {
+    if outline.len() < 3 || delta == 0.0 {
+        return Vec::new();
+    }
+    to_polylines(&offset_path(&to_path(outline), delta, Join::Round, 2.0))
+        .into_iter()
+        .filter(|s| s.len() >= 3)
+        .collect()
+}
+
 /// Offset a closed outline inward in `interval` steps, up to `max_rings` rings.
 ///
 /// This is the offset fill for an arbitrary shape. Each ring is the outline inset
@@ -143,8 +157,23 @@ mod tests {
     }
 
     #[test]
+    fn offset_outset_grows_and_inset_shrinks() {
+        let sq = vec![(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)];
+        let out = offset(&sq, 3.0);
+        let inn = offset(&sq, -3.0);
+        assert!(!out.is_empty() && !inn.is_empty());
+        // The outset ring reaches beyond the 20 mm square; the inset stays inside.
+        let out_max = out.iter().flatten().fold(f64::MIN, |m, &(x, _)| m.max(x));
+        let inn_max = inn.iter().flatten().fold(f64::MIN, |m, &(x, _)| m.max(x));
+        assert!(out_max > 20.5, "outset max x {out_max}");
+        assert!(inn_max < 19.5, "inset max x {inn_max}");
+    }
+
+    #[test]
     fn degenerate_input_is_safe() {
         assert!(weld(&[]).is_empty());
+        assert!(offset(&[(0.0, 0.0), (1.0, 1.0)], 2.0).is_empty());
+        assert!(offset(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)], 0.0).is_empty());
         assert!(concentric(&[(0.0, 0.0)], 1.0, 5).is_empty());
         assert!(concentric(&[(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)], 0.0, 5).is_empty());
     }

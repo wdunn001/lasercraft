@@ -167,6 +167,19 @@ pub fn text_to_paths(text: &str, height_mm: f64, x: f64, y: f64, gap_mm: f64) ->
     serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
+/// Offset a closed outline by one signed distance in millimetres.
+///
+/// A positive `delta` grows the outline outward, a negative one shrinks it inward.
+/// The input is one polyline as an array of `[x, y]` pairs. The result is a JSON
+/// array of offset polylines. This is Offset Shapes, run on the shared
+/// `craft-pathops` offset.
+#[wasm_bindgen]
+pub fn offset(polyline_json: &str, delta: f64) -> Result<String, JsError> {
+    let outline: Vec<(f64, f64)> = parse(polyline_json, "polyline")?;
+    let out = lasercraft_geomops::offset(&outline, delta);
+    serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
 /// Build a material-test grid project from `spec` and return it as project JSON.
 #[wasm_bindgen]
 pub fn material_test_project(spec_json: &str) -> Result<String, JsError> {
