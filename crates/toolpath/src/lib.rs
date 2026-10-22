@@ -116,9 +116,82 @@ pub fn follow_polyline(points: &[Point], closed: bool) -> Vec<Segment> {
     segments
 }
 
+/// Expand a polyline into a wobbled path: overlapping circles traced along it.
+///
+/// This is LightBurn's "Wobble" and EZCAD's "Dithering". The tool advances by
+/// `step_mm` along the path and traces a circle of diameter `size_mm` at each
+/// step, which widens the effective line for cutting a thin kerf. The result is a
+/// dense polyline the caller then marks or cuts. A degenerate input returns
+/// unchanged: fewer than two points, a non-positive step, or a non-positive size.
+pub fn wobble_path(points: &[Point], step_mm: f64, size_mm: f64) -> Vec<Point> {
+    const CIRCLE_POINTS: usize = 16;
+    let radius = size_mm / 2.0;
+    if points.len() < 2 || step_mm <= 0.0 || radius <= 0.0 {
+        return points.to_vec();
+    }
+    let circle = |center: Point| {
+        (0..=CIRCLE_POINTS).map(move |k| {
+            let theta = std::f64::consts::TAU * (k as f64) / (CIRCLE_POINTS as f64);
+            Point {
+                x: center.x + radius * theta.cos(),
+                y: center.y + radius * theta.sin(),
+            }
+        })
+    };
+    let mut out: Vec<Point> = Vec::new();
+    let mut target = 0.0_f64;
+    let mut travelled = 0.0_f64;
+    for pair in points.windows(2) {
+        let [a, b] = pair else { continue };
+        let seg_len = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+        if seg_len <= 0.0 {
+            continue;
+        }
+        // Emit a circle each time a step target falls inside this segment.
+        while target <= travelled + seg_len {
+            let t = (target - travelled) / seg_len;
+            let center = Point {
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t,
+            };
+            out.extend(circle(center));
+            target += step_mm;
+        }
+        travelled += seg_len;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wobble_traces_circles_along_a_line() {
+        let line = [Point { x: 0.0, y: 0.0 }, Point { x: 10.0, y: 0.0 }];
+        let path = wobble_path(&line, 1.0, 0.5);
+        // Roughly eleven circles (arc lengths 0 through 10 at step 1), each dense.
+        assert!(path.len() > 100, "got {}", path.len());
+        // Every point stays within the half-diameter band around the line.
+        let radius = 0.25;
+        for p in &path {
+            assert!(
+                p.x >= -radius - 1e-9 && p.x <= 10.0 + radius + 1e-9,
+                "x {}",
+                p.x
+            );
+            assert!(p.y.abs() <= radius + 1e-9, "y {}", p.y);
+        }
+    }
+
+    #[test]
+    fn wobble_leaves_a_degenerate_input_unchanged() {
+        let one = [Point { x: 1.0, y: 2.0 }];
+        assert_eq!(wobble_path(&one, 1.0, 0.5).len(), 1);
+        let line = [Point { x: 0.0, y: 0.0 }, Point { x: 10.0, y: 0.0 }];
+        assert_eq!(wobble_path(&line, 0.0, 0.5).len(), 2);
+        assert_eq!(wobble_path(&line, 1.0, 0.0).len(), 2);
+    }
 
     fn unit_box() -> BBox {
         BBox {
