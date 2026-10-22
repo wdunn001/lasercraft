@@ -12,6 +12,7 @@ repository = "https://devops.quasarke.net/wdunn001/lasercraft"
 [workspace.dependencies]
 # Laser-specific crates live here because craft-libs only accepts crates useful
 # to more than one app. They consume craft-libs for the shared UI and cloud.
+lasercraft-cli = { path = "crates/cli" }
 lasercraft-device = { path = "crates/device" }
 lasercraft-dsp = { path = "crates/dsp" }
 lasercraft-engine = { path = "crates/engine" }
@@ -25,6 +26,7 @@ lasercraft-xtool = { path = "crates/xtool" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+clap = { version = "4", features = ["derive"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
