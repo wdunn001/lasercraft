@@ -6,7 +6,7 @@ Running record of what the reverse engineering has established. Every number her
 
 | Binary | Role target | Functions | Strings | PDB reference | Snapshot |
 |---|---|---|---|---|---|
-| `LightBurn.exe` | job model, GCode framing | pending | pending | n/a | timed out, needs long run |
+| `LightBurn.exe` | job model, Ruida and GRBL framing | 41432 | 47362 | stripped | `lightburn.snap` |
 | `transfer.dll` | transport layer, `craft-device` | 651 | 429 | `transfer.pdb`, stripped | `transfer.snap` |
 | `executor.dll` | galvo execution and calibration, `craft-galvo` | 3810 | 998 | `executor.pdb`, stripped | `executor.snap` |
 | `acclplanner.dll` | motion planning and GCode emission, `craft-motion`/`craft-gcode` | 3757 | 2084 | stripped | `acclplanner.snap` |
@@ -55,6 +55,29 @@ Decoded immediates for the record: `0x64695f726573616c` is `laser_id`, `0x616e65
 
 This function emits binary GCode records in a loop with an 88-byte (`0x58`) stride per record. So the binary format is fixed-width records. `craft-gcode` can model them as a packed struct once the field layout is recovered from this function's stores.
 
-## What still needs the exe
+## LightBurn.exe protocol architecture
 
-The Ruida and GRBL dialects, the `.lbrn` job and layer model, and the main UI workflow are not in these three DLLs. A full `LightBurn.exe` analysis is running with a 60-minute Ghidra deadline to recover them.
+The whole-exe Ghidra analysis succeeded at 41432 functions and 47362 strings. Reopening that saved snapshot to query it is killed on load every time, most likely an out-of-memory during project load. The workaround was direct string extraction from the PE. That needs no analysis engine and runs in seconds. The full inventory is saved at `rea-evidence/strings-lightburn-ascii.txt` and the device and protocol class list at `rea-evidence/exe-protocol-classes.txt`.
+
+The MSVC RTTI class names recover LightBurn's entire controller layer. It is a `Protocol` base class with a `ProtocolDescriptor` registry, one descriptor per supported device. The families are clear.
+
+| Family | Protocol classes | LaserCraft crate |
+|---|---|---|
+| GCode base and dialects | `Protocol_GCode_Base`, `Protocol_GRBL` (+ `_LPC`, `_M3`, `_iLaser`), `Protocol_Marlin`, `Protocol_Smoothie`, `Protocol_GCode_Thread_RepRap`, `Protocol_LinuxCNC`, `Protocol_GCode_Custom` | `craft-gcode` |
+| Vendor GCode flavors | `Protocol_Flavor_Creality_Falcon`, `Protocol_Flavor_RRF_HTTP`, `Protocol_Flavor_WeCreat_Http`, `Protocol_Emblaser*`, `Protocol_SnapMaker`, `Protocol_Cubiio`, `Protocol_FabKit`, `Protocol_ACCELaser`, `Protocol_CanCam` | `craft-gcode` flavors |
+| DSP binary controllers | `Protocol_Ruida`, `Protocol_Trocen`, `Protocol_Topwisdom` | `craft-dsp` |
+| Galvo and fiber | `Protocol_Galvo`, `Protocol_EZCad3`, `Protocol_JCZFiber`, `Protocol_BSLFiber` | `craft-galvo` |
+| xTool network | `Protocol_XTool`, `Protocol_XTool_HTTP`, `Protocol_Worker_XTool_V1`, `Protocol_Worker_XTool_V2` | `craft-xtool` |
+| Other | `Protocol_Epilog`, `Protocol_LBP`, `Protocol_Gerbil_STM`, `Protocol_SnapMaker` | per-device |
+
+Two design points carry straight into LaserCraft. The GCode controllers all descend from one base with per-dialect subclasses. `craft-gcode` should follow that shape with a core emitter and a dialect trait, where each dialect is a small implementation of the trait. The device list is data-driven through descriptors and embedded device-profile JSON, for example the Emblaser profiles carrying `"GCodeFlavor": "grbl"` and a `StartGCode` template. That matches the house rule against hardcoded device registries. `craft-device` holds the descriptor registry and the transport, and each protocol crate implements one `Protocol` trait.
+
+The xTool path is unusual. It speaks HTTP and a WebSocket status bus, carrying its own auth, credentials, and camera commands. The serial and DSP controllers share none of that. xTool earns its own `craft-xtool` crate.
+
+## The .lbrn file model
+
+The project format is plain XML. The root element is `<LightBurnProject>` and geometry is carried in `<Shape>` elements with attributes such as `Type="Group"` and `CutIndex="0"`. Exported GCode embeds a preview through a `;thumbnail: data:image/png;base64,` comment. Bundled sample projects (`GalvoCalibration.lbrn2`, `alignmenttargets.lbrn`) confirm both extensions. This is parsing work for `craft-laser-doc`, not deep reverse engineering.
+
+## What still needs deeper work
+
+Two things remain for a later pass. The byte-level framing of the DSP protocols (Ruida, Trocen, Topwisdom) needs function decompilation. That is currently blocked by the `LightBurn.exe` snapshot reopen being killed on load. The fix is to raise the Ghidra heap or to re-analyze only the address range around a chosen `Protocol_Ruida` method. The second is the cut-settings and material-library schema. That can be read from the XML and the embedded device-profile JSON without the decompiler.

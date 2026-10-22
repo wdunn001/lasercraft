@@ -13,10 +13,11 @@ Each LightBurn subsystem becomes a new vendor-free `craft-*` crate or reuses an 
 | Bitmap to vector trace | `potrace.dll` | `craft-trace` | new, Rust potrace port |
 | Toolpath generation, raster and vector | `LightBurn.exe` | `craft-toolpath` | new |
 | Motion and acceleration planning | `acclplanner.dll` | `craft-motion` | new |
-| GCode framing | `LightBurn.exe` | `craft-gcode` | new |
-| Ruida framing | `transfer.dll`, `executor.dll` | `craft-ruida` | new |
-| Marlin and GRBL dialects | `LightBurn.exe` | `craft-grbl` | new |
-| Galvo and fiber control | `lcs2dll.dll`, `BslCal.dll` | `craft-galvo` | new, later phase |
+| GCode base and dialects | `LightBurn.exe` `Protocol_GCode_Base` and subclasses | `craft-gcode` with a dialect trait | new |
+| DSP binary controllers | `LightBurn.exe` `Protocol_Ruida`, `Protocol_Trocen`, `Protocol_Topwisdom` | `craft-dsp` | new |
+| xTool HTTP and WebSocket | `LightBurn.exe` `Protocol_Worker_XTool_V1`/`V2` | `craft-xtool` | new |
+| Galvo and fiber control | `executor.dll`, `lcs2dll.dll`, `BslCal.dll` | `craft-galvo` | new, later phase |
+| Device descriptor registry | `LightBurn.exe` `ProtocolDescriptor` and device JSON | `craft-device` registry | new |
 | Device streaming | `executor.dll`, `transfer.dll` | `craft-device` | new |
 | UI shell, panels, theming | not reverse engineered, reused | `craft-ui` | existing |
 | Cloud open and save, accounts | not reverse engineered, reused | `craft-ui::cloud`, `craft-cloud-client` | existing |
@@ -25,7 +26,7 @@ Each LightBurn subsystem becomes a new vendor-free `craft-*` crate or reuses an 
 
 ## Provenance of the sibling DLLs
 
-A pass over the DLL version metadata on 2026-10-22 informs which binaries are worth reverse engineering. `transfer.dll`, `executor.dll`, `acclplanner.dll`, `param.dll`, and `utils.dll` carry no version resource and are named like internal modules, consistent with LightBurn's own code. These are the primary RE targets. `potrace.dll` is Peter Selinger's open-source Potrace. `craft-trace` uses the public Potrace algorithm directly, so no RE of that DLL is needed. `lcs2dll.dll` and `lcs2dllx64.dll` are a third-party galvo control SDK, version 1.0.0.6219 dated 2024, for JCZ-style LMC boards. Galvo support is a later phase and leans on the board's documented protocol.
+A pass over the DLL version metadata on 2026-10-22 informs which binaries are worth reverse engineering. `transfer.dll`, `executor.dll`, `acclplanner.dll`, `param.dll`, and `utils.dll` carry no version resource and are named like internal modules, consistent with LightBurn's own code. These are the primary RE targets. `potrace.dll` is Peter Selinger's open-source Potrace. `craft-trace` uses the public Potrace algorithm directly. No RE of that DLL is needed. `lcs2dll.dll` and `lcs2dllx64.dll` are a third-party galvo control SDK, version 1.0.0.6219 dated 2024, for JCZ-style LMC boards. Galvo support is a later phase and leans on the board's documented protocol.
 
 ## Controller protocols
 
