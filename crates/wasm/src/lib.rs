@@ -155,6 +155,18 @@ pub fn concentric(polyline_json: &str, interval: f64, max_rings: u32) -> Result<
     serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
+/// Lay text out into single-stroke polylines for engraving or marking.
+///
+/// `height_mm` is the cap height. The baseline sits at `(x, y)` and text grows
+/// upward. `gap_mm` is the extra space between letters. The result is a JSON array
+/// of polylines, each an array of `[x, y]` pairs, which the page lays on the
+/// active layer. The font is single-line, the right choice for a galvo or diode.
+#[wasm_bindgen]
+pub fn text_to_paths(text: &str, height_mm: f64, x: f64, y: f64, gap_mm: f64) -> Result<String, JsError> {
+    let out = lasercraft_text::text_to_polylines(text, height_mm, x, y, gap_mm);
+    serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
 /// Build a material-test grid project from `spec` and return it as project JSON.
 #[wasm_bindgen]
 pub fn material_test_project(spec_json: &str) -> Result<String, JsError> {

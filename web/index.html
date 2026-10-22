@@ -324,7 +324,7 @@
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths } from "./pkg/lasercraft_wasm.js";
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
@@ -412,6 +412,15 @@
       cx += adv;
     }
     return out;
+  }
+  // Text shapes from the shared engine font (single-stroke, via wasm). Falls back
+  // to the local JS font before wasm is ready, so the on-load seed still draws.
+  function engineTextShapes(str, ox, oy, h, cut){
+    if (!ready) return textShapes(str, ox, oy, h, cut);
+    try {
+      const polys = JSON.parse(text_to_paths(str, h, ox, oy, h*0.28));
+      return polys.map(pl => ({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.map(a=>p(a[0], a[1])), closed:false } } }));
+    } catch(e){ console.error(e); return textShapes(str, ox, oy, h, cut); }
   }
   // seed a text sample on the engrave layer so the feature is visible on load
   doc.shapes.push(...textShapes("LASERCRAFT", 20, 70, 11, 2));
@@ -838,7 +847,7 @@
   $("addText").onclick = () => {
     const str = $("textIn").value.trim(); if (!str) return;
     const h = +$("textH").value || 8;
-    const shapes = textShapes(str, 20, BED.h/2, h, doc.layers[activeLayer].index);
+    const shapes = engineTextShapes(str, 20, BED.h/2, h, doc.layers[activeLayer].index);
     doc.shapes.push(...shapes); selected = null; render(); refreshCounts();
   };
   $("textIn").addEventListener("keydown", e => { if (e.key === "Enter") $("addText").click(); });
@@ -1210,6 +1219,7 @@
     else if (act==="arraygrid"){ doc.shapes=[rect(15,15,24,16,0)]; selected=0; arrayGrid(4,3,6,6); openArrange(); }
     else if (act==="arraycircular"){ doc.shapes=[rect(66,18,18,12,0)]; selected=0; arrayCircular(9,30); openArrange(); }
     else if (act==="alignbed"){ doc.shapes=[rect(8,8,26,18,0)]; selected=0; alignBed("center"); openArrange(); }
+    else if (act==="text"){ doc.shapes=[...engineTextShapes("LaserCraft 2026", 12, 95, 13, 0), ...engineTextShapes("SN-0042 / 19.5mm", 12, 60, 10, 1), ...engineTextShapes("ABCDEFG HIJKLM", 12, 30, 9, 2)]; selected=null; render(); refreshCounts(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
