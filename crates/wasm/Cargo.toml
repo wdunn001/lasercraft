@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 lasercraft-engine = { workspace = true }
 lasercraft-galvo = { workspace = true }
+lasercraft-geomops = { workspace = true }
 lasercraft-gcode = { workspace = true }
 lasercraft-laser-doc = { workspace = true }
 lasercraft-motion = { workspace = true }

@@ -114,6 +114,30 @@ pub fn generate_galvo_lmc(
     Ok(plan_galvo_lmc(&project, &param, hz, speed, power))
 }
 
+/// Union a set of closed polylines into their merged outline.
+///
+/// The input is a JSON array of polylines, each an array of `[x, y]` pairs. The
+/// result is the same shape. This is the Weld operation, run on the shared
+/// `craft-pathops` boolean.
+#[wasm_bindgen]
+pub fn weld(polylines_json: &str) -> Result<String, JsError> {
+    let polylines: Vec<Vec<(f64, f64)>> = parse(polylines_json, "polylines")?;
+    let out = lasercraft_geomops::weld(&polylines);
+    serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
+/// Offset a closed outline inward into concentric rings.
+///
+/// The input is one polyline as an array of `[x, y]` pairs. The result is a JSON
+/// array of ring polylines. This is the true offset fill, run on the shared
+/// `craft-pathops` offset.
+#[wasm_bindgen]
+pub fn concentric(polyline_json: &str, interval: f64, max_rings: u32) -> Result<String, JsError> {
+    let outline: Vec<(f64, f64)> = parse(polyline_json, "polyline")?;
+    let out = lasercraft_geomops::concentric(&outline, interval, max_rings as usize);
+    serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
 /// Build a material-test grid project from `spec` and return it as project JSON.
 #[wasm_bindgen]
 pub fn material_test_project(spec_json: &str) -> Result<String, JsError> {

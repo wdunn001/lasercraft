@@ -1,0 +1,15 @@
+[package]
+name = "lasercraft-geomops"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Polygon boolean and offset for LaserCraft, over the shared craft-pathops crate"
+
+[dependencies]
+craft-geom = { git = "https://github.com/wdunn001/craft-libs", branch = "shared-geometry-crates" }
+craft-pathops = { git = "https://github.com/wdunn001/craft-libs", branch = "shared-geometry-crates" }
+
+[lints]
+workspace = true
