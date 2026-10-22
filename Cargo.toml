@@ -18,6 +18,7 @@ lasercraft-dsp = { path = "crates/dsp" }
 lasercraft-engine = { path = "crates/engine" }
 lasercraft-galvo = { path = "crates/galvo" }
 lasercraft-gcode = { path = "crates/gcode" }
+lasercraft-i18n = { path = "crates/i18n" }
 lasercraft-laser-doc = { path = "crates/laser-doc" }
 lasercraft-motion = { path = "crates/motion" }
 lasercraft-toolpath = { path = "crates/toolpath" }
