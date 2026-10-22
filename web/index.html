@@ -399,6 +399,7 @@
     ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"],
     ["poly","M12 3l9 7-3 11H6L3 10z"],
     ["line","M4 20L20 4"],
+    ["pen","M4 20l7-2 8-8-5-5-8 8z"],
   ];
   const toolsEl = $("tools");
   for (const [name, d] of TOOLS) {
@@ -432,11 +433,9 @@
     // shapes
     doc.shapes.forEach((sh, i) => {
       const col = PALETTE[(sh.cut_index)%PALETTE.length];
-      const pts = shapePoints(sh).map(mm2px);
-      if (!pts.length) return;
-      const closed = sh.geometry.Polyline ? sh.geometry.Polyline.closed : true;
-      let dd = pts.map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ") + (closed?" Z":"");
-      const selAttr = (selected===i) ? ` stroke-dasharray="none" stroke-width="2.5"` : ` stroke-width="1.6"`;
+      const dd = shapeD(sh);
+      if (!dd) return;
+      const selAttr = (selected===i) ? ` stroke-width="2.5"` : ` stroke-width="1.6"`;
       s += `<path d="${dd}" fill="none" stroke="${col}"${selAttr}/>`;
       if (selected===i) {
         const bb = bbox(sh);
@@ -457,10 +456,61 @@
     if (typeof positionCam === "function") positionCam();
   }
   function shapePoints(sh){ return sh.geometry.Polyline ? sh.geometry.Polyline.points : []; }
-  function bbox(sh){ const pts = shapePoints(sh); let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const q of pts){x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);} return {x0,y0,x1,y1}; }
+  // The SVG path for a shape, in screen pixels. Handles both polylines and cubic paths.
+  function shapeD(sh){
+    const g = sh.geometry;
+    if (g.Polyline){ const pts = g.Polyline.points.map(mm2px); if (!pts.length) return ""; return pts.map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ") + (g.Polyline.closed?" Z":""); }
+    if (g.Path){ const P = g.Path; const s0 = mm2px(P.start); let d = "M "+s0.x.toFixed(1)+" "+s0.y.toFixed(1);
+      for (const seg of P.segments){
+        if (seg.Cubic){ const c1=mm2px(seg.Cubic.c1), c2=mm2px(seg.Cubic.c2), to=mm2px(seg.Cubic.to); d += ` C ${c1.x.toFixed(1)} ${c1.y.toFixed(1)} ${c2.x.toFixed(1)} ${c2.y.toFixed(1)} ${to.x.toFixed(1)} ${to.y.toFixed(1)}`; }
+        else if (seg.Line){ const to=mm2px(seg.Line.to); d += ` L ${to.x.toFixed(1)} ${to.y.toFixed(1)}`; }
+      }
+      if (P.closed) d += " Z"; return d; }
+    return "";
+  }
+  // Flattened mm points of a shape, for the bounding box and hit testing.
+  function shapeFlatPts(sh){
+    const g = sh.geometry;
+    if (g.Polyline) return g.Polyline.points;
+    if (g.Path){ const pts = [g.Path.start]; let a = g.Path.start;
+      for (const seg of g.Path.segments){
+        if (seg.Cubic){ const c1=seg.Cubic.c1, c2=seg.Cubic.c2, b=seg.Cubic.to;
+          for (let t=0.25; t<=1.0001; t+=0.25){ const u=1-t; pts.push({ x:u*u*u*a.x+3*u*u*t*c1.x+3*u*t*t*c2.x+t*t*t*b.x, y:u*u*u*a.y+3*u*u*t*c1.y+3*u*t*t*c2.y+t*t*t*b.y }); } a = b; }
+        else if (seg.Line){ pts.push(seg.Line.to); a = seg.Line.to; }
+      }
+      return pts; }
+    return [];
+  }
+  function bbox(sh){ const pts = shapeFlatPts(sh); let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const q of pts){x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);} return {x0,y0,x1,y1}; }
 
   // ---- interaction ----
   let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null;
+  let penAnchors = [], penDrag = false;
+  function penPreview(){
+    if (!penAnchors.length) return null;
+    const A = penAnchors, m = q => mm2px(q);
+    const s0 = m(A[0].p); let d = `<path d="M ${s0.x} ${s0.y}`;
+    for (let i = 1; i < A.length; i++){ const c1=m(A[i-1].hOut), c2=m(A[i].hIn), to=m(A[i].p); d += ` C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${to.x} ${to.y}`; }
+    d += `" fill="none" stroke="#3b82f6" stroke-dasharray="4 3"/>`;
+    let extra = "";
+    for (const a of A){ const pp=m(a.p), hi=m(a.hIn), ho=m(a.hOut);
+      extra += `<line x1="${hi.x}" y1="${hi.y}" x2="${ho.x}" y2="${ho.y}" stroke="#3b82f6" stroke-width="1"/>`;
+      extra += `<circle cx="${hi.x}" cy="${hi.y}" r="3" fill="#3b82f6"/><circle cx="${ho.x}" cy="${ho.y}" r="3" fill="#3b82f6"/>`;
+      extra += `<rect x="${pp.x-4}" y="${pp.y-4}" width="8" height="8" fill="#fff" stroke="#3b82f6"/>`;
+    }
+    return d + extra;
+  }
+  function finishPen(closed){
+    const A = penAnchors;
+    if (A.length >= 2){
+      const segs = [];
+      for (let i = 0; i < A.length-1; i++) segs.push({ Cubic:{ c1:p(A[i].hOut.x,A[i].hOut.y), c2:p(A[i+1].hIn.x,A[i+1].hIn.y), to:p(A[i+1].p.x,A[i+1].p.y) } });
+      if (closed) segs.push({ Cubic:{ c1:p(A[A.length-1].hOut.x,A[A.length-1].hOut.y), c2:p(A[0].hIn.x,A[0].hIn.y), to:p(A[0].p.x,A[0].p.y) } });
+      doc.shapes.push({ kind:"Path", cut_index:doc.layers[activeLayer].index, geometry:{ Path:{ start:p(A[0].p.x,A[0].p.y), segments:segs, closed } } });
+      selected = doc.shapes.length - 1;
+    }
+    penAnchors = []; penDrag = false; drawing = null; render(); refreshCounts();
+  }
   function hitNode(cx, cy){ if (selected == null || !doc.shapes[selected]) return null; const r = canvas.getBoundingClientRect(); const pts = shapePoints(doc.shapes[selected]); for (let i = 0; i < pts.length; i++){ const d = mm2px(pts[i]); if (Math.hypot(d.x-(cx-r.left), d.y-(cy-r.top)) < 8) return i; } return null; }
   function handleCalibClick(e){
     const r = canvas.getBoundingClientRect();
@@ -476,6 +526,12 @@
   canvas.addEventListener("mousedown", e => {
     if (camCalibrating){ handleCalibClick(e); return; }
     const m = px2mm(e.clientX, e.clientY); start = m;
+    if (tool === "pen"){
+      const r = canvas.getBoundingClientRect();
+      if (penAnchors.length >= 2){ const d0 = mm2px(penAnchors[0].p); if (Math.hypot(d0.x-(e.clientX-r.left), d0.y-(e.clientY-r.top)) < 8){ finishPen(true); return; } }
+      penAnchors.push({ p:{x:m.x,y:m.y}, hIn:{x:m.x,y:m.y}, hOut:{x:m.x,y:m.y} });
+      penDrag = true; drawing = penPreview(); render(); return;
+    }
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
       if (dragNode == null) { selected = hitTest(m); }   // no node hit: pick a shape to edit
@@ -490,6 +546,7 @@
   canvas.addEventListener("mousemove", e => {
     const m = px2mm(e.clientX, e.clientY);
     $("readout").textContent = `x ${m.x.toFixed(1)}  y ${m.y.toFixed(1)} mm`;
+    if (tool==="pen" && penDrag && penAnchors.length){ const a = penAnchors[penAnchors.length-1]; a.hOut={x:m.x,y:m.y}; a.hIn={x:2*a.p.x-m.x,y:2*a.p.y-m.y}; drawing=penPreview(); render(); return; }
     if (!start) return;
     if (tool==="node" && dragNode!=null && doc.shapes[selected]){ const pts=shapePoints(doc.shapes[selected]); if (pts[dragNode]) pts[dragNode]=p(m.x,m.y); render(); return; }
     if (tool==="select" && dragShape!=null){ moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y); render(); return; }
@@ -499,6 +556,7 @@
       render(); }
   });
   window.addEventListener("mouseup", e => {
+    if (tool==="pen"){ penDrag=false; start=null; return; }
     if (!start){ return; }
     const m = px2mm(e.clientX, e.clientY);
     if (tool==="rect" && Math.abs(m.x-start.x)>1){ doc.shapes.push(rect(Math.min(start.x,m.x),Math.min(start.y,m.y),Math.abs(m.x-start.x),Math.abs(m.y-start.y),doc.layers[activeLayer].index)); selected=doc.shapes.length-1; }
@@ -846,6 +904,7 @@
 
   // keyboard
   window.addEventListener("keydown", e => {
+    if (tool==="pen" && penAnchors.length){ if (e.key==="Enter"){ e.preventDefault(); finishPen(false); return; } if (e.key==="Escape"){ penAnchors=[]; penDrag=false; drawing=null; render(); return; } }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); return; }
     if ((e.key==="Delete"||e.key==="Backspace") && selected!=null && !/INPUT/.test(document.activeElement.tagName)){ doc.shapes.splice(selected,1); selected=null; render(); refreshCounts(); }
@@ -1072,6 +1131,7 @@
     else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selected=0; booleanWith("difference"); render(); refreshCounts(); }
     else if (act==="materials"){ openMaterials(); }
     else if (act==="cs"){ openCutSettings(2); }
+    else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selected=doc.shapes.length-1; render(); refreshCounts(); }
     else if (act==="dither"){ const c=document.createElement("canvas"); c.width=220; c.height=150; const cx=c.getContext("2d"); const g=cx.createRadialGradient(110,75,8,110,75,100); g.addColorStop(0,"#fff"); g.addColorStop(1,"#000"); cx.fillStyle=g; cx.fillRect(0,0,220,150); const im=new Image(); im.onload=()=>ditherImage(im); im.src=c.toDataURL(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
