@@ -17,6 +17,7 @@
 use lasercraft_gcode::{Dialect, Op, program};
 use lasercraft_laser_doc::{CutSetting, Geometry, Project, Shape};
 use lasercraft_motion::MotionConfig;
+use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
 use lasercraft_toolpath::{BBox, Point, follow_polyline, line_fill};
 
 /// Errors the engine can return while executing a command.
@@ -146,6 +147,35 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
     program(dialect, &ops)
 }
 
+/// Generate controller output to raster-engrave an image.
+///
+/// Each constant-power scan run becomes a rapid to its start with the laser off,
+/// then a cut across the span at the run power and the configured engrave feed.
+/// This is the image-engraving path, alongside the vector and line-fill paths.
+pub fn plan_raster(
+    image: &GrayImage,
+    params: &RasterParams,
+    motion: &MotionConfig,
+    dialect: &dyn Dialect,
+) -> String {
+    let feed = motion.clamp_feed(params.speed_mm_s);
+    let runs = raster_scan(image, params);
+    let mut ops = Vec::with_capacity(runs.len() * 2);
+    for run in &runs {
+        ops.push(Op::RapidTo {
+            x: run.x_start_mm,
+            y: run.y_mm,
+        });
+        ops.push(Op::CutTo {
+            x: run.x_end_mm,
+            y: run.y_mm,
+            feed_mm_s: feed,
+            power: run.power,
+        });
+    }
+    program(dialect, &ops)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,5 +259,31 @@ mod tests {
         assert_eq!(cut_moves, 3);
         // The cut runs at the layer feed and power.
         assert!(out.contains("F1200 S800"));
+    }
+
+    #[test]
+    fn plan_raster_engraves_dark_pixels() {
+        let motion = MotionConfig {
+            max_speed_mm_s: 300.0,
+            accel_mm_s2: 1000.0,
+            accel_to_decel_mm_s2: 500.0,
+        };
+        let image = GrayImage {
+            width: 3,
+            height: 1,
+            pixels: vec![0, 255, 255],
+        };
+        let params = RasterParams {
+            pixel_mm: 1.0,
+            power_max: 100.0,
+            threshold: 128,
+            speed_mm_s: 200.0,
+        };
+        let out = plan_raster(&image, &params, &motion, &Grbl::new());
+        // The two dark pixels merge into one engrave move at full power.
+        let cut_moves = out.lines().filter(|l| l.starts_with("G1 ")).count();
+        assert_eq!(cut_moves, 1);
+        // 200 mm/s is 12000 mm/min, full power is S1000 on GRBL.
+        assert!(out.contains("F12000 S1000"));
     }
 }

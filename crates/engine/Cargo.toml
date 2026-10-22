@@ -10,6 +10,7 @@ repository.workspace = true
 lasercraft-gcode = { workspace = true }
 lasercraft-laser-doc = { workspace = true }
 lasercraft-motion = { workspace = true }
+lasercraft-raster = { workspace = true }
 lasercraft-toolpath = { workspace = true }
 thiserror = { workspace = true }
 
