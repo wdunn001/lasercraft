@@ -181,6 +181,69 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
     program(dialect, &ops)
 }
 
+/// Render a project to an SVG preview string.
+///
+/// Each shape is drawn as a path, coloured by its cut index so layers are
+/// distinguishable, over a dark bed. The Y axis is flipped so the preview matches
+/// the laser's bottom-left origin. This is a viewing aid and does not drive the
+/// machine.
+pub fn project_to_svg(project: &Project) -> String {
+    use std::fmt::Write as _;
+    const PALETTE: &[&str] = &[
+        "#e23", "#2a7", "#39f", "#fb0", "#b5f", "#0cc", "#f70", "#7d2",
+    ];
+    const CURVE_STEPS: u32 = 24;
+    let (min, max) = project
+        .bounds()
+        .unwrap_or((Point2 { x: 0.0, y: 0.0 }, Point2 { x: 100.0, y: 100.0 }));
+    let pad = ((max.x - min.x).max(max.y - min.y) * 0.05).max(1.0);
+    let (x0, y0) = (min.x - pad, min.y - pad);
+    let w = (max.x - min.x + 2.0 * pad).max(1.0);
+    let h = (max.y - min.y + 2.0 * pad).max(1.0);
+    let stroke = (w.max(h) / 300.0).max(0.05);
+
+    let mut svg = String::new();
+    let _ = write!(
+        svg,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"{x0:.3} {y0:.3} {w:.3} {h:.3}\" width=\"640\">"
+    );
+    let _ = write!(
+        svg,
+        "<rect x=\"{x0:.3}\" y=\"{y0:.3}\" width=\"{w:.3}\" height=\"{h:.3}\" fill=\"#111\"/>"
+    );
+    // Flip Y so the bottom-left origin reads correctly.
+    let _ = write!(
+        svg,
+        "<g transform=\"translate(0 {:.3}) scale(1 -1)\">",
+        2.0 * y0 + h
+    );
+    for shape in &project.shapes {
+        let (points, closed) = match &shape.geometry {
+            Geometry::Polyline { points, closed } => (points.clone(), *closed),
+            Geometry::Path(path) => (path.flatten(CURVE_STEPS), path.closed),
+            Geometry::Empty => continue,
+        };
+        if points.is_empty() {
+            continue;
+        }
+        let color = PALETTE[(shape.cut_index as usize) % PALETTE.len()];
+        let mut d = String::new();
+        for (i, p) in points.iter().enumerate() {
+            let cmd = if i == 0 { 'M' } else { 'L' };
+            let _ = write!(d, "{cmd}{:.3} {:.3} ", p.x, p.y);
+        }
+        if closed {
+            d.push('Z');
+        }
+        let _ = write!(
+            svg,
+            "<path d=\"{d}\" fill=\"none\" stroke=\"{color}\" stroke-width=\"{stroke:.3}\"/>"
+        );
+    }
+    svg.push_str("</g></svg>");
+    svg
+}
+
 /// A material-test grid: columns vary speed, rows vary power.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MaterialTestSpec {
@@ -576,6 +639,32 @@ mod tests {
         assert!(out.contains("G0 X20.000 Y18.000"));
         // Framing never fires the laser.
         assert!(!out.contains("G1 "));
+    }
+
+    #[test]
+    fn project_to_svg_renders_shapes() {
+        let project = Project {
+            app_version: "0.1.0".to_string(),
+            shapes: vec![Shape {
+                kind: ShapeKind::Rect,
+                cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 0.0, y: 0.0 },
+                        Point2 { x: 20.0, y: 0.0 },
+                        Point2 { x: 20.0, y: 20.0 },
+                        Point2 { x: 0.0, y: 20.0 },
+                    ],
+                    closed: true,
+                },
+            }],
+            cut_settings: vec![cut()],
+        };
+        let svg = project_to_svg(&project);
+        assert!(svg.starts_with("<svg"));
+        assert!(svg.contains("viewBox"));
+        assert!(svg.contains("<path"));
+        assert!(svg.ends_with("</svg>"));
     }
 
     #[test]

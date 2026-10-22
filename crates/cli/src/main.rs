@@ -14,7 +14,9 @@
 //! which exercises the document, persistence, engine, and dialect crates together.
 
 use clap::{Parser, Subcommand, ValueEnum};
-use lasercraft_engine::{estimate_job_time, plan_frame, plan_line_fill, plan_project, plan_raster};
+use lasercraft_engine::{
+    estimate_job_time, plan_frame, plan_line_fill, plan_project, plan_raster, project_to_svg,
+};
 use lasercraft_gcode::{Dialect, GCodeDialect};
 use lasercraft_laser_doc::CutSetting;
 use lasercraft_motion::MotionConfig;
@@ -100,6 +102,12 @@ enum Commands {
         /// Machine maximum speed in millimetres per second.
         #[arg(long, default_value_t = 300.0)]
         max_speed: f64,
+    },
+    /// Load a saved project and print an SVG preview of it.
+    Preview {
+        /// Path to the project file.
+        #[arg(long)]
+        project: PathBuf,
     },
     /// Load a saved project and print a framing pass tracing its bounds.
     Frame {
@@ -205,6 +213,16 @@ fn main() -> std::process::ExitCode {
                 }
             }
         }
+        Commands::Preview { project } => match lasercraft_persist::load_project(&project) {
+            Ok(doc) => {
+                print!("{}", project_to_svg(&doc));
+                std::process::ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("could not load {}: {error}", project.display());
+                std::process::ExitCode::FAILURE
+            }
+        },
         Commands::Frame { project, flavor } => match lasercraft_persist::load_project(&project) {
             Ok(doc) => {
                 print!("{}", plan_frame(&doc, flavor.dialect().as_ref()));

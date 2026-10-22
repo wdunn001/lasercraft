@@ -1,0 +1,37 @@
+{
+  "app_version": "0.1.0",
+  "shapes": [
+    {
+      "kind": "Rect",
+      "cut_index": 0,
+      "geometry": { "Polyline": { "points": [
+        { "x": 5.0, "y": 5.0 }, { "x": 55.0, "y": 5.0 },
+        { "x": 55.0, "y": 40.0 }, { "x": 5.0, "y": 40.0 }
+      ], "closed": true } }
+    },
+    {
+      "kind": "Path",
+      "cut_index": 1,
+      "geometry": { "Polyline": { "points": [
+        { "x": 15.0, "y": 12.0 }, { "x": 45.0, "y": 12.0 }, { "x": 30.0, "y": 33.0 }
+      ], "closed": true } }
+    },
+    {
+      "kind": "Ellipse",
+      "cut_index": 2,
+      "geometry": { "Path": {
+        "start": { "x": 30.0, "y": 50.0 },
+        "segments": [
+          { "Cubic": { "c1": { "x": 44.0, "y": 50.0 }, "c2": { "x": 44.0, "y": 70.0 }, "to": { "x": 30.0, "y": 70.0 } } },
+          { "Cubic": { "c1": { "x": 16.0, "y": 70.0 }, "c2": { "x": 16.0, "y": 50.0 }, "to": { "x": 30.0, "y": 50.0 } } }
+        ],
+        "closed": true
+      } }
+    }
+  ],
+  "cut_settings": [
+    { "index": 0, "name": "Cut", "speed_mm_s": 20.0, "power_min": 10.0, "power_max": 80.0, "num_passes": 1, "air_assist": true },
+    { "index": 1, "name": "Score", "speed_mm_s": 60.0, "power_min": 5.0, "power_max": 20.0, "num_passes": 1, "air_assist": false },
+    { "index": 2, "name": "Engrave", "speed_mm_s": 100.0, "power_min": 0.0, "power_max": 40.0, "num_passes": 1, "air_assist": false }
+  ]
+}
