@@ -114,24 +114,28 @@
 <body>
   <div class="menubar">
     <span class="brand"><span class="dot"></span>LaserCraft</span>
-    <span class="m" data-menu="file">File
+    <span class="m" data-menu="file"><span data-i18n="menu.file">File</span>
       <div class="dropdown">
-        <div data-act="new">New</div>
-        <div data-act="import">Import SVG&hellip;</div>
-        <div data-act="export">Export GCode&hellip;</div>
+        <div data-act="new" data-i18n="action.new">New</div>
+        <div data-act="import" data-i18n="action.import">Import SVG&hellip;</div>
+        <div data-act="export" data-i18n="action.export">Export GCode&hellip;</div>
       </div>
     </span>
-    <span class="m" data-menu="edit">Edit
-      <div class="dropdown"><div data-act="delete">Delete selected</div><div data-act="dupe">Duplicate</div></div>
+    <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
+      <div class="dropdown"><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div></div>
     </span>
-    <input id="textIn" placeholder="type to mark…" style="width:150px;margin-left:8px" />
+    <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:150px;margin-left:8px" />
     <input id="textH" type="number" value="8" step="1" title="height mm" style="width:52px" />
-    <button class="btn" id="addText">Add Text</button>
+    <button class="btn" id="addText" data-i18n="text.add">Add Text</button>
     <span class="spacer"></span>
-    <span class="stat" style="margin-right:14px"><span>Est. <b id="est">&mdash;</b></span></span>
+    <select id="lang" title="Language" style="margin-right:10px">
+      <option value="en">English</option><option value="es">Español</option>
+      <option value="de">Deutsch</option><option value="fr">Français</option><option value="pt-BR">Português</option>
+    </select>
+    <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
     <span class="btn ok" id="wasmok" style="margin-right:8px">loading&hellip;</span>
-    <button class="btn" id="frameBtn">Frame</button>
-    <button class="btn primary" id="genBtn">Generate</button>
+    <button class="btn" id="frameBtn" data-i18n="action.frame">Frame</button>
+    <button class="btn primary" id="genBtn" data-i18n="action.generate">Generate</button>
     <input type="file" id="file" accept=".svg" class="hidden" />
   </div>
 
@@ -150,12 +154,12 @@
 
     <div class="dock">
       <div class="section">
-        <h3>Cuts / Layers <span class="mini"><span id="layerUp">&#9650;</span><span id="layerDown">&#9660;</span></span></h3>
-        <div class="cols"><span>Layer</span><span>Mode</span><span>Speed / Pwr</span><span>Out</span><span>Show</span></div>
+        <h3><span data-i18n="panel.layers">Cuts / Layers</span> <span class="mini"><span id="layerUp">&#9650;</span><span id="layerDown">&#9660;</span></span></h3>
+        <div class="cols"><span data-i18n="col.layer">Layer</span><span data-i18n="col.mode">Mode</span><span data-i18n="col.spd">Speed / Pwr</span><span data-i18n="col.out">Out</span><span data-i18n="col.show">Show</span></div>
         <div class="layers" id="layers"></div>
       </div>
       <div class="section" style="flex:1">
-        <h3>Laser</h3>
+        <h3 data-i18n="panel.laser">Laser</h3>
         <div class="out">
           <div class="devrow">
             <select id="flavor">
@@ -166,8 +170,8 @@
             <button class="btn" id="copyBtn">Copy</button>
           </div>
           <div class="devrow" id="galvoRow" style="display:none">
-            <button class="btn" id="connectBtn" style="flex:1">Connect galvo (WebUSB)</button>
-            <button class="btn" id="sendBtn" disabled>Send</button>
+            <button class="btn" id="connectBtn" style="flex:1" data-i18n="galvo.connect">Connect galvo (WebUSB)</button>
+            <button class="btn" id="sendBtn" disabled data-i18n="galvo.send">Send</button>
           </div>
           <div class="stat" id="devstat" style="display:none">Galvo not connected. Plug in the board and click Connect.</div>
           <div class="gcode"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
@@ -602,10 +606,30 @@
     d.querySelectorAll("polygon,polyline").forEach(pl=>{ const pts=(pl.getAttribute("points")||"").trim().split(/\s+/).map(s=>s.split(",").map(Number)).filter(a=>a.length===2); if(pts.length) doc.shapes.push(poly(pts, pl.tagName==="polygon", cut)); });
   }
 
+  // ---- i18n: translate the UI chrome (shipped catalog translations) ----
+  const I18N = {
+    en: {},
+    es: { "menu.file":"Archivo","menu.edit":"Edición","action.new":"Nuevo","action.import":"Importar SVG…","action.export":"Exportar GCode…","action.delete":"Eliminar selección","action.dupe":"Duplicar","action.frame":"Encuadrar","action.generate":"Generar","text.add":"Añadir texto","text.ph":"texto a marcar…","label.est":"Est.","panel.layers":"Cortes / Capas","panel.laser":"Láser","col.layer":"Capa","col.mode":"Modo","col.spd":"Vel / Pot","col.out":"Salida","col.show":"Ver","galvo.connect":"Conectar galvo (WebUSB)","galvo.send":"Enviar" },
+    de: { "menu.file":"Datei","menu.edit":"Bearbeiten","action.new":"Neu","action.import":"SVG importieren…","action.export":"GCode exportieren…","action.delete":"Auswahl löschen","action.dupe":"Duplizieren","action.frame":"Rahmen","action.generate":"Erzeugen","text.add":"Text hinzufügen","text.ph":"Text zum Markieren…","label.est":"Gesch.","panel.layers":"Schnitte / Ebenen","panel.laser":"Laser","col.layer":"Ebene","col.mode":"Modus","col.spd":"Geschw. / Leist.","col.out":"Aus","col.show":"Zeig","galvo.connect":"Galvo verbinden (WebUSB)","galvo.send":"Senden" },
+    fr: { "menu.file":"Fichier","menu.edit":"Édition","action.new":"Nouveau","action.import":"Importer SVG…","action.export":"Exporter GCode…","action.delete":"Supprimer la sélection","action.dupe":"Dupliquer","action.frame":"Cadrer","action.generate":"Générer","text.add":"Ajouter du texte","text.ph":"texte à marquer…","label.est":"Est.","panel.layers":"Coupes / Calques","panel.laser":"Laser","col.layer":"Calque","col.mode":"Mode","col.spd":"Vit. / Puis.","col.out":"Sortie","col.show":"Voir","galvo.connect":"Connecter galvo (WebUSB)","galvo.send":"Envoyer" },
+    "pt-BR": { "menu.file":"Arquivo","menu.edit":"Editar","action.new":"Novo","action.import":"Importar SVG…","action.export":"Exportar GCode…","action.delete":"Excluir seleção","action.dupe":"Duplicar","action.frame":"Enquadrar","action.generate":"Gerar","text.add":"Adicionar texto","text.ph":"texto para marcar…","label.est":"Est.","panel.layers":"Cortes / Camadas","panel.laser":"Laser","col.layer":"Camada","col.mode":"Modo","col.spd":"Vel / Pot","col.out":"Saída","col.show":"Ver","galvo.connect":"Conectar galvo (WebUSB)","galvo.send":"Enviar" },
+  };
+  document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => I18N.en[el.dataset.i18nPh] = el.getAttribute("placeholder"));
+  function applyLang(lang){
+    const t = I18N[lang] || {}, en = I18N.en;
+    document.querySelectorAll("[data-i18n]").forEach(el => { const k = el.dataset.i18n; el.textContent = t[k] !== undefined ? t[k] : (en[k] || el.textContent); });
+    document.querySelectorAll("[data-i18n-ph]").forEach(el => { const k = el.dataset.i18nPh; el.placeholder = t[k] !== undefined ? t[k] : (en[k] || el.placeholder); });
+  }
+  $("lang").onchange = () => applyLang($("lang").value);
+
   // boot
   function layout(){ const r=canvas.getBoundingClientRect(); canvas.setAttribute("viewBox",`0 0 ${r.width} ${r.height}`); render(); }
   window.addEventListener("resize", layout);
   renderLayers(); renderPalette(); $("canvas").classList.toggle("select", tool==="select");
+  const urlLang = new URLSearchParams(location.search).get("lang");
+  if (urlLang && I18N[urlLang]) $("lang").value = urlLang;
+  applyLang($("lang").value);
   fit(); layout();
 
   init().then(()=>{ ready=true; $("wasmok").textContent="WASM ready"; generate(); }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
