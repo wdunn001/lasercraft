@@ -43,17 +43,17 @@ Three acclplanner functions were located by cross-referencing the GCode string a
 
 ### FUN_180034dd0: the Start GCode builder (xref from 0x180034e85)
 
-This function assembles the job header. It appends the literal `\n;Start GCode\nG90\n`, so the output is absolute-coordinate mode. It then appends `G1 U0 V0 W0 F` followed by a feedrate read from config, which shows a U, V, W axis naming and a configured feedrate. A `\nG00 P100\n` move follows. Config values are read through a key lookup helper (`FUN_180055f90` tests a key, `FUN_180023c70` and `FUN_180023b10` fetch it) and a numeric getter (`FUN_180023f50` returns a double). This is the reference for the `craft-gcode` header writer.
+This function assembles the job header. It appends the literal `\n;Start GCode\nG90\n`. The `G90` sets absolute-coordinate mode. It then appends `G1 U0 V0 W0 F` followed by a feedrate read from config. This shows U, V, and W axis naming with a configured feedrate. A `\nG00 P100\n` move follows. Config values are read through a key lookup helper (`FUN_180055f90` tests a key, `FUN_180023c70` and `FUN_180023b10` fetch it) and a numeric getter (`FUN_180023f50` returns a double). This is the reference for the `craft-gcode` header writer.
 
 ### FUN_1800365d0: the config reader behind the velocity limit (xref from 0x180037456)
 
-This function reads a block of laser configuration. The keys are compiled as packed little-endian immediates, which decode to `laser_id`, `mopa_enable`, `mopa_freq`, and `airflow`. MOPA is a fiber-laser pulse mode, so this confirms fiber and galvo support alongside air-assist control. The same lookup helpers appear here, which pins down the config access pattern `craft-motion` and `craft-gcode` must reproduce.
+This function reads a block of laser configuration. The keys are compiled as packed little-endian immediates. They decode to `laser_id`, `mopa_enable`, `mopa_freq`, and `airflow`. MOPA is a fiber-laser pulse mode. These keys confirm fiber and galvo support alongside air-assist control. The same lookup helpers appear here. They pin down the config access pattern `craft-motion` and `craft-gcode` must reproduce.
 
 Decoded immediates for the record: `0x64695f726573616c` is `laser_id`, `0x616e655f61706f6d` is `mopa_ena`, `0x6572665f61706f6d` is `mopa_fre`, `0x5f776f6c66726961` is `airflow_`.
 
 ### FUN_180060a30: the binary GCode writer (xref from 0x180060f80)
 
-This function emits binary GCode records in a loop with an 88-byte (`0x58`) stride per record. So the binary format is fixed-width records, which `craft-gcode` can model as a packed struct once the field layout is recovered from this function's stores.
+This function emits binary GCode records in a loop with an 88-byte (`0x58`) stride per record. So the binary format is fixed-width records. `craft-gcode` can model them as a packed struct once the field layout is recovered from this function's stores.
 
 ## What still needs the exe
 
