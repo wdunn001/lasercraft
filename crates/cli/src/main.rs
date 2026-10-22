@@ -15,7 +15,7 @@
 
 use clap::{Parser, Subcommand, ValueEnum};
 use lasercraft_engine::{plan_frame, plan_line_fill, plan_project, plan_raster};
-use lasercraft_gcode::{Dialect, Grbl, Marlin};
+use lasercraft_gcode::{Dialect, Grbl, GrblM3, Marlin};
 use lasercraft_laser_doc::CutSetting;
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams};
@@ -35,6 +35,8 @@ struct Cli {
 enum Flavor {
     /// GRBL and compatible controllers.
     Grbl,
+    /// GRBL constant-power (M3) mode, for 1.1e and earlier.
+    GrblM3,
     /// Marlin firmware.
     Marlin,
 }
@@ -43,6 +45,7 @@ impl Flavor {
     fn dialect(self) -> Box<dyn Dialect> {
         match self {
             Flavor::Grbl => Box::new(Grbl::new()),
+            Flavor::GrblM3 => Box::new(GrblM3::new()),
             Flavor::Marlin => Box::new(Marlin::new()),
         }
     }

@@ -190,9 +190,71 @@ impl Dialect for Marlin {
     }
 }
 
+/// The GRBL constant-power (`M3`) dialect, for GRBL 1.1e and earlier and for
+/// diode controllers that lack dynamic power. It matches [`Grbl`] except the
+/// header enables `M3` constant-power laser mode instead of `M4` dynamic mode, so
+/// power does not scale with speed. That is the right choice when a controller has
+/// no dynamic mode.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct GrblM3 {
+    /// The S value that maps to 100 percent power.
+    pub spindle_max: u32,
+}
+
+impl GrblM3 {
+    /// A GRBL-M3 dialect with the stock `$30` value of 1000.
+    pub fn new() -> Self {
+        Self { spindle_max: 1000 }
+    }
+
+    fn spindle_for(&self, power: f64) -> u32 {
+        (power.clamp(0.0, 100.0) / 100.0 * f64::from(self.spindle_max)).round() as u32
+    }
+}
+
+impl Dialect for GrblM3 {
+    fn flavor(&self) -> Flavor {
+        Flavor::Grbl
+    }
+
+    fn header(&self) -> String {
+        // M3 is constant-power laser mode, unlike GRBL's dynamic M4.
+        "G90\nG21\nM3 S0\n".to_string()
+    }
+
+    fn footer(&self) -> String {
+        "M5\nG0 X0 Y0\n".to_string()
+    }
+
+    fn emit(&self, op: &Op) -> String {
+        match op {
+            Op::RapidTo { x, y } => format!("G0 X{x:.3} Y{y:.3}"),
+            Op::CutTo {
+                x,
+                y,
+                feed_mm_s,
+                power,
+            } => {
+                let feed_mm_min = feed_mm_s * 60.0;
+                let s = self.spindle_for(*power);
+                format!("G1 X{x:.3} Y{y:.3} F{feed_mm_min:.0} S{s}")
+            }
+            Op::LaserOff => "M5".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn grbl_m3_uses_constant_power_header() {
+        let out = program(&GrblM3::new(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
+        // Constant-power mode is M3, not M4.
+        assert!(out.starts_with("G90\nG21\nM3 S0\n"));
+        assert!(!out.contains("M4"));
+    }
 
     #[test]
     fn grbl_cut_scales_power_and_feed() {
