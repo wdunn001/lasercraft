@@ -21,6 +21,7 @@ lasercraft-gcode = { path = "crates/gcode", version = "0.1.0" }
 lasercraft-i18n = { path = "crates/i18n", version = "0.1.0" }
 lasercraft-laser-doc = { path = "crates/laser-doc", version = "0.1.0" }
 lasercraft-motion = { path = "crates/motion", version = "0.1.0" }
+lasercraft-persist = { path = "crates/persist", version = "0.1.0" }
 lasercraft-toolpath = { path = "crates/toolpath", version = "0.1.0" }
 lasercraft-trace = { path = "crates/trace", version = "0.1.0" }
 lasercraft-xtool = { path = "crates/xtool", version = "0.1.0" }
