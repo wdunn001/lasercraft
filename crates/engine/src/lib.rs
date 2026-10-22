@@ -16,10 +16,10 @@
 
 use lasercraft_galvo::{GalvoCommand, GalvoParam, MarkRun, lmc, mark_polyline, mark_scanlines};
 use lasercraft_gcode::{Dialect, Op, program};
-use lasercraft_laser_doc::{CutSetting, Geometry, Point2, Project, Shape, ShapeKind};
+use lasercraft_laser_doc::{CutSetting, FillMode, Geometry, Point2, Project, Shape, ShapeKind};
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
-use lasercraft_toolpath::{BBox, Point, follow_polyline, line_fill, wobble_path};
+use lasercraft_toolpath::{BBox, Point, follow_polyline, hatch_fill, line_fill, wobble_path};
 
 /// Errors the engine can return while executing a command.
 #[derive(Debug, thiserror::Error)]
@@ -376,6 +376,26 @@ pub fn plan_galvo_project(
         let Some(setting) = project.cut_setting_for(shape) else {
             continue;
         };
+        // A Fill layer hatches the shape interior with scan lines, clipped to the
+        // outline. Concentric fill still needs the shared polygon offset, so it
+        // falls through to the outline for now.
+        if let Some(galvo) = &setting.galvo
+            && galvo.mode == FillMode::Fill
+        {
+            let poly: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+            let segments = hatch_fill(&poly, galvo.fill.line_interval_mm);
+            commands.push(GalvoCommand::SetPower {
+                percent: setting.power_max.clamp(0.0, 100.0),
+            });
+            commands.push(GalvoCommand::SetFrequency { hz: frequency_hz });
+            for seg in &segments {
+                let (sx, sy) = param.logic_to_device(seg.start.x, seg.start.y);
+                let (ex, ey) = param.logic_to_device(seg.end.x, seg.end.y);
+                commands.push(GalvoCommand::Jump { x: sx, y: sy });
+                commands.push(GalvoCommand::Mark { x: ex, y: ey });
+            }
+            continue;
+        }
         // A layer with wobble enabled marks a widened, dense circle path instead.
         if let Some(galvo) = &setting.galvo
             && galvo.wobble.enabled
@@ -809,6 +829,58 @@ mod tests {
             "wobble {} plain {}",
             wobble_cmds.len(),
             plain_cmds.len()
+        );
+    }
+
+    #[test]
+    fn a_fill_layer_hatches_the_shape() {
+        use lasercraft_laser_doc::{FillParams, GalvoSettings};
+        let param = GalvoParam {
+            field_size_mm: 110.0,
+            resolution_bits: 16,
+        };
+        let square = || Geometry::Polyline {
+            points: vec![
+                Point2 { x: -10.0, y: -10.0 },
+                Point2 { x: 10.0, y: -10.0 },
+                Point2 { x: 10.0, y: 10.0 },
+                Point2 { x: -10.0, y: 10.0 },
+            ],
+            closed: true,
+        };
+        let mut outline = Project::new();
+        outline.cut_settings.push(cut());
+        outline.shapes.push(Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: square(),
+        });
+        let outline_cmds = plan_galvo_project(&outline, &param, 30_000);
+
+        let mut fill_setting = cut();
+        fill_setting.galvo = Some(GalvoSettings {
+            mode: FillMode::Fill,
+            fill: FillParams {
+                line_interval_mm: 1.0,
+                ..FillParams::default()
+            },
+            ..GalvoSettings::default()
+        });
+        let mut fill = Project::new();
+        fill.cut_settings.push(fill_setting);
+        fill.shapes.push(Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: square(),
+        });
+        let fill_cmds = plan_galvo_project(&fill, &param, 30_000);
+
+        // A 20 mm square hatched at 1 mm is about twenty scan lines, far more than an outline.
+        assert!(
+            fill_cmds.len() > outline_cmds.len() * 3,
+            "fill {} outline {}",
+            fill_cmds.len(),
+            outline_cmds.len()
         );
     }
 

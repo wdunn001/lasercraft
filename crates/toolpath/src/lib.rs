@@ -223,6 +223,69 @@ pub fn offset_fill(bbox: &BBox, interval_mm: f64) -> Vec<Segment> {
     segments
 }
 
+/// Fill the interior of a closed polygon with horizontal scan lines.
+///
+/// This is the true line fill for an arbitrary outline, clipped to the shape
+/// rather than its bounding box. Each scan line crosses the polygon at an even
+/// number of edges, and the laser marks between consecutive pairs, the even-odd
+/// rule. Alternate lines reverse so the head does not fly back. A polygon with
+/// fewer than three points, or a non-positive interval, yields nothing. The line
+/// count is capped against a runaway.
+pub fn hatch_fill(polygon: &[Point], interval_mm: f64) -> Vec<Segment> {
+    let mut segments = Vec::new();
+    if polygon.len() < 3 || interval_mm <= 0.0 {
+        return segments;
+    }
+    let (min_y, max_y) = polygon
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+            (lo.min(p.y), hi.max(p.y))
+        });
+    let n = polygon.len();
+    let max_lines = 1_000_000usize;
+    let mut y = min_y + interval_mm / 2.0;
+    let mut leftward = false;
+    while y <= max_y && segments.len() < max_lines {
+        // The x where each crossing edge meets this scan line.
+        let mut crossings: Vec<f64> = Vec::new();
+        for i in 0..n {
+            let (Some(&a), Some(&b)) = (polygon.get(i), polygon.get((i + 1) % n)) else {
+                continue;
+            };
+            // A half-open test counts a vertex once, so a shared vertex is not doubled.
+            let crosses = (a.y <= y && b.y > y) || (b.y <= y && a.y > y);
+            if crosses {
+                let t = (y - a.y) / (b.y - a.y);
+                crossings.push(a.x + t * (b.x - a.x));
+            }
+        }
+        crossings.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let mut spans: Vec<(f64, f64)> = crossings
+            .chunks(2)
+            .filter_map(|pair| {
+                if let [x0, x1] = pair {
+                    Some((*x0, *x1))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if leftward {
+            spans.reverse();
+        }
+        for (x0, x1) in spans {
+            let (start_x, end_x) = if leftward { (x1, x0) } else { (x0, x1) };
+            segments.push(Segment {
+                start: Point { x: start_x, y },
+                end: Point { x: end_x, y },
+            });
+        }
+        leftward = !leftward;
+        y += interval_mm;
+    }
+    segments
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,6 +339,56 @@ mod tests {
     #[test]
     fn offset_fill_rejects_a_non_positive_interval() {
         assert!(offset_fill(&unit_box(), 0.0).is_empty());
+    }
+
+    #[test]
+    fn hatch_fill_scans_a_square() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        let lines = hatch_fill(&square, 1.0);
+        // Scan lines centred at y = 0.5 through 9.5 is ten lines.
+        assert_eq!(lines.len(), 10);
+        for seg in &lines {
+            let lo = seg.start.x.min(seg.end.x);
+            let hi = seg.start.x.max(seg.end.x);
+            assert!(
+                (lo - 0.0).abs() < 1e-9 && (hi - 10.0).abs() < 1e-9,
+                "span {lo}..{hi}"
+            );
+        }
+    }
+
+    #[test]
+    fn hatch_fill_narrows_over_a_triangle() {
+        let tri = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 5.0, y: 10.0 },
+        ];
+        let lines = hatch_fill(&tri, 2.0);
+        assert!(!lines.is_empty());
+        let width = |s: &Segment| (s.start.x - s.end.x).abs();
+        let first = lines.first().map(width).unwrap_or(0.0);
+        let last = lines.last().map(width).unwrap_or(0.0);
+        // A lower scan line crosses more of the triangle than a higher one.
+        assert!(first > last, "first {first} last {last}");
+    }
+
+    #[test]
+    fn hatch_fill_rejects_degenerate_input() {
+        let two = [Point { x: 0.0, y: 0.0 }, Point { x: 1.0, y: 1.0 }];
+        assert!(hatch_fill(&two, 1.0).is_empty());
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        assert!(hatch_fill(&square, 0.0).is_empty());
     }
 
     fn unit_box() -> BBox {
