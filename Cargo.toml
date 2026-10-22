@@ -24,6 +24,7 @@ lasercraft-motion = { path = "crates/motion", version = "0.1.0" }
 lasercraft-persist = { path = "crates/persist", version = "0.1.0" }
 lasercraft-profile = { path = "crates/profile", version = "0.1.0" }
 lasercraft-raster = { path = "crates/raster", version = "0.1.0" }
+lasercraft-svg = { path = "crates/svg", version = "0.1.0" }
 lasercraft-toolpath = { path = "crates/toolpath", version = "0.1.0" }
 lasercraft-trace = { path = "crates/trace", version = "0.1.0" }
 lasercraft-xtool = { path = "crates/xtool", version = "0.1.0" }
