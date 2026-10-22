@@ -255,6 +255,43 @@ fn arc_to_cubics(
     result
 }
 
+/// Extract and parse every `<path>` element's geometry from SVG document text.
+///
+/// This is a flat extractor: it reads the `d` attribute of each path and parses it.
+/// Group transforms, the `viewBox`, units, and the shape primitives (`rect`,
+/// `circle`, and the rest) are later work. A path whose data fails to parse is
+/// skipped so one bad path does not lose the rest of the drawing.
+pub fn paths_from_svg(svg: &str) -> Vec<BezierPath> {
+    let mut paths = Vec::new();
+    let bytes = svg.as_bytes();
+    for (index, _) in svg.match_indices("d=") {
+        // Require an attribute boundary before `d` so `id=`, `width=`, and the like
+        // are not mistaken for a path data attribute.
+        let preceded_by_space = index
+            .checked_sub(1)
+            .and_then(|i| bytes.get(i))
+            .is_some_and(|b| b.is_ascii_whitespace());
+        if !preceded_by_space {
+            continue;
+        }
+        let after = index + 2;
+        let quote = match bytes.get(after) {
+            Some(b'"') => b'"',
+            Some(b'\'') => b'\'',
+            _ => continue,
+        };
+        let value_start = after + 1;
+        let Some(rel_end) = svg[value_start..].find(quote as char) else {
+            continue;
+        };
+        let data = &svg[value_start..value_start + rel_end];
+        if let Ok(parsed) = parse_path_data(data) {
+            paths.extend(parsed);
+        }
+    }
+    paths
+}
+
 fn resolve(absolute: bool, from: Point2, x: f64, y: f64) -> Point2 {
     if absolute {
         Point2 { x, y }
@@ -384,6 +421,18 @@ mod tests {
     #[test]
     fn rejects_segment_before_move() {
         assert!(parse_path_data("L10 10").is_err());
+    }
+
+    #[test]
+    fn extracts_multiple_paths_from_a_document() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg">
+            <rect id="bg" width="100" height="100"/>
+            <path id="a" d="M0 0 L10 0 L10 10 Z"/>
+            <path d="M5 5 L5 15"/>
+        </svg>"#;
+        let paths = paths_from_svg(svg);
+        // The id and width attributes must not be mistaken for path data.
+        assert_eq!(paths.len(), 2);
     }
 
     #[test]
