@@ -136,6 +136,60 @@ impl Dialect for Grbl {
     }
 }
 
+/// The Marlin dialect for diode and CO2 lasers running Marlin firmware.
+///
+/// Marlin drives the laser with `M3`/`M5` inline spindle commands and scales power
+/// to the configured `spindle_max`, which defaults to 255 on stock Marlin laser
+/// builds. The move grammar matches GRBL otherwise.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Marlin {
+    /// The S value that maps to 100 percent power. Stock Marlin laser mode is 255.
+    pub spindle_max: u32,
+}
+
+impl Marlin {
+    /// A Marlin dialect with the stock power range of 255.
+    pub fn new() -> Self {
+        Self { spindle_max: 255 }
+    }
+
+    fn spindle_for(&self, power: f64) -> u32 {
+        let clamped = power.clamp(0.0, 100.0);
+        (clamped / 100.0 * f64::from(self.spindle_max)).round() as u32
+    }
+}
+
+impl Dialect for Marlin {
+    fn flavor(&self) -> Flavor {
+        Flavor::Marlin
+    }
+
+    fn header(&self) -> String {
+        "G90\nG21\nM3 S0\n".to_string()
+    }
+
+    fn footer(&self) -> String {
+        "M5\nG0 X0 Y0\n".to_string()
+    }
+
+    fn emit(&self, op: &Op) -> String {
+        match op {
+            Op::RapidTo { x, y } => format!("G0 X{x:.3} Y{y:.3}"),
+            Op::CutTo {
+                x,
+                y,
+                feed_mm_s,
+                power,
+            } => {
+                let feed_mm_min = feed_mm_s * 60.0;
+                let s = self.spindle_for(*power);
+                format!("G1 X{x:.3} Y{y:.3} F{feed_mm_min:.0} S{s}")
+            }
+            Op::LaserOff => "M5".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,5 +212,19 @@ mod tests {
         let out = program(&grbl, &[Op::RapidTo { x: 0.0, y: 0.0 }]);
         assert!(out.starts_with("G90\nG21\nM4 S0\n"));
         assert!(out.trim_end().ends_with("G0 X0 Y0"));
+    }
+
+    #[test]
+    fn marlin_scales_power_to_its_own_range() {
+        let marlin = Marlin::new();
+        assert_eq!(marlin.flavor(), Flavor::Marlin);
+        let line = marlin.emit(&Op::CutTo {
+            x: 10.0,
+            y: 5.0,
+            feed_mm_s: 20.0,
+            power: 50.0,
+        });
+        // 50 percent of Marlin's 255 range is S128, feed still in mm/min.
+        assert_eq!(line, "G1 X10.000 Y5.000 F1200 S128");
     }
 }
