@@ -139,7 +139,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div></div>
     </span>
     <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:150px;margin-left:8px" />
     <input id="textH" type="number" value="8" step="1" title="height mm" style="width:52px" />
@@ -529,7 +529,7 @@
   function closeCS(){ $("modalBg").classList.remove("show"); }
   $("csClose").onclick=$("csCancel").onclick=closeCS;
   document.querySelectorAll("[data-cstab]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-cstab]").forEach(x=>x.classList.toggle("active",x===b)); $("cstab-cut").classList.toggle("hidden",b.dataset.cstab!=="cut"); $("cstab-timings").classList.toggle("hidden",b.dataset.cstab!=="timings"); });
-  $("csOk").onclick=()=>{ const L=doc.layers[editing]; L.mode=L._mode||L.mode; L.speed_mm_s=+$("cs_speed").value; L.power_max=+$("cs_power").value; L.num_passes=+$("cs_passes").value; L.freq=+$("cs_freq").value; L.qpulse=+$("cs_qpulse").value; L.power_min=+$("cs_pmin").value; L.interval=+$("cs_interval").value; L.angle=+$("cs_angle").value; L.air_assist=$("cs_air").value==="true"; L.on_us=+$("cs_onus").value; L.off_us=+$("cs_offus").value; L.poly_us=+$("cs_polyus").value; closeCS(); renderLayers(); render(); generate(); };
+  $("csOk").onclick=()=>{ const L=doc.layers[editing]; L.mode=L._mode||L.mode; L.speed_mm_s=+$("cs_speed").value; L.power_max=+$("cs_power").value; L.num_passes=+$("cs_passes").value; L.freq=+$("cs_freq").value; L.qpulse=+$("cs_qpulse").value; L.power_min=+$("cs_pmin").value; L.interval=+$("cs_interval").value; L.angle=+$("cs_angle").value; L.air_assist=$("cs_air").value==="true"; L.on_us=+$("cs_onus").value; L.off_us=+$("cs_offus").value; L.poly_us=+$("cs_polyus").value; closeCS(); snapshot(); renderLayers(); render(); generate(); };
 
   // ---- export to engine project JSON ----
   function toProject(){
@@ -574,7 +574,21 @@
       }
     } catch(e){ $("gcode").textContent = String(e); }
   }
-  function refreshCounts(){ renderLayers(); generate(); }
+  function refreshCounts(){ snapshot(); renderLayers(); generate(); }
+
+  // ---- undo / redo history ----
+  let history = [], hptr = -1;
+  function snapshot(){
+    const s = JSON.stringify(doc);
+    if (history[hptr] === s) return;   // no change, no new entry
+    history = history.slice(0, hptr + 1);
+    history.push(s);
+    if (history.length > 100) history.shift();
+    hptr = history.length - 1;
+  }
+  function restore(){ doc = JSON.parse(history[hptr]); selected = null; render(); renderLayers(); renderPalette(); generate(); }
+  function undo(){ if (hptr > 0){ hptr--; restore(); } }
+  function redo(){ if (hptr < history.length - 1){ hptr++; restore(); } }
 
   // ---- Weld (boolean union) and Concentric fill, via craft-pathops in WASM ----
   function closedPolys(shapes){ return shapes.filter(s => s.geometry.Polyline && s.geometry.Polyline.closed).map(s => s.geometry.Polyline.points.map(q => [q.x, q.y])); }
@@ -696,12 +710,18 @@
     else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
     else if (a==="weld"){ weldActive(); }
     else if (a==="concentric"){ concentricFill(); }
+    else if (a==="undo"){ undo(); return; }
+    else if (a==="redo"){ redo(); return; }
     render(); refreshCounts();
   });
   function moveShapeTo2(sh,dx,dy){ for(const q of shapePoints(sh)){ q.x+=dx; q.y+=dy; } }
 
   // keyboard
-  window.addEventListener("keydown", e => { if ((e.key==="Delete"||e.key==="Backspace") && selected!=null && !/INPUT/.test(document.activeElement.tagName)){ doc.shapes.splice(selected,1); selected=null; render(); refreshCounts(); } });
+  window.addEventListener("keydown", e => {
+    if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); return; }
+    if ((e.key==="Delete"||e.key==="Backspace") && selected!=null && !/INPUT/.test(document.activeElement.tagName)){ doc.shapes.splice(selected,1); selected=null; render(); refreshCounts(); }
+  });
 
   // SVG import (basic: rect, circle, ellipse, polygon, polyline, path M/L/C/Z)
   $("file").onchange = ev => {
@@ -829,6 +849,10 @@
   Object.assign(I18N.de, { "tab.camera":"Kamera","cam.enable":"Kamera aktivieren","cam.opacity":"Deckkraft","cam.calib":"Kalibrieren (4 Ecken klicken)","cam.reset":"Zurücksetzen" });
   Object.assign(I18N.fr, { "tab.camera":"Caméra","cam.enable":"Activer la caméra","cam.opacity":"Opacité","cam.calib":"Calibrer (4 coins)","cam.reset":"Réinitialiser" });
   Object.assign(I18N["pt-BR"], { "tab.camera":"Câmera","cam.enable":"Ativar câmera","cam.opacity":"Opacidade","cam.calib":"Calibrar (4 cantos)","cam.reset":"Redefinir" });
+  Object.assign(I18N.es, { "action.undo":"Deshacer","action.redo":"Rehacer" });
+  Object.assign(I18N.de, { "action.undo":"Rückgängig","action.redo":"Wiederholen" });
+  Object.assign(I18N.fr, { "action.undo":"Annuler","action.redo":"Rétablir" });
+  Object.assign(I18N["pt-BR"], { "action.undo":"Desfazer","action.redo":"Refazer" });
   let curLang = "en";
   function trMode(m){ const t = I18N[curLang] || {}; return t["mode." + String(m).toLowerCase()] || m; }
   document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
@@ -854,6 +878,7 @@
   if (urlTab) { const tb = document.querySelector(`.docktabs button[data-dock="${urlTab}"]`); if (tb) tb.click(); }
   const urlTool = params.get("tool");
   if (urlTool) { const tb = document.querySelector(`.tool[data-tool="${urlTool}"]`); if (tb) tb.click(); if (urlTool === "node") { selected = 0; render(); } }
+  snapshot();   // seed the undo history with the initial document
   fit(); layout();
 
   init().then(()=>{
