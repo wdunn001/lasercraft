@@ -210,6 +210,39 @@ pub fn plan_galvo_raster(
     mark_scanlines(param, &runs, frequency_hz)
 }
 
+/// Estimate the cutting time of a project in seconds.
+///
+/// Each shape is flattened and every segment is timed with the trapezoidal
+/// acceleration model in [`MotionConfig::move_time`], then multiplied by the
+/// layer's pass count. This accounts for acceleration on short segments, which is
+/// where a naive length-over-feed estimate is most wrong. Rapid travel between
+/// shapes is not counted, so this is a lower bound on wall-clock time.
+pub fn estimate_job_time(project: &Project, motion: &MotionConfig) -> f64 {
+    const CURVE_STEPS: u32 = 24;
+    let mut seconds = 0.0;
+    for shape in &project.shapes {
+        let (points, closed) = match &shape.geometry {
+            Geometry::Polyline { points, closed } => (points.clone(), *closed),
+            Geometry::Path(path) => (path.flatten(CURVE_STEPS), path.closed),
+            Geometry::Empty => continue,
+        };
+        let Some(setting) = project.cut_setting_for(shape) else {
+            continue;
+        };
+        let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+        let per_pass: f64 = follow_polyline(&path, closed)
+            .iter()
+            .map(|seg| {
+                let dx = seg.end.x - seg.start.x;
+                let dy = seg.end.y - seg.start.y;
+                motion.move_time(dx.hypot(dy), setting.speed_mm_s)
+            })
+            .sum();
+        seconds += per_pass * f64::from(setting.num_passes);
+    }
+    seconds
+}
+
 /// Generate a framing pass that traces the job's bounding box.
 ///
 /// Framing moves the head around the extent of the job with the laser off so the
@@ -344,6 +377,44 @@ mod tests {
         assert_eq!(cut_moves, 3);
         // The cut runs at the layer feed and power.
         assert!(out.contains("F1200 S800"));
+    }
+
+    #[test]
+    fn estimate_job_time_sums_trapezoidal_moves() {
+        let motion = MotionConfig {
+            max_speed_mm_s: 300.0,
+            accel_mm_s2: 1000.0,
+            accel_to_decel_mm_s2: 500.0,
+        };
+        // A closed square of four 20 mm edges at 25 mm/s.
+        let project = Project {
+            app_version: "0.1.0".to_string(),
+            shapes: vec![Shape {
+                kind: ShapeKind::Path,
+                cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 0.0, y: 0.0 },
+                        Point2 { x: 20.0, y: 0.0 },
+                        Point2 { x: 20.0, y: 20.0 },
+                        Point2 { x: 0.0, y: 20.0 },
+                    ],
+                    closed: true,
+                },
+            }],
+            cut_settings: vec![CutSetting {
+                index: 0,
+                name: "Cut".to_string(),
+                speed_mm_s: 25.0,
+                power_min: 0.0,
+                power_max: 80.0,
+                num_passes: 1,
+                air_assist: true,
+            }],
+        };
+        let seconds = estimate_job_time(&project, &motion);
+        // Each 20 mm edge at 25 mm/s with accel 1000 takes 0.825 s; four edges is 3.3 s.
+        assert!((seconds - 3.3).abs() < 1e-6, "got {seconds}");
     }
 
     #[test]

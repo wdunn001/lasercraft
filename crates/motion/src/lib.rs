@@ -42,6 +42,35 @@ impl MotionConfig {
         let reachable = (entry * entry + 2.0 * accel * distance).sqrt();
         reachable.min(self.max_speed_mm_s)
     }
+
+    /// Estimate the time in seconds to travel a straight segment of `distance_mm`
+    /// at a target `feed_mm_s`, starting and stopping at rest.
+    ///
+    /// This models the real trapezoidal velocity profile: accelerate to the feed,
+    /// cruise, then decelerate. Short moves that cannot reach the feed use the
+    /// triangular profile instead. Assuming rest at both ends is a conservative
+    /// estimate that ignores junction carry-over, which is exactly why LightBurn's
+    /// naive distance-over-feed estimate reads far too optimistic on detailed jobs.
+    pub fn move_time(&self, distance_mm: f64, feed_mm_s: f64) -> f64 {
+        let distance = distance_mm.max(0.0);
+        let accel = self.accel_mm_s2.max(f64::MIN_POSITIVE);
+        let feed = self.clamp_feed(feed_mm_s).max(f64::MIN_POSITIVE);
+        if distance == 0.0 {
+            return 0.0;
+        }
+        // Distance to accelerate from rest to the feed, and the same to stop.
+        let ramp_distance = feed * feed / (2.0 * accel);
+        if 2.0 * ramp_distance <= distance {
+            // Trapezoid: ramp up, cruise, ramp down.
+            let ramp_time = 2.0 * (feed / accel);
+            let cruise_time = (distance - 2.0 * ramp_distance) / feed;
+            ramp_time + cruise_time
+        } else {
+            // Triangle: accelerate to a peak below the feed, then decelerate.
+            let peak = (accel * distance).sqrt();
+            2.0 * peak / accel
+        }
+    }
 }
 
 #[cfg(test)]
@@ -70,5 +99,21 @@ mod tests {
         assert!((v - 63.245).abs() < 0.01);
         // Over a long distance the cap applies.
         assert_eq!(cfg().max_reachable_speed(1000.0, 0.0), 100.0);
+    }
+
+    #[test]
+    fn move_time_uses_a_trapezoid_when_the_feed_is_reached() {
+        // 10 mm at 50 mm/s, accel 1000: ramp 1.25 mm each end, so a trapezoid.
+        // t = 2*(50/1000) + (10 - 2.5)/50 = 0.1 + 0.15 = 0.25 s.
+        let t = cfg().move_time(10.0, 50.0);
+        assert!((t - 0.25).abs() < 1e-9, "got {t}");
+    }
+
+    #[test]
+    fn move_time_uses_a_triangle_for_short_moves() {
+        // 1 mm at 50 mm/s, accel 1000: cannot reach 50, peak = sqrt(1000*1) ~ 31.6,
+        // t = 2*peak/accel ~ 0.06325 s.
+        let t = cfg().move_time(1.0, 50.0);
+        assert!((t - 0.063245).abs() < 1e-4, "got {t}");
     }
 }
