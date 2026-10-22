@@ -1,0 +1,47 @@
+{
+  "id": "commarker-b6",
+  "display_name": "ComMarker B6 MOPA",
+  "controller": "EzCad2",
+  "transport": "Usb",
+  "work_area_mm": [150.0, 150.0],
+  "max_speed_mm_s": 7000.0,
+  "laser_source": "mopa",
+  "galvo": {
+    "field_width_mm": 150.0,
+    "field_height_mm": 150.0,
+    "resolution_bits": 16,
+    "correction_file": "jcz15.cor",
+    "galvo1": { "is_x_axis": false, "reverse": false, "scale_percent": 100.0, "bulge": 1.0, "skew": 0.0, "trapezoid": 1.0 },
+    "galvo2": { "is_x_axis": true, "reverse": false, "scale_percent": 100.0, "bulge": 1.0, "skew": 0.0, "trapezoid": 1.0 },
+    "frame_speed_mm_s": 3000.0,
+    "max_speed_mm_s": 7000.0,
+    "jump": { "jump_speed_mm_s": 4000.0, "min_jump_delay_us": 500.0, "max_jump_delay_us": 500.0, "jump_distance_limit_mm": 0.0 },
+    "delays": { "laser_on_tc_us": -300.0, "laser_off_tc_us": 100.0, "end_tc_us": 300.0, "polygon_tc_us": 100.0 },
+    "fiber": {
+      "fiber_type": "JPT",
+      "q_pulse_width": true,
+      "mo_only_when_running": true,
+      "open_mo_delay_ms": 8.0,
+      "pwm_enable": true,
+      "max_freq_khz": 4000.0,
+      "min_freq_khz": 1.0,
+      "tickle_enable": false,
+      "tickle_pulse_us": 1.0,
+      "tickle_freq_khz": 5.0,
+      "fpk_enable": false,
+      "fpk_start_power": 10.0,
+      "fpk_increment": 10.0,
+      "uv_min_pulse_ns": 1.0,
+      "uv_max_pulse_ns": 20.0,
+      "spi_simmer_current": 80.0
+    },
+    "io": {
+      "start_marking": { "port": 14, "active_high": true },
+      "door_protect": { "port": null, "active_high": false },
+      "duration_ms": 10.0,
+      "blanking_delay_us": 100.0,
+      "require_full_pulse": true
+    },
+    "require_framing_before_start": true
+  }
+}

@@ -125,33 +125,369 @@ pub enum LaserSource {
     Uv,
 }
 
-/// Galvo field configuration for a fiber or galvo device.
-///
-/// The field is the galvo build area. Scale matching corrects the X and Y gains
-/// so a commanded length marks true, the angle offset squares a rotated head, and
-/// a correction (COR or UCF) file supplies the lens distortion map.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GalvoConfig {
-    /// The square field side length in millimetres (the build area).
-    pub field_size_mm: f64,
-    /// The device coordinate resolution in bits.
-    pub resolution_bits: u32,
-    /// X-axis scale-matching factor, 1.0 when no correction is needed.
-    #[serde(default = "one")]
-    pub scale_x: f64,
-    /// Y-axis scale-matching factor.
-    #[serde(default = "one")]
-    pub scale_y: f64,
-    /// Field rotation offset in degrees to square the head.
-    #[serde(default)]
-    pub angle_offset_deg: f64,
-    /// Path to the lens correction file (COR or UCF), if any.
-    #[serde(default)]
-    pub correction_file: Option<String>,
+/// One galvo mirror axis, from the Galvo and Basic Settings tab.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalvoAxis {
+    /// Whether this mirror drives the X axis.
+    pub is_x_axis: bool,
+    /// Reverse (negate) the direction.
+    pub reverse: bool,
+    /// Scale-matching percentage, 100.0 when true.
+    pub scale_percent: f64,
+    /// Barrel/pincushion bulge correction, 1.0 when none.
+    pub bulge: f64,
+    /// Parallelogram skew correction.
+    pub skew: f64,
+    /// Trapezoid correction, 1.0 when none.
+    pub trapezoid: f64,
 }
 
-fn one() -> f64 {
-    1.0
+impl Default for GalvoAxis {
+    fn default() -> Self {
+        Self {
+            is_x_axis: false,
+            reverse: false,
+            scale_percent: 100.0,
+            bulge: 1.0,
+            skew: 0.0,
+            trapezoid: 1.0,
+        }
+    }
+}
+
+/// Red-dot pointer alignment.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RedDotConfig {
+    /// Offset in millimetres.
+    pub offset_mm: [f64; 2],
+    /// Scale factors.
+    pub scale: [f64; 2],
+    /// Rest position in millimetres.
+    pub rest_pos_mm: [f64; 2],
+}
+
+impl Default for RedDotConfig {
+    fn default() -> Self {
+        Self {
+            offset_mm: [0.0, 0.0],
+            scale: [1.0, 1.0],
+            rest_pos_mm: [0.0, 0.0],
+        }
+    }
+}
+
+/// Jump (laser-off travel) timing defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JumpDefaults {
+    /// Jump speed in millimetres per second.
+    pub jump_speed_mm_s: f64,
+    /// Minimum jump delay in microseconds.
+    pub min_jump_delay_us: f64,
+    /// Maximum jump delay in microseconds.
+    pub max_jump_delay_us: f64,
+    /// Distance below which the delay is not scaled, in millimetres.
+    pub jump_distance_limit_mm: f64,
+}
+
+impl Default for JumpDefaults {
+    fn default() -> Self {
+        Self {
+            jump_speed_mm_s: 4000.0,
+            min_jump_delay_us: 500.0,
+            max_jump_delay_us: 500.0,
+            jump_distance_limit_mm: 0.0,
+        }
+    }
+}
+
+/// Timing-constant delays around marking.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DelayDefaults {
+    /// Laser-on timing constant in microseconds.
+    pub laser_on_tc_us: f64,
+    /// Laser-off timing constant in microseconds.
+    pub laser_off_tc_us: f64,
+    /// End timing constant in microseconds.
+    pub end_tc_us: f64,
+    /// Polygon (corner) timing constant in microseconds.
+    pub polygon_tc_us: f64,
+}
+
+impl Default for DelayDefaults {
+    fn default() -> Self {
+        Self {
+            laser_on_tc_us: -300.0,
+            laser_off_tc_us: 100.0,
+            end_tc_us: 300.0,
+            polygon_tc_us: 100.0,
+        }
+    }
+}
+
+/// One IO port assignment: a port number and its active level, or unassigned.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IoAssignment {
+    /// The assigned port, 0 to 15, or none.
+    pub port: Option<u8>,
+    /// Whether the active level is logic high.
+    pub active_high: bool,
+}
+
+/// The named galvo IO assignments, from the Ports and Laser Settings tab.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalvoIo {
+    /// Ready-light output.
+    pub ready_light: IoAssignment,
+    /// Busy-light output.
+    pub busy_light: IoAssignment,
+    /// Red-dot output.
+    pub red_dot: IoAssignment,
+    /// Keep the red dot on at all times.
+    pub red_dot_always_on: bool,
+    /// Blank the beam between marks.
+    pub enable_blanking: bool,
+    /// Blanking delay in microseconds.
+    pub blanking_delay_us: f64,
+    /// Start-framing input.
+    pub start_framing: IoAssignment,
+    /// Start-marking input.
+    pub start_marking: IoAssignment,
+    /// Require a full pulse on the start input.
+    pub require_full_pulse: bool,
+    /// Stop-marking input.
+    pub stop_marking: IoAssignment,
+    /// Done-marking output.
+    pub done_marking: IoAssignment,
+    /// Output pulse duration in milliseconds.
+    pub duration_ms: f64,
+    /// Door-protect interlock input.
+    pub door_protect: IoAssignment,
+    /// Second-laser-source select output.
+    pub second_laser_source: IoAssignment,
+}
+
+/// Fiber laser source configuration, from the Laser Source Configuration panel.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FiberLaserConfig {
+    /// Fiber source vendor, for example `JPT`.
+    pub fiber_type: String,
+    /// Enable the MOPA Q-pulse-width setting.
+    pub q_pulse_width: bool,
+    /// Enable the master oscillator only while running.
+    pub mo_only_when_running: bool,
+    /// Master-oscillator open delay in milliseconds.
+    pub open_mo_delay_ms: f64,
+    /// Enable PWM frequency control.
+    pub pwm_enable: bool,
+    /// Maximum PWM frequency in kilohertz.
+    pub max_freq_khz: f64,
+    /// Minimum PWM frequency in kilohertz.
+    pub min_freq_khz: f64,
+    /// Enable the tickle pulse that keeps the fiber primed.
+    pub tickle_enable: bool,
+    /// Tickle pulse width in microseconds.
+    pub tickle_pulse_us: f64,
+    /// Tickle frequency in kilohertz.
+    pub tickle_freq_khz: f64,
+    /// Enable the first-pulse killer.
+    pub fpk_enable: bool,
+    /// First-pulse-killer start power percentage.
+    pub fpk_start_power: f64,
+    /// First-pulse-killer increment.
+    pub fpk_increment: f64,
+    /// UV minimum pulse in nanoseconds.
+    pub uv_min_pulse_ns: f64,
+    /// UV maximum pulse in nanoseconds.
+    pub uv_max_pulse_ns: f64,
+    /// SPI simmer current.
+    pub spi_simmer_current: f64,
+}
+
+impl Default for FiberLaserConfig {
+    fn default() -> Self {
+        Self {
+            fiber_type: String::new(),
+            q_pulse_width: false,
+            mo_only_when_running: false,
+            open_mo_delay_ms: 8.0,
+            pwm_enable: false,
+            max_freq_khz: 4000.0,
+            min_freq_khz: 1.0,
+            tickle_enable: false,
+            tickle_pulse_us: 1.0,
+            tickle_freq_khz: 5.0,
+            fpk_enable: false,
+            fpk_start_power: 10.0,
+            fpk_increment: 10.0,
+            uv_min_pulse_ns: 1.0,
+            uv_max_pulse_ns: 20.0,
+            spi_simmer_current: 80.0,
+        }
+    }
+}
+
+/// Simulation and motion planning settings, from the Additional Settings tab.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SimulationConfig {
+    /// Maximum speed per axis in millimetres per second.
+    pub max_speed_mm_s: [f64; 2],
+    /// Cut acceleration per axis in millimetres per second squared.
+    pub cut_accel: [f64; 2],
+    /// Engrave acceleration per axis.
+    pub engrave_accel: [f64; 2],
+    /// Rapid speed in millimetres per second.
+    pub rapid_speed_mm_s: f64,
+    /// Corner accuracy tolerance in millimetres.
+    pub corner_accuracy_mm: f64,
+    /// Minimum corner speed in millimetres per second.
+    pub min_corner_speed_mm_s: f64,
+    /// Cut speed scale percentage.
+    pub cut_speed_scale_pct: f64,
+    /// Global speed scale percentage.
+    pub global_speed_scale_pct: f64,
+}
+
+impl Default for SimulationConfig {
+    fn default() -> Self {
+        Self {
+            max_speed_mm_s: [7000.0, 7000.0],
+            cut_accel: [1_500_000.0, 1_500_000.0],
+            engrave_accel: [1_500_000.0, 1_500_000.0],
+            rapid_speed_mm_s: 7000.0,
+            corner_accuracy_mm: 0.010,
+            min_corner_speed_mm_s: 1.0,
+            cut_speed_scale_pct: 100.0,
+            global_speed_scale_pct: 100.0,
+        }
+    }
+}
+
+/// Extension settings, from the Extensions tab.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExtensionsConfig {
+    /// Enable a hardware pendant.
+    pub pendant_enable: bool,
+    /// Enable the permanent API access port.
+    pub api_port_enable: bool,
+    /// The fixed API port number, 0 for automatic.
+    pub api_fixed_port: u16,
+    /// Enable drag-and-drop import.
+    pub dragon_drop_enable: bool,
+}
+
+/// Full galvo and fiber device configuration, matching the LightBurn galvo device
+/// settings (Galvo/Basic, Ports/Laser, Additional, Extensions). Every field has a
+/// sensible default, so a profile fills only what differs from stock.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GalvoConfig {
+    /// Field width in millimetres (the build area X).
+    pub field_width_mm: f64,
+    /// Field height in millimetres.
+    pub field_height_mm: f64,
+    /// Field offset in millimetres.
+    #[serde(default)]
+    pub field_offset_mm: [f64; 2],
+    /// Field rotation in degrees.
+    #[serde(default)]
+    pub field_angle_deg: f64,
+    /// Device coordinate resolution in bits.
+    pub resolution_bits: u32,
+    /// Lens correction file (COR or UCF).
+    #[serde(default)]
+    pub correction_file: Option<String>,
+    /// First galvo mirror.
+    #[serde(default)]
+    pub galvo1: GalvoAxis,
+    /// Second galvo mirror.
+    #[serde(default)]
+    pub galvo2: GalvoAxis,
+    /// Framing speed in millimetres per second.
+    #[serde(default = "default_frame_speed")]
+    pub frame_speed_mm_s: f64,
+    /// Maximum speed in millimetres per second.
+    #[serde(default = "default_max_speed")]
+    pub max_speed_mm_s: f64,
+    /// Red-dot alignment.
+    #[serde(default)]
+    pub red_dot: RedDotConfig,
+    /// Jump timing defaults.
+    #[serde(default)]
+    pub jump: JumpDefaults,
+    /// Marking delays.
+    #[serde(default)]
+    pub delays: DelayDefaults,
+    /// Fiber source configuration, when the source is fiber.
+    #[serde(default)]
+    pub fiber: Option<FiberLaserConfig>,
+    /// Named IO assignments.
+    #[serde(default)]
+    pub io: GalvoIo,
+    /// Simulation and motion planning settings.
+    #[serde(default)]
+    pub simulation: SimulationConfig,
+    /// Extension settings.
+    #[serde(default)]
+    pub extensions: ExtensionsConfig,
+    /// Play a sound when a job finishes.
+    #[serde(default)]
+    pub play_sound_on_finish: bool,
+    /// Require framing before a job starts.
+    #[serde(default)]
+    pub require_framing_before_start: bool,
+    /// Enable the job checklist.
+    #[serde(default)]
+    pub job_checklist: bool,
+    /// Save and load rotary settings with project files.
+    #[serde(default)]
+    pub save_rotary_with_project: bool,
+}
+
+fn default_frame_speed() -> f64 {
+    3000.0
+}
+
+fn default_max_speed() -> f64 {
+    7000.0
+}
+
+impl Default for GalvoConfig {
+    fn default() -> Self {
+        Self {
+            field_width_mm: 110.0,
+            field_height_mm: 110.0,
+            field_offset_mm: [0.0, 0.0],
+            field_angle_deg: 0.0,
+            resolution_bits: 16,
+            correction_file: None,
+            galvo1: GalvoAxis::default(),
+            galvo2: GalvoAxis {
+                is_x_axis: true,
+                ..GalvoAxis::default()
+            },
+            frame_speed_mm_s: default_frame_speed(),
+            max_speed_mm_s: default_max_speed(),
+            red_dot: RedDotConfig::default(),
+            jump: JumpDefaults::default(),
+            delays: DelayDefaults::default(),
+            fiber: None,
+            io: GalvoIo::default(),
+            simulation: SimulationConfig::default(),
+            extensions: ExtensionsConfig::default(),
+            play_sound_on_finish: false,
+            require_framing_before_start: false,
+            job_checklist: false,
+            save_rotary_with_project: false,
+        }
+    }
 }
 
 /// A rotary attachment, for engraving cylinders.
@@ -226,6 +562,7 @@ impl DeviceProfile {
 const BUILTIN: &[&str] = &[
     include_str!("../profiles/snapmaker.json"),
     include_str!("../profiles/ezcad2-jczfiber.json"),
+    include_str!("../profiles/commarker-b6.json"),
     include_str!("../profiles/grbl.json"),
     include_str!("../profiles/marlin.json"),
     include_str!("../profiles/ruida.json"),
@@ -362,12 +699,15 @@ mod tests {
             max_speed_mm_s: 7000.0,
             gcode_flavor: None,
             galvo: Some(GalvoConfig {
-                field_size_mm: 110.0,
-                resolution_bits: 16,
-                scale_x: 1.002,
-                scale_y: 0.998,
-                angle_offset_deg: 0.25,
+                field_width_mm: 110.0,
+                field_height_mm: 110.0,
                 correction_file: Some("lens-110.cor".to_string()),
+                fiber: Some(FiberLaserConfig {
+                    fiber_type: "JPT".to_string(),
+                    q_pulse_width: true,
+                    ..FiberLaserConfig::default()
+                }),
+                ..GalvoConfig::default()
             }),
             laser_source: Some(LaserSource::Mopa),
             rotary: Some(RotaryConfig {
@@ -388,19 +728,41 @@ mod tests {
         if let Ok(back) = back {
             assert_eq!(back, profile);
             assert_eq!(back.laser_source, Some(LaserSource::Mopa));
-            assert_eq!(back.galvo.map(|g| g.scale_x), Some(1.002));
+            assert_eq!(
+                back.galvo.and_then(|g| g.fiber).map(|f| f.fiber_type),
+                Some("JPT".to_string())
+            );
         }
     }
 
     #[test]
     fn galvo_defaults_fill_when_absent_from_json() {
-        // The shipped ezcad2 profile omits the new galvo fields; they default.
+        // The shipped ezcad2 profile sets only field and resolution; the rest default.
         let set = ProfileSet::with_builtins();
         if let Some(galvo) = set.get("ezcad2-jczfiber").and_then(|p| p.galvo.clone()) {
-            assert_eq!(galvo.scale_x, 1.0);
-            assert_eq!(galvo.scale_y, 1.0);
-            assert_eq!(galvo.angle_offset_deg, 0.0);
-            assert!(galvo.correction_file.is_none());
+            assert_eq!(galvo.field_width_mm, 110.0);
+            assert_eq!(galvo.frame_speed_mm_s, 3000.0);
+            assert_eq!(galvo.galvo1.scale_percent, 100.0);
+            assert_eq!(galvo.delays.laser_on_tc_us, -300.0);
+            assert!(galvo.fiber.is_none());
+        }
+    }
+
+    #[test]
+    fn commarker_b6_carries_the_fiber_and_io_config() {
+        let set = ProfileSet::with_builtins();
+        let galvo = set.get("commarker-b6").and_then(|p| p.galvo.clone());
+        assert!(galvo.is_some());
+        if let Some(galvo) = galvo {
+            assert_eq!(galvo.field_width_mm, 150.0);
+            assert_eq!(galvo.correction_file.as_deref(), Some("jcz15.cor"));
+            assert_eq!(galvo.io.start_marking.port, Some(14));
+            assert!(galvo.require_framing_before_start);
+            assert_eq!(
+                galvo.fiber.as_ref().map(|f| f.fiber_type.as_str()),
+                Some("JPT")
+            );
+            assert_eq!(galvo.fiber.map(|f| f.max_freq_khz), Some(4000.0));
         }
     }
 }
