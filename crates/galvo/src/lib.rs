@@ -310,6 +310,297 @@ fn read_i32(bytes: &[u8], offset: usize) -> Result<i32, &'static str> {
         .ok_or("cor data truncated")
 }
 
+/// The BJJCZ LMC board list encoding behind EZCAD2 and JCZFiber.
+///
+/// A GCode dialect serialises the neutral GCode ops; this module is the same seam
+/// for the galvo board. It turns [`GalvoCommand`] into the LMC list-buffer bytes a
+/// BJJCZ controller executes.
+///
+/// The format is clean-room from the public community documentation of the board,
+/// the `meerk40t/galvoplotter` and Balor projects, not from any LightBurn or JCZ
+/// code. A command is six little-endian `u16`: an opcode and five parameters, so
+/// twelve bytes. Commands accumulate into a list chunk of `0xC00` bytes, which is
+/// 256 commands, padded with end-of-list opcodes. Field coordinates are `0..=0xFFFF`
+/// with `0x8000` at the centre, which is what [`GalvoParam::logic_to_device`]
+/// already produces at sixteen-bit resolution.
+///
+/// The opcodes and the packet layout are verified against the public sources. The
+/// power-ratio scale is machine-dependent, so [`power_ratio_from_percent`] is a
+/// provisional linear map that a real machine's calibration refines. Nothing here
+/// is confirmed against hardware yet.
+pub mod lmc {
+    use super::GalvoCommand;
+
+    /// The BJJCZ USB vendor id.
+    pub const USB_VENDOR: u16 = 0x9588;
+    /// The BJJCZ USB product id.
+    pub const USB_PRODUCT: u16 = 0x9899;
+    /// The bulk OUT endpoint the list is written to.
+    pub const WRITE_ENDPOINT: u8 = 0x02;
+    /// The bulk IN endpoint status is read from.
+    pub const READ_ENDPOINT: u8 = 0x88;
+
+    /// Move with the laser off to a field point.
+    pub const LIST_JUMP_TO: u16 = 0x8001;
+    /// End of a list, also the padding opcode.
+    pub const LIST_END_OF_LIST: u16 = 0x8002;
+    /// Move with the laser on to a field point.
+    pub const LIST_MARK_TO: u16 = 0x8005;
+    /// Set the jump (travel) speed.
+    pub const LIST_JUMP_SPEED: u16 = 0x8006;
+    /// Set the laser-on delay (Laser On TC).
+    pub const LIST_LASER_ON_DELAY: u16 = 0x8007;
+    /// Set the laser-off delay (Laser Off TC).
+    pub const LIST_LASER_OFF_DELAY: u16 = 0x8008;
+    /// Set the power ratio on machines that take it over 0x800A.
+    pub const LIST_MARK_POWER_RATIO: u16 = 0x800B;
+    /// Set the marking speed.
+    pub const LIST_MARK_SPEED: u16 = 0x800C;
+    /// Set the jump delay.
+    pub const LIST_JUMP_DELAY: u16 = 0x800D;
+    /// Set the polygon (corner) delay.
+    pub const LIST_POLYGON_DELAY: u16 = 0x800F;
+    /// Set the Q-switch period, the fiber laser's inverse frequency.
+    pub const LIST_QSWITCH_PERIOD: u16 = 0x801B;
+
+    /// Bytes in one command packet.
+    pub const PACKET_LEN: usize = 12;
+    /// Bytes in one list chunk, which is 256 commands.
+    pub const LIST_CHUNK_LEN: usize = 0xC00;
+    /// The base constant that converts a fiber frequency in kHz to a Q-switch period.
+    const QSWITCH_BASE: f64 = 20000.0;
+
+    /// Encode one opcode and its five parameters into a twelve-byte packet.
+    pub fn encode(command: u16, params: [u16; 5]) -> [u8; PACKET_LEN] {
+        let mut packet = [0u8; PACKET_LEN];
+        packet[0..2].copy_from_slice(&command.to_le_bytes());
+        for (i, value) in params.iter().enumerate() {
+            let offset = 2 + i * 2;
+            packet[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+        }
+        packet
+    }
+
+    /// The Q-switch period for a fiber marking frequency in kHz.
+    ///
+    /// The period is `20000 / frequency`, clamped to a `u16`. A frequency at or
+    /// below zero yields zero.
+    pub fn qswitch_period(frequency_khz: f64) -> u16 {
+        if frequency_khz <= 0.0 {
+            return 0;
+        }
+        (QSWITCH_BASE / frequency_khz)
+            .round()
+            .clamp(0.0, f64::from(u16::MAX)) as u16
+    }
+
+    /// A provisional map from a power percentage to the list power ratio.
+    ///
+    /// The ratio runs `0..=0xFFF`, a common twelve-bit full scale. The true scale
+    /// depends on the laser and its current source, so a machine's calibration
+    /// replaces this. The value is clamped to the percentage range first.
+    pub fn power_ratio_from_percent(percent: f64) -> u16 {
+        let fraction = (percent / 100.0).clamp(0.0, 1.0);
+        (fraction * f64::from(0x0FFFu16)).round() as u16
+    }
+
+    /// A signed microsecond delay as `(magnitude, sign)`, where a negative delay
+    /// sets `0x8000` in the sign slot, as the board expects for an advanced delay.
+    fn delay_params(delay_us: f64) -> [u16; 5] {
+        let magnitude = delay_us.abs().round().clamp(0.0, f64::from(u16::MAX)) as u16;
+        let sign = if delay_us < 0.0 { 0x8000 } else { 0x0000 };
+        [magnitude, sign, 0, 0, 0]
+    }
+
+    fn clamp_coord(value: i32) -> u16 {
+        value.clamp(0, i32::from(u16::MAX)) as u16
+    }
+
+    /// A growing LMC list program.
+    #[derive(Debug, Default, Clone)]
+    pub struct ListBuffer {
+        bytes: Vec<u8>,
+        count: usize,
+    }
+
+    impl ListBuffer {
+        /// An empty list.
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        /// Append one command.
+        pub fn push(&mut self, command: u16, params: [u16; 5]) {
+            self.bytes.extend_from_slice(&encode(command, params));
+            self.count += 1;
+        }
+
+        /// Jump with the laser off to a field point.
+        pub fn jump_to(&mut self, x: u16, y: u16) {
+            self.push(LIST_JUMP_TO, [x, y, 0, 0, 0]);
+        }
+
+        /// Mark with the laser on to a field point.
+        pub fn mark_to(&mut self, x: u16, y: u16) {
+            self.push(LIST_MARK_TO, [x, y, 0, 0, 0]);
+        }
+
+        /// Set the marking speed.
+        pub fn mark_speed(&mut self, speed: u16) {
+            self.push(LIST_MARK_SPEED, [speed, 0, 0, 0, 0]);
+        }
+
+        /// Set the jump speed.
+        pub fn jump_speed(&mut self, speed: u16) {
+            self.push(LIST_JUMP_SPEED, [speed, 0, 0, 0, 0]);
+        }
+
+        /// Set the power ratio.
+        pub fn mark_power_ratio(&mut self, ratio: u16) {
+            self.push(LIST_MARK_POWER_RATIO, [ratio, 0, 0, 0, 0]);
+        }
+
+        /// Set the fiber Q-switch period.
+        pub fn qswitch_period(&mut self, period: u16) {
+            self.push(LIST_QSWITCH_PERIOD, [period, 0, 0, 0, 0]);
+        }
+
+        /// Set the laser-on delay in microseconds.
+        pub fn laser_on_delay(&mut self, delay_us: f64) {
+            self.push(LIST_LASER_ON_DELAY, delay_params(delay_us));
+        }
+
+        /// Set the laser-off delay in microseconds.
+        pub fn laser_off_delay(&mut self, delay_us: f64) {
+            self.push(LIST_LASER_OFF_DELAY, delay_params(delay_us));
+        }
+
+        /// Set the jump delay in microseconds.
+        pub fn jump_delay(&mut self, delay_us: f64) {
+            self.push(LIST_JUMP_DELAY, delay_params(delay_us));
+        }
+
+        /// Set the polygon (corner) delay in microseconds.
+        pub fn polygon_delay(&mut self, delay_us: f64) {
+            self.push(LIST_POLYGON_DELAY, delay_params(delay_us));
+        }
+
+        /// The number of commands written, before padding.
+        pub fn len(&self) -> usize {
+            self.count
+        }
+
+        /// Whether no command has been written.
+        pub fn is_empty(&self) -> bool {
+            self.count == 0
+        }
+
+        /// The finished buffer: an end-of-list, then padding with end-of-list
+        /// opcodes up to a whole `0xC00` chunk, which is what the board reads.
+        pub fn finish(mut self) -> Vec<u8> {
+            self.push(LIST_END_OF_LIST, [0; 5]);
+            while !self.bytes.len().is_multiple_of(LIST_CHUNK_LEN) {
+                self.bytes
+                    .extend_from_slice(&encode(LIST_END_OF_LIST, [0; 5]));
+            }
+            self.bytes
+        }
+    }
+
+    /// Compile device-space galvo commands into an LMC list program.
+    ///
+    /// The marking speed and the power ratio open the list. Each [`GalvoCommand`]
+    /// then appends its list command. The result is padded to a whole chunk and is
+    /// ready for the bulk write to [`WRITE_ENDPOINT`].
+    pub fn compile(commands: &[GalvoCommand], mark_speed: u16, power_ratio: u16) -> Vec<u8> {
+        let mut list = ListBuffer::new();
+        list.mark_speed(mark_speed);
+        list.mark_power_ratio(power_ratio);
+        for command in commands {
+            match *command {
+                GalvoCommand::Jump { x, y } => list.jump_to(clamp_coord(x), clamp_coord(y)),
+                GalvoCommand::Mark { x, y } => list.mark_to(clamp_coord(x), clamp_coord(y)),
+                GalvoCommand::SetPower { percent } => {
+                    list.mark_power_ratio(power_ratio_from_percent(percent))
+                }
+                GalvoCommand::SetFrequency { hz } => {
+                    list.qswitch_period(qswitch_period(f64::from(hz) / 1000.0))
+                }
+            }
+        }
+        list.finish()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_packet_is_six_little_endian_u16() {
+            // The end-of-list nop is 0x8002, little-endian 0x02 0x80.
+            let p = encode(LIST_END_OF_LIST, [0; 5]);
+            assert_eq!(p.len(), PACKET_LEN);
+            assert_eq!(&p[0..2], &[0x02, 0x80]);
+            assert!(p[2..].iter().all(|&b| b == 0));
+        }
+
+        #[test]
+        fn a_jump_carries_its_coordinates() {
+            let p = encode(LIST_JUMP_TO, [0x8000, 0x4000, 0, 0, 0]);
+            assert_eq!(&p[0..2], &[0x01, 0x80]); // 0x8001
+            assert_eq!(&p[2..4], &[0x00, 0x80]); // x = 0x8000
+            assert_eq!(&p[4..6], &[0x00, 0x40]); // y = 0x4000
+        }
+
+        #[test]
+        fn fiber_frequency_becomes_a_qswitch_period() {
+            // 20000 / 20 kHz = 1000.
+            assert_eq!(qswitch_period(20.0), 1000);
+            assert_eq!(qswitch_period(0.0), 0);
+        }
+
+        #[test]
+        fn a_negative_delay_sets_the_sign_slot() {
+            // A Laser On TC of -300 us encodes as magnitude 300 with sign 0x8000.
+            let params = delay_params(-300.0);
+            assert_eq!(params[0], 300);
+            assert_eq!(params[1], 0x8000);
+            assert_eq!(delay_params(100.0)[1], 0x0000);
+        }
+
+        #[test]
+        fn a_finished_list_is_whole_chunks() {
+            let mut list = ListBuffer::new();
+            list.jump_to(0x8000, 0x8000);
+            list.mark_to(0xA000, 0x8000);
+            let bytes = list.finish();
+            assert!(bytes.len().is_multiple_of(LIST_CHUNK_LEN));
+            assert_eq!(bytes.len(), LIST_CHUNK_LEN);
+        }
+
+        #[test]
+        fn compile_opens_with_speed_and_power() {
+            let commands = [
+                GalvoCommand::Jump {
+                    x: 0x8000,
+                    y: 0x8000,
+                },
+                GalvoCommand::Mark {
+                    x: 0xC000,
+                    y: 0x8000,
+                },
+            ];
+            let bytes = compile(&commands, 100, 0x0800);
+            // First command is the marking speed.
+            assert_eq!(&bytes[0..2], &0x800Cu16.to_le_bytes());
+            assert_eq!(&bytes[2..4], &100u16.to_le_bytes());
+            // Second command is the power ratio.
+            assert_eq!(&bytes[12..14], &0x800Bu16.to_le_bytes());
+            assert!(bytes.len().is_multiple_of(LIST_CHUNK_LEN));
+        }
+    }
+}
+
 #[cfg(test)]
 mod cor_tests {
     use super::*;
