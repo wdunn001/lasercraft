@@ -87,6 +87,23 @@
   .palette .sw.active { border-color: #fff; }
   .palette .lbl { color: var(--faint); font-size: 11px; margin-right: 8px; }
 
+  /* dock tabs + move panel */
+  .docktabs { display: flex; gap: 2px; padding: 0 8px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+  .docktabs button { padding: 10px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+  .docktabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .dpane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .posrow { display: flex; gap: 8px; }
+  .pos { flex: 1; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; display: flex; align-items: center; gap: 8px; }
+  .pos span { font-size: 11px; color: var(--muted); font-weight: 600; }
+  .pos b { font-size: 16px; font-variant-numeric: tabular-nums; }
+  #jog { cursor: pointer; }
+  #jog .seg:hover { filter: brightness(1.4); }
+  .chips { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
+  .chip { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--field); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  .chip.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .moveacts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .moveacts .fire { color: #ff8a6e; border-color: #7a3a2d; background: #3a2320; }
+
   /* modal cut-settings editor */
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 100; }
   .modal-bg.show { display: flex; }
@@ -153,6 +170,11 @@
     </div>
 
     <div class="dock">
+      <div class="docktabs">
+        <button class="active" data-dock="design" data-i18n="tab.design">Design</button>
+        <button data-dock="move" data-i18n="tab.move">Move</button>
+      </div>
+      <div id="designPane" class="dpane">
       <div class="section">
         <h3><span data-i18n="panel.layers">Cuts / Layers</span> <span class="mini"><span id="layerUp">&#9650;</span><span id="layerDown">&#9660;</span></span></h3>
         <div class="cols"><span data-i18n="col.layer">Layer</span><span data-i18n="col.mode">Mode</span><span data-i18n="col.spd">Speed / Pwr</span><span data-i18n="col.out">Out</span><span data-i18n="col.show">Show</span></div>
@@ -177,6 +199,24 @@
           <div class="gcode"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
           <div class="stat"><span>Lines <b id="lineCount">0</b></span><span>Shapes <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
+      </div>
+      </div>
+
+      <div id="movePane" class="dpane" style="display:none;padding:16px;overflow:auto">
+        <div class="posrow">
+          <div class="pos"><span>X</span><b id="posX">0.0</b></div>
+          <div class="pos"><span>Y</span><b id="posY">0.0</b></div>
+          <div class="pos"><span>Z</span><b id="posZ">0.0</b></div>
+        </div>
+        <svg id="jog" width="280" height="280" viewBox="0 0 280 280" style="display:block;margin:16px auto"></svg>
+        <div class="chips" id="distChips"></div>
+        <div class="moveacts">
+          <button class="btn ok" id="jogHome">Home</button>
+          <button class="btn" id="jogFrame" data-i18n="action.frame">Frame</button>
+          <button class="btn" id="jogOrigin">Set Origin</button>
+          <button class="btn fire" id="jogFire">Fire (1%)</button>
+        </div>
+        <div class="stat" id="moveStat" style="margin-top:12px;color:var(--muted)">Jog drives the connected galvo. Connect it on the Design tab first.</div>
       </div>
     </div>
   </div>
@@ -606,6 +646,45 @@
     d.querySelectorAll("polygon,polyline").forEach(pl=>{ const pts=(pl.getAttribute("points")||"").trim().split(/\s+/).map(s=>s.split(",").map(Number)).filter(a=>a.length===2); if(pts.length) doc.shapes.push(poly(pts, pl.tagName==="polygon", cut)); });
   }
 
+  // ---- Move / jog panel ----
+  const GotoXY = 0x000D, LaserSignalOn = 0x000F, LaserSignalOff = 0x000E;
+  let jogDist = 10, jogPos = { x: 0x8000, y: 0x8000 };   // device units, 0x8000 is centre
+  document.querySelectorAll(".docktabs button").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".docktabs button").forEach(x => x.classList.toggle("active", x === b));
+    $("designPane").style.display = b.dataset.dock === "design" ? "flex" : "none";
+    $("movePane").style.display = b.dataset.dock === "move" ? "flex" : "none";
+  });
+  ["0.1","1","10","50"].forEach(d => { const c = document.createElement("span"); c.className = "chip" + (+d === jogDist ? " on" : ""); c.textContent = d; c.onclick = () => { jogDist = +d; document.querySelectorAll("#distChips .chip").forEach(x => x.classList.toggle("on", x === c)); }; $("distChips").appendChild(c); });
+  function buildJog(){
+    const cx = 140, cy = 140, bands = [{ri:42,ro:78,l:"1"},{ri:83,ro:120,l:"10"}];
+    const dirs = [{n:"Y",m:-90,s:"+",dx:0,dy:1},{n:"X",m:0,s:"+",dx:1,dy:0},{n:"-Y",m:90,s:"-",dx:0,dy:-1},{n:"-X",m:180,s:"-",dx:-1,dy:0}];
+    const rad = d => d*Math.PI/180, pt = (r,a) => [cx+r*Math.cos(rad(a)), cy+r*Math.sin(rad(a))];
+    const sector = (ri,ro,a0,a1) => { const [xo0,yo0]=pt(ro,a0),[xo1,yo1]=pt(ro,a1),[xi1,yi1]=pt(ri,a1),[xi0,yi0]=pt(ri,a0); return `M ${xo0} ${yo0} A ${ro} ${ro} 0 0 1 ${xo1} ${yo1} L ${xi1} ${yi1} A ${ri} ${ri} 0 0 0 ${xi0} ${yi0} Z`; };
+    let s = "";
+    for (const d of dirs){
+      for (const b of bands){ const a0=d.m-45+7, a1=d.m+45-7, amt=(b.l==="10")?10:1; s += `<path class="seg" data-dx="${d.dx*amt}" data-dy="${d.dy*amt}" d="${sector(b.ri,b.ro,a0,a1)}" fill="${b.ro>80?"#262b36":"#2e3542"}" stroke="#394152"/>`; const [lx,ly]=pt((b.ri+b.ro)/2,d.m); s += `<text x="${lx}" y="${ly}" fill="#c7ccd8" font-size="13" font-weight="600" text-anchor="middle" dominant-baseline="central" pointer-events="none">${d.s}${b.l}</text>`; }
+      const [tx,ty] = pt(132,d.m); s += `<text x="${tx}" y="${ty}" fill="#8b93a7" font-size="12" font-weight="700" text-anchor="middle" dominant-baseline="central" pointer-events="none">${d.n}</text>`;
+    }
+    s += `<circle class="seg" data-home="1" cx="${cx}" cy="${cy}" r="36" fill="#28c08a"/><text x="${cx}" y="${cy+1}" fill="#0c1512" font-size="22" text-anchor="middle" dominant-baseline="central" pointer-events="none">&#8962;</text>`;
+    $("jog").innerHTML = s;
+    $("jog").querySelectorAll(".seg").forEach(el => el.onclick = () => el.dataset.home ? jogHome() : jog(+el.dataset.dx, +el.dataset.dy));
+  }
+  const mm2dev = mm => Math.round(mm / 110 * 0xFFFF);
+  function updatePos(){ $("posX").textContent = (jogPos.x/0xFFFF*110-55).toFixed(1); $("posY").textContent = (jogPos.y/0xFFFF*110-55).toFixed(1); }
+  async function jog(dx, dy){
+    jogPos.x = Math.max(0, Math.min(0xFFFF, jogPos.x + mm2dev(dx*jogDist)));
+    jogPos.y = Math.max(0, Math.min(0xFFFF, jogPos.y + mm2dev(dy*jogDist)));
+    updatePos();
+    if (USB.dev){ try { await ctl(GotoXY, jogPos.x, jogPos.y, 0, 0); $("moveStat").textContent = `Moved to device ${jogPos.x}, ${jogPos.y}.`; } catch(e){ $("moveStat").textContent = "Move failed: " + e.message; } }
+    else $("moveStat").textContent = "Not connected — showing the simulated position.";
+  }
+  async function jogHome(){ jogPos = { x:0x8000, y:0x8000 }; updatePos(); if (USB.dev){ try { await ctl(GotoXY, 0x8000, 0x8000, 0, 0); } catch(e){} } }
+  $("jogHome").onclick = jogHome;
+  $("jogFrame").onclick = () => { if (!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":$("flavor").value); } catch(e){} };
+  $("jogOrigin").onclick = () => { jogPos = { x:0x8000, y:0x8000 }; updatePos(); $("moveStat").textContent = "Origin set at the current position."; };
+  $("jogFire").onclick = async () => { if (!USB.dev){ $("moveStat").textContent = "Connect the galvo to fire the pointer."; return; } try { await ctl(LaserSignalOn); setTimeout(async () => { try { await ctl(LaserSignalOff); } catch(e){} }, 300); $("moveStat").textContent = "Fired the red pointer briefly."; } catch(e){ $("moveStat").textContent = "Fire failed: " + e.message; } };
+  buildJog(); updatePos();
+
   // ---- i18n: translate the UI chrome (shipped catalog translations) ----
   const I18N = {
     en: {},
@@ -614,6 +693,10 @@
     fr: { "menu.file":"Fichier","menu.edit":"Édition","action.new":"Nouveau","action.import":"Importer SVG…","action.export":"Exporter GCode…","action.delete":"Supprimer la sélection","action.dupe":"Dupliquer","action.frame":"Cadrer","action.generate":"Générer","text.add":"Ajouter du texte","text.ph":"texte à marquer…","label.est":"Est.","panel.layers":"Coupes / Calques","panel.laser":"Laser","col.layer":"Calque","col.mode":"Mode","col.spd":"Vit. / Puis.","col.out":"Sortie","col.show":"Voir","galvo.connect":"Connecter galvo (WebUSB)","galvo.send":"Envoyer" },
     "pt-BR": { "menu.file":"Arquivo","menu.edit":"Editar","action.new":"Novo","action.import":"Importar SVG…","action.export":"Exportar GCode…","action.delete":"Excluir seleção","action.dupe":"Duplicar","action.frame":"Enquadrar","action.generate":"Gerar","text.add":"Adicionar texto","text.ph":"texto para marcar…","label.est":"Est.","panel.layers":"Cortes / Camadas","panel.laser":"Laser","col.layer":"Camada","col.mode":"Modo","col.spd":"Vel / Pot","col.out":"Saída","col.show":"Ver","galvo.connect":"Conectar galvo (WebUSB)","galvo.send":"Enviar" },
   };
+  Object.assign(I18N.es, { "tab.design":"Diseño","tab.move":"Mover" });
+  Object.assign(I18N.de, { "tab.design":"Entwurf","tab.move":"Bewegen" });
+  Object.assign(I18N.fr, { "tab.design":"Conception","tab.move":"Déplacer" });
+  Object.assign(I18N["pt-BR"], { "tab.design":"Design","tab.move":"Mover" });
   document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
   document.querySelectorAll("[data-i18n-ph]").forEach(el => I18N.en[el.dataset.i18nPh] = el.getAttribute("placeholder"));
   function applyLang(lang){
@@ -627,9 +710,11 @@
   function layout(){ const r=canvas.getBoundingClientRect(); canvas.setAttribute("viewBox",`0 0 ${r.width} ${r.height}`); render(); }
   window.addEventListener("resize", layout);
   renderLayers(); renderPalette(); $("canvas").classList.toggle("select", tool==="select");
-  const urlLang = new URLSearchParams(location.search).get("lang");
+  const params = new URLSearchParams(location.search);
+  const urlLang = params.get("lang");
   if (urlLang && I18N[urlLang]) $("lang").value = urlLang;
   applyLang($("lang").value);
+  if (params.get("tab") === "move") document.querySelector('.docktabs button[data-dock="move"]').click();
   fit(); layout();
 
   init().then(()=>{ ready=true; $("wasmok").textContent="WASM ready"; generate(); }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
