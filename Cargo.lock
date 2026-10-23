@@ -457,6 +457,7 @@ dependencies = [
  "lasercraft-motion",
  "lasercraft-svg",
  "lasercraft-text",
+ "lasercraft-trace",
  "serde",
  "serde_json",
  "wasm-bindgen",

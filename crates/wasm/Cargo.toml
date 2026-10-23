@@ -19,6 +19,7 @@ lasercraft-dxf = { workspace = true }
 lasercraft-gcode = { workspace = true }
 lasercraft-laser-doc = { workspace = true }
 lasercraft-svg = { workspace = true }
+lasercraft-trace = { workspace = true }
 lasercraft-motion = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

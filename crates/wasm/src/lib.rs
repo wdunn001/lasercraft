@@ -267,6 +267,45 @@ pub fn text_outline_paths(font: &[u8], text: &str, height_mm: f64, x: f64, y: f6
     serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
+/// Trace a one-bit image mask into closed vector contours.
+///
+/// `mask` is one byte per pixel, row-major, non-zero for a mark pixel. The result
+/// is a JSON array of `{ points: [[x, y], ...], closed: bool }` in pixel
+/// coordinates, which the page scales onto the bed. `speckle` drops contours below
+/// that pixel area and `smoothing` sets the corner tolerance.
+#[wasm_bindgen]
+pub fn trace_image(mask: &[u8], width: u32, height: u32, speckle: u32, smoothing: f64) -> Result<String, JsError> {
+    use lasercraft_trace::{Bitmap, BoundaryTracer, TraceParams, Tracer};
+    let expected = (width as usize).saturating_mul(height as usize);
+    if mask.len() != expected {
+        return Err(JsError::new("mask size does not match width times height"));
+    }
+    let bitmap = Bitmap {
+        width,
+        height,
+        pixels: mask.iter().map(|&b| b != 0).collect(),
+    };
+    let params = TraceParams {
+        threshold: 128,
+        speckle_suppression: speckle,
+        corner_smoothing: smoothing,
+    };
+    #[derive(serde::Serialize)]
+    struct Poly {
+        points: Vec<(f64, f64)>,
+        closed: bool,
+    }
+    let out: Vec<Poly> = BoundaryTracer
+        .trace(&bitmap, &params)
+        .into_iter()
+        .map(|p| Poly {
+            points: p.points.into_iter().map(|q| (q.x, q.y)).collect(),
+            closed: p.closed,
+        })
+        .collect();
+    serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
 /// Build a material-test grid project from `spec` and return it as project JSON.
 #[wasm_bindgen]
 pub fn material_test_project(spec_json: &str) -> Result<String, JsError> {

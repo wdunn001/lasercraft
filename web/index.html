@@ -169,6 +169,7 @@
         <div data-act="new" data-i18n="action.new">New</div>
         <div data-act="import" data-i18n="action.import">Import SVG / DXF&hellip;</div>
         <div data-act="image" data-i18n="action.image">Import Image (dither)&hellip;</div>
+        <div data-act="trace" data-i18n="action.trace">Trace Image (vector)&hellip;</div>
         <div data-act="export" data-i18n="action.export">Export GCode&hellip;</div>
         <div data-act="exportdxf" data-i18n="action.exportdxf">Export DXF&hellip;</div>
       </div>
@@ -396,7 +397,7 @@
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf, export_dxf, svg_path_to_paths, text_outline_paths } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf, export_dxf, svg_path_to_paths, text_outline_paths, trace_image } from "./pkg/lasercraft_wasm.js";
 
   // Filled-text font, loaded once from a served asset so the wasm stays small.
   let FONT_BYTES = null;
@@ -1322,7 +1323,8 @@
     else if (a==="delete" && sel.size){ deleteSelection(); return; }
     else if (a==="dupe" && sel.size){ duplicateSelection(); return; }
     else if (a==="import"){ $("file").click(); }
-    else if (a==="image"){ $("imgFile").click(); }
+    else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
+    else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
     else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
     else if (a==="exportdxf"){ exportDxf(); }
     else if (a==="weld"){ weldActive(); }
@@ -1382,12 +1384,30 @@
   // SVG import (basic: rect, circle, ellipse, polygon, polyline, path M/L/C/Z)
   // Import a bitmap, Floyd-Steinberg dither it, and lay each dark run as a short
   // engraving segment on the active layer. The engine then engraves the runs.
+  let imgMode = "dither";
   $("imgFile").onchange = ev => {
     const f = ev.target.files[0]; if (!f) return;
+    const mode = imgMode;
     const img = new Image();
-    img.onload = () => { try { ditherImage(img); } catch(e){ console.error(e); } URL.revokeObjectURL(img.src); };
+    img.onload = () => { try { if (mode==="trace") traceImage(img); else ditherImage(img); } catch(e){ console.error(e); } URL.revokeObjectURL(img.src); };
     img.src = URL.createObjectURL(f);
   };
+  // Trace a bitmap into closed vector contours and lay them on the active layer,
+  // centred and scaled onto the bed. The engine does the contour following.
+  function traceImage(img){
+    if (!ready) return;
+    const w = 240, h = Math.max(1, Math.round(img.height / img.width * w));
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const cx = cv.getContext("2d"); cx.drawImage(img, 0, 0, w, h);
+    const data = cx.getImageData(0, 0, w, h).data;
+    const mask = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++){ const g = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2]; const a = data[i*4+3]; mask[i] = (a > 128 && g < 128) ? 1 : 0; }
+    let polys; try { polys = JSON.parse(trace_image(mask, w, h, 3, 1.0)); } catch(e){ console.error(e); return; }
+    const bw = Math.min(BED.w*0.8, 120), px = bw / w, bx = (BED.w - bw)/2, by0 = (BED.h - h*px)/2;
+    const cut = doc.layers[activeLayer].index;
+    for (const pl of polys){ if (pl.points.length >= 3) doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.points.map(a => p(bx + a[0]*px, by0 + (h-1-a[1])*px)), closed: !!pl.closed } } }); }
+    selectOnly(null); render(); refreshCounts();
+  }
   function ditherImage(img){
     const targetW = 110;                               // sample width in pixels (kept modest for speed)
     const w = targetW, h = Math.max(1, Math.round(img.height / img.width * targetW));
@@ -1711,6 +1731,9 @@
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
     else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
     else if (act==="pages"){ doc.shapes=[rect(30,30,80,50,0)]; addPage(); doc.shapes=[ellipse(90,90,40,30,1)]; addPage(); doc.shapes=[rect(20,20,40,40,2), ellipse(100,100,30,30,0)]; renderPageTabs(); render(); refreshCounts(); }
+    else if (act==="tracepic"){ const c=document.createElement("canvas"); c.width=240; c.height=160; const cx=c.getContext("2d");
+      cx.fillStyle="#fff"; cx.fillRect(0,0,240,160); cx.fillStyle="#000"; cx.beginPath(); cx.arc(70,80,48,0,7); cx.fill(); cx.fillStyle="#fff"; cx.beginPath(); cx.arc(70,80,22,0,7); cx.fill(); cx.fillStyle="#000"; cx.fillRect(140,42,74,74);
+      const im=new Image(); im.onload=()=>{ imgMode="trace"; traceImage(im); }; im.src=c.toDataURL(); }
     else if (act==="regmarks"){ doc.shapes=[rect(45,45,60,45,0), ellipse(75,67,15,12,2)]; addRegistrationMarks(); const tb=document.querySelector('.docktabs button[data-dock="camera"]'); if (tb) tb.click(); render(); refreshCounts(); }
     else if (act==="textfill"){ $("textIn").value="LaserCraft"; $("textFont").value="sans";
       doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"LaserCraft", x:14, y:92, h:24, gap:0, align:"left", font:"sans" } } },
