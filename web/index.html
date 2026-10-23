@@ -2709,7 +2709,10 @@
   }
   function handleGrblLine(line){
     if (!line) return;
-    consoleLog(line, "rx");
+    // Log only while the console panel is open, so a streamed job's acks do no
+    // DOM work on the hot path when the console is hidden.
+    const cp = $("consolePanel");
+    if (cp && cp.style.display !== "none") consoleLog(line, "rx");
     // Only ok/error are command acknowledgements, one per sent line. ALARM is an
     // unsolicited async push and must NOT consume an okq slot, or the stream desyncs.
     if (line === "ok" || line.startsWith("error")){
@@ -3071,14 +3074,15 @@
   function importLbrn(xml){
     const d2 = new DOMParser().parseFromString(xml, "application/xml");
     if (d2.querySelector("parsererror")){ alert(tr("lbrn.bad","That file is not valid LightBurn XML.")); return; }
-    // Start from a clean document so the file's own layers are what remains.
-    doc.layers.length = 0; doc.shapes.length = 0;
-    // Layers from CutSetting blocks.
+    // Parse into temporary arrays and only replace the live document once the
+    // file is confirmed to carry geometry. An early bail must never wipe the
+    // open design.
+    const newLayers = [];
     d2.querySelectorAll("CutSetting, CutSetting_Img").forEach(cs => {
       const g=(t)=>{ const el=cs.querySelector(t); return el?(el.getAttribute("Value")??el.textContent):null; };
       const idx=+(g("index")||0);
-      let L=doc.layers.find(l=>l.index===idx);
-      if (!L){ L=layer(idx, g("name")||("Layer "+String(idx).padStart(2,"0")), +(g("speed")||100)||100, +(g("maxPower")||50)||50, "Line"); doc.layers.push(L); }
+      let L=newLayers.find(l=>l.index===idx);
+      if (!L){ L=layer(idx, g("name")||("Layer "+String(idx).padStart(2,"0")), +(g("speed")||100)||100, +(g("maxPower")||50)||50, "Line"); newLayers.push(L); }
       if (g("name")) L.name=g("name"); if (g("speed")) L.speed_mm_s=+g("speed")||L.speed_mm_s;
       if (g("maxPower")) L.power_max=+g("maxPower")||L.power_max; if (g("minPower")) L.power_min=+g("minPower")||0;
       if (g("numPasses")) L.num_passes=Math.max(1,+g("numPasses")||1);
@@ -3086,7 +3090,7 @@
       // Map every type, including Cut, so a reused index never keeps a stale mode.
       if (typ==="Scan"||typ==="Fill") L.mode="Fill"; else if (typ==="Offset") L.mode="Concentric"; else if (typ==="Image") L.mode="Image"; else L.mode="Line";
     });
-    if (!doc.layers.length) doc.layers.push(layer(0, "Cut", 100, 80, "Line"));
+    if (!newLayers.length) newLayers.push(layer(0, "Cut", 100, 80, "Line"));
     const xform=(sh)=>{ const x=sh.querySelector(":scope > XForm"); const a=x?x.textContent.trim().split(/\s+/).map(Number):[1,0,0,1,0,0]; return a.length>=6?a:[1,0,0,1,0,0]; };
     // Compose two affine matrices [a b c d e f]: outer applied after inner.
     const mul=(o,i)=>[o[0]*i[0]+o[2]*i[1], o[1]*i[0]+o[3]*i[1], o[0]*i[2]+o[2]*i[3], o[1]*i[2]+o[3]*i[3], o[0]*i[4]+o[2]*i[5]+o[4], o[1]*i[4]+o[3]*i[5]+o[5]];
@@ -3094,18 +3098,21 @@
     const effXform=(sh)=>{ let m=xform(sh); let p=sh.parentElement; while (p){ if (p.tagName==="Shape" && p.getAttribute("Type")==="Group"){ m=mul(xform(p), m); } p=p.parentElement; } return m; };
     const ap=(m,px,py)=>({ x:m[0]*px+m[2]*py+m[4], y:m[1]*px+m[3]*py+m[5] });
     const verts=(s)=>{ const out=[]; const re=/V\s*(-?[\d.eE+]+)\s+(-?[\d.eE+]+)/g; let mm; while((mm=re.exec(s))){ out.push([+mm[1],+mm[2]]); } return out; };
-    let added=0;
+    const newShapes = [];
     d2.querySelectorAll("Shape").forEach(sh => {
       const type=sh.getAttribute("Type"); if (type==="Group") return;   // a group is a container, not geometry
       const ci=+(sh.getAttribute("CutIndex")||0), m=effXform(sh);
-      if (type==="Text"){ const str=sh.getAttribute("Str")||(sh.querySelector("Str")&&sh.querySelector("Str").textContent)||""; const h=+(sh.getAttribute("H")||10)||10; const o=ap(m,0,0); doc.shapes.push({ kind:"Text", cut_index:ci, geometry:{ Text:{ s:str, x:o.x, y:o.y, h, gap:h*0.28, align:"left", font:"sans" } } }); added++; return; }
+      if (type==="Text"){ const str=sh.getAttribute("Str")||(sh.querySelector("Str")&&sh.querySelector("Str").textContent)||""; const h=+(sh.getAttribute("H")||10)||10; const o=ap(m,0,0); newShapes.push({ kind:"Text", cut_index:ci, geometry:{ Text:{ s:str, x:o.x, y:o.y, h, gap:h*0.28, align:"left", font:"sans" } } }); return; }
       let pts=null, closed=true, kind="Path";
       if (type==="Rect"){ const w=+sh.getAttribute("W")||0, h=+sh.getAttribute("H")||0, hw=w/2, hh=h/2; pts=[[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]]; kind="Rect"; }
       else if (type==="Ellipse"){ const rx=+sh.getAttribute("Rx")||0, ry=+sh.getAttribute("Ry")||0; pts=[]; for (let i=0;i<64;i++){ const t=i/64*Math.PI*2; pts.push([rx*Math.cos(t), ry*Math.sin(t)]); } kind="Ellipse"; }
       else if (type==="Path"){ const vl=sh.querySelector("VertList"); if (vl){ pts=verts(vl.textContent); const pl=sh.querySelector("PrimList"); closed = pl ? /Closed/.test(pl.textContent) : false; } }
-      if (pts && pts.length>=2){ const mapped=pts.map(([px,py])=>{ const q=ap(m,px,py); return p(q.x,q.y); }); doc.shapes.push({ kind, cut_index:ci, geometry:{ Polyline:{ points:mapped, closed } } }); added++; }
+      if (pts && pts.length>=2){ const mapped=pts.map(([px,py])=>{ const q=ap(m,px,py); return p(q.x,q.y); }); newShapes.push({ kind, cut_index:ci, geometry:{ Polyline:{ points:mapped, closed } } }); }
     });
-    if (!added){ alert(tr("lbrn.none","No importable shapes found in that LightBurn file.")); return; }
+    if (!newShapes.length){ alert(tr("lbrn.none","No importable shapes found in that LightBurn file.")); return; }
+    // Commit: the file's layers and shapes replace the open document.
+    doc.layers.length = 0; newLayers.forEach(l => doc.layers.push(l));
+    doc.shapes.length = 0; newShapes.forEach(s => doc.shapes.push(s));
     activeLayer = 0; selectOnly(null); snapshot(); renderLayers(); render(); generate(); refreshCounts();
   }
   function importDxf(text){
@@ -3491,6 +3498,7 @@
     else if (act==="lbrn"){ const xml=`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/><speed Value="15"/><maxPower Value="80"/></CutSetting><CutSetting type="Scan"><index Value="1"/><name Value="Engrave"/><speed Value="200"/><maxPower Value="40"/></CutSetting><Shape Type="Rect" CutIndex="0" W="60" H="40"><XForm>1 0 0 1 80 60</XForm></Shape><Shape Type="Ellipse" CutIndex="1" Rx="20" Ry="15"><XForm>1 0 0 1 45 100</XForm></Shape><Shape Type="Path" CutIndex="0"><XForm>1 0 0 1 0 0</XForm><VertList>V10 20V40 20V40 55V10 55</VertList><PrimList>LineClosed</PrimList></Shape><Shape Type="Group"><XForm>1 0 0 1 120 30</XForm><Children><Shape Type="Rect" CutIndex="1" W="22" H="22"><XForm>1 0 0 1 0 0</XForm></Shape></Children></Shape></LightBurnProject>`; doc.shapes=[]; importLbrn(xml); }
     else if (act==="serial"){ doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"SN-%N", x:20, y:95, h:9, gap:9*0.28, align:"left", font:"mark" } } }]; selectOnly(0); doSerialize(1,10,1,4); }
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
+    else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
     else if (act==="mattest"){ doMaterialTest(5,5,10,100,50,400,10); }
     else if (act==="crosshatch"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=true; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
