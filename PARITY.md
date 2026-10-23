@@ -24,7 +24,7 @@ because every item ships at once.
 | 12 | Cuts/Layers window + colour palette | Done | Layers with colour picker, output/show toggles, cut-order reorder. |
 | 13 | Cut settings editor: Line/Fill/Image/Offset-fill | Done | Full editor (double-click a layer) with perforation, wobble, tabs, ramp, timings. |
 | 14 | Speed, max/min power, passes | Done | |
-| 15 | Scan angle, line interval, cross-hatch | Partial | Angle + interval done; cross-hatch: Gap. |
+| 15 | Scan angle, line interval, cross-hatch | Done | Angle-aware hatch (engine), interval, and cross-hatch all work on galvo and G-code. |
 | 16 | Image dithering modes | Done | Floyd-Steinberg, Atkinson, Jarvis, Stucki, Ordered, Threshold, picked in Preferences. |
 | 17 | Trace image (vectorize) | Done | |
 | 18 | Laser window: start, frame, pause, stop | Done | GRBL serial: Run (confirm), Frame (beam-off), Pause/Resume, Stop. |
@@ -45,10 +45,10 @@ because every item ships at once.
 - Text: core + alignment + fonts Done; variable text, text-on-path, bending, bar code: Gap.
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, kerf, tabs, perforation, ramp Done; lead-in/out, overcut, sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
-- Fill/scan: interval, angle Done; cross-hatch, bidirectional, overscan, DPI, fill grouping, flood fill: Gap.
+- Fill/scan: interval, angle, cross-hatch Done (angle honored on galvo and G-code); bidirectional, overscan, DPI, fill grouping, flood fill: Gap.
 - Image/art: trace + dither import Done; adjust image, dither-mode picker, mask, convert-to-bitmap, 3D depth map: Gap.
 - Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); console, macros, file list, bridge: Gap.
-- Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating) Done; units mm/inch, guidelines, snap distances, alignment guides: Gap.
+- Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
 
 ## Beyond LightBurn
 
