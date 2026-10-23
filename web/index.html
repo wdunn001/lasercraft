@@ -120,6 +120,8 @@
   .btn.sm { padding: 3px 10px; font-size: 11px; }
   .devpos { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; color: var(--muted); align-self: center; }
   .pvctl { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .csrule { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+  .csgroup { margin-top: 12px; }
   .gcode pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; line-height: 1.5; color: #cdd3e0; white-space: pre; }
   .stat { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); }
   .stat b { color: var(--ink); }
@@ -363,39 +365,6 @@
   <!-- right-click context menu -->
   <div class="ctxmenu" id="ctxmenu"></div>
 
-  <!-- Cut settings editor -->
-  <div class="modal-bg" id="modalBg">
-    <div class="modal">
-      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 id="csTitle">Cut Settings</h2><span class="spacer"></span><span class="btn" id="csClose">&times;</span></div>
-      <div class="mbody">
-        <div class="seg" id="csMode"></div>
-        <div class="grid3">
-          <div class="f"><label data-i18n="layer.speed">Speed</label><span class="aka">LightBurn Speed &middot; EZCAD Mark Speed</span><input id="cs_speed" type="number" step="1"></div>
-          <div class="f"><label data-i18n="layer.power">Power</label><span class="aka">LB Max Power &middot; EZCAD Power</span><input id="cs_power" type="number" step="1"></div>
-          <div class="f"><label data-i18n="layer.passes">Passes</label><span class="aka">LB Number of Passes</span><input id="cs_passes" type="number" step="1"></div>
-          <div class="f"><label data-i18n="cs.freq">Pulse Frequency</label><span class="aka">LB Frequency</span><input id="cs_freq" type="number" step="0.1"></div>
-          <div class="f"><label data-i18n="cs.qpulse">Pulse Width</label><span class="aka">LB Q-Pulse &middot; EZCAD Q Pulse</span><input id="cs_qpulse" type="number" step="1"></div>
-          <div class="f"><label data-i18n="cs.pmin">Min Power</label><span class="aka">LB Min Power</span><input id="cs_pmin" type="number" step="1"></div>
-        </div>
-        <div class="tabrow"><button class="active" data-cstab="cut" data-i18n="cs.tabcut">Cut</button><button data-cstab="timings" data-i18n="cs.tabtimings">Timings</button></div>
-        <div id="cstab-cut" style="padding-top:14px">
-          <div class="grid3">
-            <div class="f"><label data-i18n="cs.interval">Line Interval</label><span class="aka">LB Line Interval &middot; EZCAD Line Space</span><input id="cs_interval" type="number" step="0.01"></div>
-            <div class="f"><label data-i18n="cs.angle">Hatch Angle</label><span class="aka">LB Angle</span><input id="cs_angle" type="number" step="1"></div>
-            <div class="f"><label data-i18n="layer.air_assist">Air Assist</label><span class="aka">on / off</span><select id="cs_air"><option value="true" data-i18n="cs.on">On</option><option value="false" data-i18n="cs.off">Off</option></select></div>
-          </div>
-        </div>
-        <div id="cstab-timings" class="hidden" style="padding-top:14px">
-          <div class="grid3">
-            <div class="f"><label data-i18n="cs.onus">Laser On Delay</label><span class="aka">LB Laser On TC (us)</span><input id="cs_onus" type="number" step="1"></div>
-            <div class="f"><label data-i18n="cs.offus">Laser Off Delay</label><span class="aka">LB Laser Off TC (us)</span><input id="cs_offus" type="number" step="1"></div>
-            <div class="f"><label data-i18n="cs.polyus">Corner Delay</label><span class="aka">LB Polygon TC (us)</span><input id="cs_polyus" type="number" step="1"></div>
-          </div>
-        </div>
-      </div>
-      <div class="mfoot"><button class="btn" id="csReset" data-i18n="cs.reset">Reset layer</button><span class="spacer"></span><button class="btn" id="csCancel" data-i18n="action.cancel">Cancel</button><button class="btn primary" id="csOk" data-i18n="action.ok">OK</button></div>
-    </div>
-  </div>
 
   <!-- material library -->
   <div class="modal-bg" id="matBg">
@@ -450,6 +419,87 @@
         </div>
       </div>
       <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="pv.note">Green is cutting, grey is rapid travel.</span><button class="btn" id="pvCancel" data-i18n="action.cancel">Close</button></div>
+    </div>
+  </div>
+
+  <!-- cut settings editor -->
+  <div class="modal-bg" id="csBg">
+    <div class="modal" style="width:620px">
+      <div class="mhead"><span class="dot" id="csDot" style="width:12px;height:12px;border-radius:3px;background:#e23"></span><h2 data-i18n="cs.title">Cut settings</h2><span class="spacer"></span><label class="mccap" style="margin-right:12px"><input type="checkbox" id="cs_output"> <span data-i18n="layer.output2">Output</span></label><span class="btn" id="csClose">&times;</span></div>
+      <div class="mbody" style="max-height:66vh;overflow:auto">
+        <div class="f"><label data-i18n="lp.name">Layer name</label><input id="cs_name" style="width:100%"></div>
+        <div class="grid3" style="margin-top:12px">
+          <div class="f"><label data-i18n="lp.mode">Mode</label><select id="cs_mode" style="width:100%"><option value="Line">Line</option><option value="Fill">Fill</option><option value="Concentric">Offset Fill</option><option value="Image">Image</option></select></div>
+          <div class="f"><label data-i18n="lp.speed">Speed mm/s</label><input id="cs_speed" type="number" min="1" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.passes">Passes</label><input id="cs_passes" type="number" min="1" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.power">Power max %</label><input id="cs_power" type="number" min="0" max="100" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.pmin">Power min %</label><input id="cs_pmin" type="number" min="0" max="100" style="width:100%"></div>
+          <div class="f" id="csAirWrap"><label data-i18n="lp.air">Air assist</label><div style="padding-top:6px"><input type="checkbox" id="cs_air" style="width:auto"></div></div>
+        </div>
+        <div class="grid3" id="csGalvoRow" style="margin-top:12px;display:none">
+          <div class="f"><label data-i18n="lp.freq">Frequency kHz</label><input id="cs_freq" type="number" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="cs_qpulse" type="number" style="width:100%"></div>
+          <div></div>
+        </div>
+        <div class="csgroup" id="csFillRow" style="display:none">
+          <div class="grid3">
+            <div class="f"><label data-i18n="lp.interval">Line interval mm</label><input id="cs_interval" type="number" step="0.01" style="width:100%"></div>
+            <div class="f"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="cs_angle" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.angleinc">Angle increment&deg;</label><input id="cs_angleinc" type="number" style="width:100%"></div>
+          </div>
+          <div class="grid3" style="margin-top:10px">
+            <label class="mccap"><input type="checkbox" id="cs_autorotate"> <span data-i18n="cs.autorotate">Auto-rotate</span></label>
+            <div class="f"><label data-i18n="cs.ramp">Ramp length mm</label><input id="cs_ramp" type="number" step="0.1" style="width:100%"></div>
+            <label class="mccap"><input type="checkbox" id="cs_dotadj"> <span data-i18n="cs.dotadjust">Dot-width adjust</span></label>
+          </div>
+        </div>
+        <hr class="csrule">
+        <div class="grid3">
+          <div class="f"><label data-i18n="lp.kerf">Kerf offset mm</label><input id="cs_kerf" type="number" step="0.01" style="width:100%"></div>
+          <label class="mccap"><input type="checkbox" id="cs_perf"> <span data-i18n="cs.perf">Perforation</span></label>
+          <label class="mccap"><input type="checkbox" id="cs_wobble"> <span data-i18n="cs.wobble">Wobble</span></label>
+        </div>
+        <div class="grid3" id="csPerfRow" style="margin-top:10px;display:none">
+          <div class="f"><label data-i18n="cs.perfcut">Perf cut mm</label><input id="cs_perfcut" type="number" step="0.05" style="width:100%"></div>
+          <div class="f"><label data-i18n="cs.perfskip">Perf skip mm</label><input id="cs_perfskip" type="number" step="0.05" style="width:100%"></div>
+          <div></div>
+        </div>
+        <div class="grid3" id="csWobRow" style="margin-top:10px;display:none">
+          <div class="f"><label data-i18n="cs.wobstep">Wobble step mm</label><input id="cs_wobstep" type="number" step="0.01" style="width:100%"></div>
+          <div class="f"><label data-i18n="cs.wobsize">Wobble size mm</label><input id="cs_wobsize" type="number" step="0.01" style="width:100%"></div>
+          <div></div>
+        </div>
+        <hr class="csrule">
+        <label class="mccap"><input type="checkbox" id="cs_tabs"> <span data-i18n="lp.tabs">Tabs / bridges</span></label>
+        <div id="csTabRow" style="margin-top:10px;display:none">
+          <div class="grid3">
+            <div class="f"><label data-i18n="cs.tabsize">Tab size mm</label><input id="cs_tabsize" type="number" step="0.1" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.tabspacing">Even spacing mm</label><input id="cs_tabspacing" type="number" step="1" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.tabspershape">Tabs per shape</label><input id="cs_tabspershape" type="number" min="1" style="width:100%"></div>
+          </div>
+          <div class="grid3" style="margin-top:10px">
+            <div class="f"><label data-i18n="cs.tabpower">Tab cut power %</label><input id="cs_tabpower" type="number" min="0" max="100" style="width:100%"></div>
+            <label class="mccap"><input type="checkbox" id="cs_tabskipinner"> <span data-i18n="cs.tabskipinner">Skip inner shapes</span></label>
+            <div></div>
+          </div>
+        </div>
+        <hr class="csrule">
+        <label class="mccap"><input type="checkbox" id="cs_timing"> <span data-i18n="cs.timing">Override default timings</span></label>
+        <div id="csTimeRow" style="margin-top:10px;display:none">
+          <div class="grid3">
+            <div class="f"><label data-i18n="cs.jumpspeed">Jump speed mm/s</label><input id="cs_jumpspeed" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.minjump">Min jump delay us</label><input id="cs_minjump" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.maxjump">Max jump delay us</label><input id="cs_maxjump" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.laseron">Laser on TC us</label><input id="cs_laseron" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.laseroff">Laser off TC us</label><input id="cs_laseroff" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.endtc">End TC us</label><input id="cs_endtc" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.polytc">Polygon TC us</label><input id="cs_polytc" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.pausebefore">Pause before ms</label><input id="cs_pausebefore" type="number" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.pauseafter">Pause after ms</label><input id="cs_pauseafter" type="number" style="width:100%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="mfoot"><button class="btn" id="csDefault" data-i18n="cs.makedefault">Make default</button><span class="spacer"></span><button class="btn" id="csCancel" data-i18n="action.cancel">Cancel</button><button class="btn primary" id="csOk" data-i18n="action.ok">OK</button></div>
     </div>
   </div>
 
@@ -1198,7 +1248,9 @@
       // Click a row: make it active, and select its shapes on the canvas so the
       // selection and the layer stay in step.
       el.onclick=(ev)=>{ if (ev.target.closest(".sw")||ev.target.closest(".sw-toggle")||ev.target.closest(".eye")) return; activeLayer=i; selectLayerShapes(L.index); renderLayers(); render(); };
-      // Double-click the name to rename in place.
+      // Double-click a row opens the full Cut Settings Editor; double-click the
+      // name alone renames in place.
+      el.ondblclick=(ev)=>{ if (ev.target.closest(".sw")||ev.target.closest(".sw-toggle")||ev.target.closest(".eye")||ev.target.closest(".n")) return; openCutSettings(i); };
       el.querySelector(".n").ondblclick=(ev)=>{ ev.stopPropagation(); beginRenameLayer(el, i); };
       // Click the swatch to open the color palette for this layer.
       el.querySelector(".sw").onclick=(ev)=>{ ev.stopPropagation(); openColorPicker(ev.currentTarget, L); };
@@ -1285,7 +1337,8 @@
       + (galvo?`<div class="f2"><label data-i18n="lp.freq">Frequency kHz</label><input id="lp_freq" type="number" value="${L.freq}"></div><div class="f2"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="lp_qpulse" type="number" value="${L.qpulse}"></div>`:"")
       + (L.mode==="Line"?`<div class="f2"><label data-i18n="lp.kerf">Kerf offset mm</label><input id="lp_kerf" type="number" step="0.01" value="${L.kerf||0}"></div><div class="f2"><label></label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="lp_tabs" style="width:auto" ${L.tabs?"checked":""}> <span data-i18n="lp.tabs">Tabs / bridges</span></label></div>`:"")
       + ((L.mode==="Line"&&L.tabs)?`<div class="f2"><label data-i18n="lp.tabsize">Tab size mm</label><input id="lp_tabsize" type="number" step="0.1" value="${L.tabSize||0.5}"></div><div class="f2"><label data-i18n="lp.tabspace">Tab spacing mm</label><input id="lp_tabspace" type="number" step="1" value="${L.tabSpacing||50}"></div>`:"")
-      + (curAir?`<div class="f2 full"><label><input type="checkbox" id="lp_air" style="width:auto" ${L.air_assist?"checked":""}> <span data-i18n="lp.air">Air assist</span></label></div>`:"");
+      + (curAir?`<div class="f2 full"><label><input type="checkbox" id="lp_air" style="width:auto" ${L.air_assist?"checked":""}> <span data-i18n="lp.air">Air assist</span></label></div>`:"")
+      + `<div class="f2 full"><button class="btn sm" id="lp_edit" style="width:100%" data-i18n="cs.editcut">Edit cut settings&hellip;</button></div>`;
     localizeIn(host);
     const commit=()=>{ render(); generate(); renderLayers(); };
     $("lp_seg").querySelectorAll("button").forEach(b=>b.onclick=()=>{ L.mode=b.dataset.m; snapshot(); commit(); });
@@ -1304,6 +1357,7 @@
     bind("lp_tabspace",e=>L.tabSpacing=+e.value||50);
     const air=$("lp_air"); if(air) air.onchange=()=>{ L.air_assist=air.checked; };
     const tabs=$("lp_tabs"); if(tabs) tabs.onchange=()=>{ L.tabs=tabs.checked; snapshot(); commit(); };
+    const edit=$("lp_edit"); if(edit) edit.onclick=()=>openCutSettings(activeLayer);
   }
   // Add a new colour-coded layer and select it.
   function addLayer(){
@@ -1311,26 +1365,57 @@
     doc.layers.push(layer(idx, "Layer "+String(idx).padStart(2,"0"), 100, 30, "Line"));
     activeLayer = doc.layers.length - 1; snapshot(); renderLayers();
   }
-
-  // ---- cut settings modal ----
-  let editing=0;
-  const MODES=[["Line","outline"],["Fill","hatch"],["Concentric","offset"],["Image","bitmap"]];
-  function openCutSettings(i){
-    editing=i; const L=doc.layers[i];
-    $("csTitle").textContent = `${(I18N[curLang] && I18N[curLang]["cs.title"]) || "Cut Settings"} ${String(L.index).padStart(2,"0")} (${L.name})`;
-    const seg=$("csMode"); seg.innerHTML="";
-    MODES.forEach(([m,aka])=>{ const b=document.createElement("button"); b.className=(L.mode===m?"active":""); b.innerHTML=`${trMode(m)}<span class="aka">${aka}</span>`; b.onclick=()=>{ seg.querySelectorAll("button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); L._mode=m; }; seg.appendChild(b); });
-    L._mode=L.mode;
-    $("cs_speed").value=L.speed_mm_s; $("cs_power").value=L.power_max; $("cs_passes").value=L.num_passes;
-    $("cs_freq").value=L.freq; $("cs_qpulse").value=L.qpulse; $("cs_pmin").value=L.power_min;
-    $("cs_interval").value=L.interval; $("cs_angle").value=L.angle; $("cs_air").value=String(L.air_assist);
-    $("cs_onus").value=L.on_us; $("cs_offus").value=L.off_us; $("cs_polyus").value=L.poly_us;
-    $("modalBg").classList.add("show");
+  // ---- full Cut Settings Editor (the detailed per-layer dialog) ----
+  let csLayer = -1;
+  const csV = (id)=>$(id).value, csC = (id)=>$(id).checked;
+  function csUpdateVis(){
+    $("csGalvoRow").style.display = isGalvo() ? "grid" : "none";
+    $("csAirWrap").style.display = curAir ? "" : "none";   // air assist only when the machine has it
+    const m = csV("cs_mode");
+    $("csFillRow").style.display = (m==="Fill"||m==="Concentric") ? "" : "none";
+    $("csPerfRow").style.display = csC("cs_perf") ? "grid" : "none";
+    $("csWobRow").style.display = csC("cs_wobble") ? "grid" : "none";
+    $("csTabRow").style.display = csC("cs_tabs") ? "" : "none";
+    $("csTimeRow").style.display = csC("cs_timing") ? "" : "none";
   }
-  function closeCS(){ $("modalBg").classList.remove("show"); }
-  $("csClose").onclick=$("csCancel").onclick=closeCS;
-  document.querySelectorAll("[data-cstab]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-cstab]").forEach(x=>x.classList.toggle("active",x===b)); $("cstab-cut").classList.toggle("hidden",b.dataset.cstab!=="cut"); $("cstab-timings").classList.toggle("hidden",b.dataset.cstab!=="timings"); });
-  $("csOk").onclick=()=>{ const L=doc.layers[editing]; L.mode=L._mode||L.mode; L.speed_mm_s=+$("cs_speed").value; L.power_max=+$("cs_power").value; L.num_passes=+$("cs_passes").value; L.freq=+$("cs_freq").value; L.qpulse=+$("cs_qpulse").value; L.power_min=+$("cs_pmin").value; L.interval=+$("cs_interval").value; L.angle=+$("cs_angle").value; L.air_assist=$("cs_air").value==="true"; L.on_us=+$("cs_onus").value; L.off_us=+$("cs_offus").value; L.poly_us=+$("cs_polyus").value; closeCS(); snapshot(); renderLayers(); render(); generate(); };
+  function openCutSettings(i){
+    const L = doc.layers[i]; if (!L) return; csLayer = i;
+    $("csDot").style.background = layerColor(L);
+    $("cs_name").value = L.name; $("cs_output").checked = L.output !== false; $("cs_mode").value = L.mode;
+    $("cs_speed").value = L.speed_mm_s; $("cs_passes").value = L.num_passes; $("cs_power").value = L.power_max; $("cs_pmin").value = L.power_min;
+    $("cs_air").checked = !!L.air_assist; $("cs_freq").value = L.freq; $("cs_qpulse").value = L.qpulse;
+    $("cs_interval").value = L.interval; $("cs_angle").value = L.angle; $("cs_angleinc").value = L.angleInc||0;
+    $("cs_autorotate").checked = !!L.autoRotate; $("cs_ramp").value = L.ramp||0; $("cs_dotadj").checked = !!L.dotAdjust;
+    $("cs_kerf").value = L.kerf||0; $("cs_perf").checked = !!L.perf; $("cs_perfcut").value = L.perfCut||0.1; $("cs_perfskip").value = L.perfSkip||0.1;
+    $("cs_wobble").checked = !!L.wobble; $("cs_wobstep").value = L.wobStep||0.05; $("cs_wobsize").value = L.wobSize||0.1;
+    $("cs_tabs").checked = !!L.tabs; $("cs_tabsize").value = L.tabSize||0.5; $("cs_tabspacing").value = L.tabSpacing||50;
+    $("cs_tabspershape").value = L.tabsPerShape||1; $("cs_tabpower").value = L.tabPower||0; $("cs_tabskipinner").checked = !!L.tabSkipInner;
+    $("cs_timing").checked = !!L.timing; $("cs_jumpspeed").value = L.jumpSpeed||4000; $("cs_minjump").value = L.minJump!=null?L.minJump:500; $("cs_maxjump").value = L.maxJump!=null?L.maxJump:500;
+    $("cs_laseron").value = L.onTc!=null?L.onTc:-300; $("cs_laseroff").value = L.offTc!=null?L.offTc:100; $("cs_endtc").value = L.endTc!=null?L.endTc:300; $("cs_polytc").value = L.polyTc!=null?L.polyTc:100;
+    $("cs_pausebefore").value = L.pauseBefore||0; $("cs_pauseafter").value = L.pauseAfter||0;
+    csUpdateVis(); localizeIn($("csBg")); $("csBg").classList.add("show");
+  }
+  function csApply(){
+    const L = doc.layers[csLayer]; if (!L) return;
+    const n=(id,d)=>{ const v=+csV(id); return Number.isFinite(v)?v:d; };
+    L.name = csV("cs_name").trim() || L.name; L.output = csC("cs_output"); L.mode = csV("cs_mode");
+    L.speed_mm_s = n("cs_speed",100); L.num_passes = Math.max(1,n("cs_passes",1)); L.power_max = n("cs_power",0); L.power_min = n("cs_pmin",0);
+    L.air_assist = csC("cs_air"); L.freq = n("cs_freq",30); L.qpulse = n("cs_qpulse",200);
+    L.interval = n("cs_interval",0.1); L.angle = n("cs_angle",0); L.angleInc = n("cs_angleinc",0);
+    L.autoRotate = csC("cs_autorotate"); L.ramp = n("cs_ramp",0); L.dotAdjust = csC("cs_dotadj");
+    L.kerf = n("cs_kerf",0); L.perf = csC("cs_perf"); L.perfCut = n("cs_perfcut",0.1); L.perfSkip = n("cs_perfskip",0.1);
+    L.wobble = csC("cs_wobble"); L.wobStep = n("cs_wobstep",0.05); L.wobSize = n("cs_wobsize",0.1);
+    L.tabs = csC("cs_tabs"); L.tabSize = n("cs_tabsize",0.5); L.tabSpacing = n("cs_tabspacing",50);
+    L.tabsPerShape = Math.max(1,n("cs_tabspershape",1)); L.tabPower = n("cs_tabpower",0); L.tabSkipInner = csC("cs_tabskipinner");
+    L.timing = csC("cs_timing"); L.jumpSpeed = n("cs_jumpspeed",4000); L.minJump = n("cs_minjump",500); L.maxJump = n("cs_maxjump",500);
+    L.onTc = n("cs_laseron",-300); L.offTc = n("cs_laseroff",100); L.endTc = n("cs_endtc",300); L.polyTc = n("cs_polytc",100);
+    L.pauseBefore = n("cs_pausebefore",0); L.pauseAfter = n("cs_pauseafter",0);
+  }
+  ["cs_mode","cs_perf","cs_wobble","cs_tabs","cs_timing"].forEach(id => $(id) && ($(id).onchange = csUpdateVis));
+  $("csOk") && ($("csOk").onclick = () => { csApply(); $("csBg").classList.remove("show"); snapshot(); renderLayers(); render(); generate(); });
+  $("csClose") && ($("csClose").onclick = $("csCancel").onclick = () => $("csBg").classList.remove("show"));
+  $("csDefault") && ($("csDefault").onclick = () => { csApply(); try { localStorage.setItem("lc_layerdefault", JSON.stringify(doc.layers[csLayer])); } catch(e){} });
+
 
   // ---- material library: presets scoped to a specific machine ----
   // A material carries a stack of finishes. Each finish is a full starting-point
@@ -1725,11 +1810,11 @@
         index:L.index, name:L.name, speed_mm_s:L.speed_mm_s, power_min:L.power_min, power_max:L.power_max,
         num_passes:L.num_passes, air_assist:L.air_assist,
         galvo: { mode:L.mode, frequency_khz:L.freq, q_pulse_width_ns:L.qpulse, global_passes:1,
-          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:0, auto_rotate:false, dot_width_adjust:false, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:false },
+          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:L.angleInc||0, auto_rotate:!!L.autoRotate, dot_width_adjust:!!L.dotAdjust, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:!!L.rampOuter },
           line:{ kerf_offset_mm:L.kerf||0, perforation:!!L.perf, perforation_cut_mm:L.perfCut||0.1, perforation_skip_mm:L.perfSkip||0.1 },
-          tabs:{ enabled:!!L.tabs, automatic:true, size_mm:L.tabSize||0.5, spacing_mm:L.tabSpacing||50, tabs_per_shape:1, skip_inner_shapes:false, cut_power_pct:0 },
-          wobble:{ enabled:false, step_mm:0.05, size_mm:0.1 },
-          timing_override:{ jump_speed_mm_s:4000, min_jump_delay_us:500, max_jump_delay_us:500, jump_distance_limit_mm:0, laser_on_tc_us:L.on_us, laser_off_tc_us:L.off_us, end_tc_us:300, polygon_tc_us:L.poly_us, pause_before_ms:0, pause_after_ms:0 } },
+          tabs:{ enabled:!!L.tabs, automatic:true, size_mm:L.tabSize||0.5, spacing_mm:L.tabSpacing||50, tabs_per_shape:L.tabsPerShape||1, skip_inner_shapes:!!L.tabSkipInner, cut_power_pct:L.tabPower||0 },
+          wobble:{ enabled:!!L.wobble, step_mm:L.wobStep||0.05, size_mm:L.wobSize||0.1 },
+          timing_override:{ jump_speed_mm_s:L.jumpSpeed||4000, min_jump_delay_us:L.minJump!=null?L.minJump:500, max_jump_delay_us:L.maxJump!=null?L.maxJump:500, jump_distance_limit_mm:0, laser_on_tc_us:L.timing?L.onTc:L.on_us, laser_off_tc_us:L.timing?L.offTc:L.off_us, end_tc_us:L.endTc!=null?L.endTc:300, polygon_tc_us:L.timing?L.polyTc:L.poly_us, pause_before_ms:L.pauseBefore||0, pause_after_ms:L.pauseAfter||0 } },
       })),
     };
   }
@@ -2540,6 +2625,10 @@
   Object.assign(I18N.de, { "action.lock":"Sperren","action.unlock":"Alle entsperren" });
   Object.assign(I18N.fr, { "action.lock":"Verrouiller","action.unlock":"Tout déverrouiller" });
   Object.assign(I18N["pt-BR"], { "action.lock":"Bloquear","action.unlock":"Desbloquear tudo" });
+  Object.assign(I18N.es, { "cs.title":"Ajustes de corte","layer.output2":"Salida","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Predeterminar","cs.angleinc":"Incremento de ángulo°","cs.autorotate":"Auto-rotar","cs.ramp":"Longitud de rampa mm","cs.dotadjust":"Ajuste de ancho de punto","cs.perf":"Perforación","cs.wobble":"Oscilación","cs.perfcut":"Corte de perf. mm","cs.perfskip":"Salto de perf. mm","cs.wobstep":"Paso de oscilación mm","cs.wobsize":"Tamaño de oscilación mm","cs.tabsize":"Tamaño de pestaña mm","cs.tabspacing":"Espaciado uniforme mm","cs.tabspershape":"Pestañas por forma","cs.tabpower":"Potencia de pestaña %","cs.tabskipinner":"Omitir formas interiores","cs.timing":"Anular tiempos predeterminados","cs.jumpspeed":"Velocidad de salto mm/s","cs.minjump":"Retardo mín. de salto us","cs.maxjump":"Retardo máx. de salto us","cs.laseron":"Láser encendido TC us","cs.laseroff":"Láser apagado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa después ms" });
+  Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","layer.output2":"Ausgabe","lp.mode":"Modus","cs.editcut":"Schnitteinstellungen bearbeiten…","cs.makedefault":"Als Standard","cs.angleinc":"Winkelinkrement°","cs.autorotate":"Auto-Drehen","cs.ramp":"Rampenlänge mm","cs.dotadjust":"Punktbreiten-Anpassung","cs.perf":"Perforation","cs.wobble":"Wobbeln","cs.perfcut":"Perf. Schnitt mm","cs.perfskip":"Perf. Sprung mm","cs.wobstep":"Wobbel-Schritt mm","cs.wobsize":"Wobbel-Größe mm","cs.tabsize":"Steggröße mm","cs.tabspacing":"Gleichmäßiger Abstand mm","cs.tabspershape":"Stege pro Form","cs.tabpower":"Stegleistung %","cs.tabskipinner":"Innere Formen überspringen","cs.timing":"Standardzeiten überschreiben","cs.jumpspeed":"Sprunggeschwindigkeit mm/s","cs.minjump":"Min. Sprungverzögerung us","cs.maxjump":"Max. Sprungverzögerung us","cs.laseron":"Laser-Ein TC us","cs.laseroff":"Laser-Aus TC us","cs.endtc":"End-TC us","cs.polytc":"Polygon-TC us","cs.pausebefore":"Pause davor ms","cs.pauseafter":"Pause danach ms" });
+  Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","layer.output2":"Sortie","lp.mode":"Mode","cs.editcut":"Modifier les réglages de coupe…","cs.makedefault":"Par défaut","cs.angleinc":"Incrément d'angle°","cs.autorotate":"Rotation auto","cs.ramp":"Longueur de rampe mm","cs.dotadjust":"Ajustement largeur de point","cs.perf":"Perforation","cs.wobble":"Oscillation","cs.perfcut":"Coupe perf. mm","cs.perfskip":"Saut perf. mm","cs.wobstep":"Pas d'oscillation mm","cs.wobsize":"Taille d'oscillation mm","cs.tabsize":"Taille de patte mm","cs.tabspacing":"Espacement régulier mm","cs.tabspershape":"Pattes par forme","cs.tabpower":"Puissance de patte %","cs.tabskipinner":"Ignorer formes intérieures","cs.timing":"Remplacer les délais par défaut","cs.jumpspeed":"Vitesse de saut mm/s","cs.minjump":"Délai min. de saut us","cs.maxjump":"Délai max. de saut us","cs.laseron":"Laser activé TC us","cs.laseroff":"Laser désactivé TC us","cs.endtc":"TC de fin us","cs.polytc":"TC de polygone us","cs.pausebefore":"Pause avant ms","cs.pauseafter":"Pause après ms" });
+  Object.assign(I18N["pt-BR"], { "cs.title":"Ajustes de corte","layer.output2":"Saída","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Tornar padrão","cs.angleinc":"Incremento de ângulo°","cs.autorotate":"Auto-rotação","cs.ramp":"Comprimento da rampa mm","cs.dotadjust":"Ajuste largura do ponto","cs.perf":"Perfuração","cs.wobble":"Oscilação","cs.perfcut":"Corte perf. mm","cs.perfskip":"Salto perf. mm","cs.wobstep":"Passo de oscilação mm","cs.wobsize":"Tamanho de oscilação mm","cs.tabsize":"Tamanho da aba mm","cs.tabspacing":"Espaçamento uniforme mm","cs.tabspershape":"Abas por forma","cs.tabpower":"Potência da aba %","cs.tabskipinner":"Pular formas internas","cs.timing":"Substituir tempos padrão","cs.jumpspeed":"Velocidade de salto mm/s","cs.minjump":"Atraso mín. de salto us","cs.maxjump":"Atraso máx. de salto us","cs.laseron":"Laser ligado TC us","cs.laseroff":"Laser desligado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa depois ms" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -2613,6 +2702,7 @@
     else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selectOnly(0); booleanWith("difference"); render(); refreshCounts(); }
     else if (act==="materials"){ openMaterials(); }
     else if (act==="preview"){ generate(); openPreview(); }
+    else if (act==="cutsettings"){ openCutSettings(0); }
     else if (act==="star"){ doc.shapes.push(star(75,55,40,40,5,0)); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="cs"){ openCutSettings(2); }
     else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
