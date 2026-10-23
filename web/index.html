@@ -33,6 +33,20 @@
   .mccaps { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
   .mccap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); cursor: pointer; }
   .mccap input { width: auto; }
+  .matbar { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
+  .matbar .matmachine { font-weight: 700; font-size: 14px; }
+  .matempty { color: var(--muted); padding: 24px 6px; text-align: center; }
+  .matcard { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .matcard-h { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel2); }
+  .matcard-h .matname { font-weight: 700; }
+  .matcard-h .matthk { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 1px 7px; }
+  .fxrow { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--line); cursor: pointer; }
+  .fxrow:hover { background: var(--field); }
+  .fxdot { width: 9px; height: 9px; border-radius: 2px; background: #39f; flex: 0 0 auto; }
+  .fxdot.fill { background: #fb0; border-radius: 50%; } .fxdot.image { background: #b5f; } .fxdot.concentric { background: #0cc; }
+  .fxrow .fxname { font-weight: 600; min-width: 92px; }
+  .fxrow .fxsum { color: var(--muted); font-size: 12px; }
+  .fxrow .fxnote { color: var(--faint); font-size: 11.5px; font-style: italic; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .btn.ok { color: var(--ok); }
 
   /* workspace grid */
@@ -341,10 +355,40 @@
 
   <!-- material library -->
   <div class="modal-bg" id="matBg">
-    <div class="modal" style="width:580px">
+    <div class="modal" style="width:680px">
       <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="mat.title">Material Library</h2><span class="spacer"></span><span class="btn" id="matClose">&times;</span></div>
-      <div class="mbody" id="matList" style="max-height:60vh;overflow:auto"></div>
+      <div class="matbar">
+        <span class="matmachine" id="matMachine"></span>
+        <span class="spacer"></span>
+        <button class="btn sm" id="matImport" data-i18n="mat.import">Import&hellip;</button>
+        <button class="btn sm" id="matExport" data-i18n="mat.export">Export</button>
+        <button class="btn sm primary" id="matAdd" data-i18n="mat.addmat">Add material</button>
+      </div>
+      <div class="mbody" id="matList" style="max-height:56vh;overflow:auto"></div>
       <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="mat.note">Starting points only. Always test on scrap first.</span><button class="btn" id="matCancel" data-i18n="action.cancel">Close</button></div>
+    </div>
+    <input type="file" id="matFile" accept=".json,.lbset,.lbsettings,.clb,.xml,.csv" class="hidden" />
+  </div>
+
+  <!-- finish editor -->
+  <div class="modal-bg" id="fxBg">
+    <div class="modal" style="width:440px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 id="fxTitle" data-i18n="fx.title">Finish</h2><span class="spacer"></span><span class="btn" id="fxClose">&times;</span></div>
+      <div class="mbody">
+        <div class="f"><label data-i18n="fx.name">Finish name</label><input id="fx_name" style="width:100%" placeholder="Through cut"></div>
+        <div class="f" style="margin-top:12px"><label data-i18n="fx.mode">Mode</label><select id="fx_mode" style="width:100%"><option value="Line">Line</option><option value="Fill">Fill</option><option value="Concentric">Concentric</option><option value="Image">Image</option></select></div>
+        <div class="grid3" style="margin-top:12px">
+          <div class="f"><label data-i18n="lp.speed">Speed mm/s</label><input id="fx_speed" type="number" min="1" value="100" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.power">Power max %</label><input id="fx_power" type="number" min="0" max="100" value="50" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.pmin">Power min %</label><input id="fx_pmin" type="number" min="0" max="100" value="0" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.passes">Passes</label><input id="fx_passes" type="number" min="1" value="1" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.interval">Interval mm</label><input id="fx_interval" type="number" step="0.05" value="0.1" style="width:100%"></div>
+          <div class="f"><label data-i18n="lp.freq">Freq kHz</label><input id="fx_freq" type="number" value="30" style="width:100%"></div>
+        </div>
+        <div class="f" style="margin-top:12px"><label data-i18n="fx.note">Expected effect / note</label><input id="fx_note" style="width:100%" placeholder="Clean edge, light flashback"></div>
+        <label class="mccap" style="margin-top:12px"><input type="checkbox" id="fx_air"> <span data-i18n="lp.air">Air assist</span></label>
+      </div>
+      <div class="mfoot"><button class="btn danger" id="fxDelete" style="display:none" data-i18n="mc.delete">Delete</button><span class="spacer"></span><button class="btn" id="fxCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="fxOk" data-i18n="mc.save">Save</button></div>
     </div>
   </div>
 
@@ -1086,50 +1130,212 @@
   document.querySelectorAll("[data-cstab]").forEach(b=>b.onclick=()=>{ document.querySelectorAll("[data-cstab]").forEach(x=>x.classList.toggle("active",x===b)); $("cstab-cut").classList.toggle("hidden",b.dataset.cstab!=="cut"); $("cstab-timings").classList.toggle("hidden",b.dataset.cstab!=="timings"); });
   $("csOk").onclick=()=>{ const L=doc.layers[editing]; L.mode=L._mode||L.mode; L.speed_mm_s=+$("cs_speed").value; L.power_max=+$("cs_power").value; L.num_passes=+$("cs_passes").value; L.freq=+$("cs_freq").value; L.qpulse=+$("cs_qpulse").value; L.power_min=+$("cs_pmin").value; L.interval=+$("cs_interval").value; L.angle=+$("cs_angle").value; L.air_assist=$("cs_air").value==="true"; L.on_us=+$("cs_onus").value; L.off_us=+$("cs_offus").value; L.poly_us=+$("cs_polyus").value; closeCS(); snapshot(); renderLayers(); render(); generate(); };
 
-  // ---- material library (starting-point settings per material) ----
-  const MATERIALS = {
-    "Fiber (galvo)": [
-      { name:"Anodized aluminium (mark)", speed:2000, power:40, passes:1, freq:30 },
-      { name:"Stainless (dark mark)", speed:300, power:80, passes:1, freq:60 },
-      { name:"Stainless (anneal)", speed:150, power:60, passes:2, freq:200 },
-      { name:"Brass (engrave)", speed:500, power:70, passes:1, freq:40 },
-      { name:"Plastic (mark)", speed:1000, power:30, passes:1, freq:30 },
-    ],
-    "CO2 / Diode": [
-      { name:"Plywood 3 mm (cut)", speed:10, power:90, passes:2 },
-      { name:"Plywood 3 mm (engrave)", speed:150, power:30, passes:1 },
-      { name:"Acrylic 3 mm (cut)", speed:8, power:95, passes:1 },
-      { name:"Acrylic (engrave)", speed:200, power:35, passes:1 },
-      { name:"Leather 2 mm (cut)", speed:30, power:60, passes:1 },
-      { name:"Cardstock (cut)", speed:60, power:40, passes:1 },
-      { name:"Paper (score)", speed:120, power:15, passes:1 },
-    ],
-  };
-  function openMaterials(){
-    const host = $("matList"); host.innerHTML = "";
-    for (const [cat, items] of Object.entries(MATERIALS)){
-      const h = document.createElement("h3"); h.textContent = cat; h.style.cssText = "font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin:12px 0 7px"; host.appendChild(h);
-      items.forEach(m => {
-        const row = document.createElement("div");
-        row.style.cssText = "display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer";
-        row.innerHTML = `<span style="flex:1;font-weight:600">${m.name}</span><span style="color:var(--muted);font-size:12px">${m.speed} mm/s &middot; ${m.power}%${m.passes>1?` &middot; ${m.passes}&times;`:""}${m.freq?` &middot; ${m.freq} kHz`:""}</span>`;
-        row.onmouseenter = () => row.style.borderColor = "var(--accent)";
-        row.onmouseleave = () => row.style.borderColor = "var(--line)";
-        row.onclick = () => applyMaterial(m);
-        host.appendChild(row);
-      });
-    }
-    $("matBg").classList.add("show");
+  // ---- material library: presets scoped to a specific machine ----
+  // A material carries a stack of finishes. Each finish is a full starting-point
+  // recipe (mode, speed, power, passes, and galvo or hatch extras) plus a note on
+  // the effect it produces. Presets live per machine in localStorage and seed from
+  // a controller-appropriate default the first time a machine is opened.
+  function seedMaterials(ctrl){
+    if (ctrl === "galvo") return [
+      { name:"Anodized aluminium", thickness:0, finishes:[
+        { name:"White mark", mode:"Fill", speed:2000, power:40, pmin:0, passes:1, interval:0.03, freq:30, note:"Bright white, no ablation" } ] },
+      { name:"Stainless steel", thickness:0, finishes:[
+        { name:"Dark mark", mode:"Fill", speed:300, power:80, pmin:0, passes:1, interval:0.02, freq:60, note:"Black oxide mark" },
+        { name:"Anneal", mode:"Fill", speed:150, power:60, pmin:0, passes:2, interval:0.02, freq:200, note:"Heat anneal, surface intact" } ] },
+      { name:"Brass", thickness:0, finishes:[
+        { name:"Engrave", mode:"Fill", speed:500, power:70, pmin:0, passes:1, interval:0.02, freq:40, note:"Shallow engrave" } ] },
+      { name:"Plastic", thickness:0, finishes:[
+        { name:"Mark", mode:"Fill", speed:1000, power:30, pmin:0, passes:1, interval:0.03, freq:30, note:"Contrast mark" } ] },
+    ];
+    return [
+      { name:"Plywood 3 mm", thickness:3, finishes:[
+        { name:"Cut", mode:"Line", speed:10, power:90, pmin:0, passes:2, air:true, note:"Through cut" },
+        { name:"Score", mode:"Line", speed:120, power:15, pmin:0, passes:1, note:"Light scoreline" },
+        { name:"Engrave", mode:"Fill", speed:150, power:30, pmin:0, passes:1, interval:0.1, note:"Surface raster" } ] },
+      { name:"Acrylic 3 mm", thickness:3, finishes:[
+        { name:"Cut", mode:"Line", speed:8, power:95, pmin:0, passes:1, note:"Flame-polished edge" },
+        { name:"Engrave", mode:"Fill", speed:200, power:35, pmin:0, passes:1, interval:0.1, note:"Frosted raster" } ] },
+      { name:"Leather 2 mm", thickness:2, finishes:[
+        { name:"Cut", mode:"Line", speed:30, power:60, pmin:0, passes:1, air:true },
+        { name:"Engrave", mode:"Fill", speed:250, power:25, pmin:0, passes:1, interval:0.12 } ] },
+      { name:"Cardstock", thickness:0.3, finishes:[
+        { name:"Cut", mode:"Line", speed:60, power:40, pmin:0, passes:1 },
+        { name:"Score", mode:"Line", speed:150, power:12, pmin:0, passes:1 } ] },
+    ];
   }
-  function applyMaterial(m){
-    const L = doc.layers[activeLayer];
-    L.speed_mm_s = m.speed; L.power_max = m.power; L.num_passes = m.passes || 1;
-    if (m.freq) L.freq = m.freq;
+  function currentMachine(){ return allMachines()[+$("machine").value] || allMachines()[0] || { name:"Machine", ctrl:"grbl" }; }
+  function allMaterialStore(){ try { return JSON.parse(localStorage.getItem("lc_materials") || "{}"); } catch(e){ return {}; } }
+  function materialsFor(mc){ const store = allMaterialStore(); if (!store[mc.name]){ store[mc.name] = seedMaterials(mc.ctrl); } return store[mc.name]; }
+  function saveMaterialsFor(mc, mats){ const store = allMaterialStore(); store[mc.name] = mats; try { localStorage.setItem("lc_materials", JSON.stringify(store)); } catch(e){} }
+  function finishSummary(f){
+    const bits = [`${f.speed} mm/s`, `${f.power}%`];
+    if (f.passes>1) bits.push(`${f.passes}×`);
+    if (f.freq && currentMachine().ctrl==="galvo") bits.push(`${f.freq} kHz`);
+    if (f.air) bits.push(tr("lp.air","Air"));
+    return bits.join(" · ");
+  }
+  function renderMaterials(){
+    const mc = currentMachine(); const mats = materialsFor(mc);
+    $("matMachine").textContent = mc.name;
+    const host = $("matList"); host.innerHTML = "";
+    if (!mats.length){ const e=document.createElement("div"); e.className="matempty"; e.textContent = tr("mat.empty","No materials yet. Add one or import a library."); host.appendChild(e); }
+    mats.forEach((m, mi) => {
+      const card = document.createElement("div"); card.className = "matcard";
+      const head = document.createElement("div"); head.className = "matcard-h";
+      head.innerHTML = `<span class="matname">${m.name}</span>${m.thickness?`<span class="matthk">${m.thickness} mm</span>`:""}<span class="spacer"></span>`;
+      const addFx = document.createElement("button"); addFx.className="btn sm"; addFx.textContent = tr("mat.addfinish","+ Finish"); addFx.onclick = ()=>openFinishEditor(mi, null);
+      const edM = document.createElement("button"); edM.className="btn sm"; edM.textContent = tr("action.rename","Rename"); edM.onclick = ()=>renameMaterial(mi);
+      const delM = document.createElement("button"); delM.className="btn sm danger"; delM.textContent = tr("mc.delete","Delete"); delM.onclick = ()=>deleteMaterial(mi);
+      head.append(addFx, edM, delM); card.appendChild(head);
+      (m.finishes||[]).forEach((f, fi) => {
+        const row = document.createElement("div"); row.className = "fxrow";
+        row.innerHTML = `<span class="fxdot ${String(f.mode||"Line").toLowerCase()}"></span><span class="fxname">${f.name}</span><span class="fxsum">${finishSummary(f)}</span>${f.note?`<span class="fxnote">${f.note}</span>`:""}`;
+        const apply = document.createElement("button"); apply.className="btn sm primary"; apply.textContent = tr("mat.apply","Apply"); apply.onclick = (ev)=>{ ev.stopPropagation(); applyFinish(f); };
+        const ed = document.createElement("button"); ed.className="btn sm"; ed.textContent = tr("action.edit","Edit"); ed.onclick = (ev)=>{ ev.stopPropagation(); openFinishEditor(mi, fi); };
+        row.append(apply, ed); row.onclick = ()=>applyFinish(f);
+        card.appendChild(row);
+      });
+      host.appendChild(card);
+    });
+    localizeIn(host);
+  }
+  function applyFinish(f){
+    const L = doc.layers[activeLayer]; if (!L) return;
+    if (f.mode) L.mode = f.mode;
+    if (f.speed!=null) L.speed_mm_s = +f.speed;
+    if (f.power!=null) L.power_max = +f.power;
+    if (f.pmin!=null) L.power_min = +f.pmin;
+    L.num_passes = +f.passes || 1;
+    if (f.interval!=null) L.interval = +f.interval;
+    if (f.angle!=null) L.angle = +f.angle;
+    if (f.freq!=null) L.freq = +f.freq;
+    if (f.qpulse!=null) L.qpulse = +f.qpulse;
+    if (f.air!=null) L.air_assist = !!f.air;
     $("matBg").classList.remove("show");
     snapshot(); renderLayers(); render(); generate();
   }
+  function addMaterial(){
+    const name = (prompt(tr("mat.newname","Material name"), "") || "").trim(); if (!name) return;
+    const mc = currentMachine(); const mats = materialsFor(mc); mats.push({ name, thickness:0, finishes:[] }); saveMaterialsFor(mc, mats); renderMaterials();
+  }
+  function renameMaterial(mi){
+    const mc = currentMachine(); const mats = materialsFor(mc); const m = mats[mi]; if (!m) return;
+    const name = (prompt(tr("mat.newname","Material name"), m.name) || "").trim(); if (!name) return;
+    m.name = name; saveMaterialsFor(mc, mats); renderMaterials();
+  }
+  function deleteMaterial(mi){
+    const mc = currentMachine(); const mats = materialsFor(mc); if (!mats[mi]) return;
+    if (!confirm(tr("mat.delconfirm","Delete this material and its finishes?"))) return;
+    mats.splice(mi,1); saveMaterialsFor(mc, mats); renderMaterials();
+  }
+  // Finish editor state: which material, and which finish (null = new).
+  let fxMat = null, fxIdx = null;
+  function openFinishEditor(mi, fi){
+    fxMat = mi; fxIdx = fi;
+    const mc = currentMachine(); const m = materialsFor(mc)[mi]; if (!m) return;
+    const f = (fi!=null && m.finishes[fi]) ? m.finishes[fi] : { name:"", mode:"Line", speed:100, power:50, pmin:0, passes:1, interval:0.1, freq:30, note:"", air:false };
+    $("fx_name").value=f.name; $("fx_mode").value=f.mode||"Line"; $("fx_speed").value=f.speed; $("fx_power").value=f.power;
+    $("fx_pmin").value=f.pmin||0; $("fx_passes").value=f.passes||1; $("fx_interval").value=f.interval!=null?f.interval:0.1;
+    $("fx_freq").value=f.freq!=null?f.freq:30; $("fx_note").value=f.note||""; $("fx_air").checked=!!f.air;
+    $("fxTitle").textContent = tr(fi!=null?"fx.edit":"fx.add", fi!=null?"Edit finish":"Add finish");
+    $("fxDelete").style.display = fi!=null ? "" : "none";
+    $("fxBg").classList.add("show");
+  }
+  $("fxOk").onclick = () => {
+    const mc = currentMachine(); const mats = materialsFor(mc); const m = mats[fxMat]; if (!m) return;
+    const f = { name: $("fx_name").value.trim() || tr("fx.untitled","Finish"), mode: $("fx_mode").value,
+      speed:+$("fx_speed").value||100, power:+$("fx_power").value||0, pmin:+$("fx_pmin").value||0, passes:+$("fx_passes").value||1,
+      interval:+$("fx_interval").value||0.1, freq:+$("fx_freq").value||30, note: $("fx_note").value.trim(), air: $("fx_air").checked };
+    if (fxIdx!=null) m.finishes[fxIdx] = f; else { m.finishes = m.finishes||[]; m.finishes.push(f); }
+    saveMaterialsFor(mc, mats); $("fxBg").classList.remove("show"); renderMaterials();
+  };
+  $("fxDelete").onclick = () => {
+    const mc = currentMachine(); const mats = materialsFor(mc); const m = mats[fxMat]; if (!m || fxIdx==null) return;
+    m.finishes.splice(fxIdx,1); saveMaterialsFor(mc, mats); $("fxBg").classList.remove("show"); renderMaterials();
+  };
+  $("fxClose").onclick = $("fxCancel").onclick = () => $("fxBg").classList.remove("show");
+  // ---- preset file import: our JSON, LightBurn library XML, or flat CSV ----
+  function importMaterialsText(text, filename){
+    const mc = currentMachine(); let mats = materialsFor(mc); let added = 0;
+    const low = (filename||"").toLowerCase();
+    const trimmed = text.replace(/^﻿/, "").trimStart();
+    try {
+      if (trimmed.startsWith("{") || trimmed.startsWith("[") || low.endsWith(".json")){
+        const data = JSON.parse(trimmed);
+        const incoming = Array.isArray(data) ? data : (data.materials || []);
+        incoming.forEach(m => { if (m && m.name){ mats.push(normalizeMaterial(m)); added++; } });
+      } else if (trimmed.startsWith("<") || low.endsWith(".xml") || low.endsWith(".clb") || low.endsWith(".lbset") || low.endsWith(".lbsettings")){
+        added = parseLightBurnXml(trimmed, mats);
+      } else {
+        added = parseCsvMaterials(trimmed, mats);
+      }
+    } catch(e){ alert(tr("mat.importerr","Could not read that file: ") + e.message); return; }
+    if (!added){ alert(tr("mat.importnone","No presets found in that file.")); return; }
+    saveMaterialsFor(mc, mats); renderMaterials();
+  }
+  function normalizeMaterial(m){
+    return { name:String(m.name), thickness:+m.thickness||0, finishes:(m.finishes||[]).map(f=>({
+      name:String(f.name||"Finish"), mode:f.mode||"Line", speed:+f.speed||100, power:+f.power||0, pmin:+f.pmin||0,
+      passes:+f.passes||1, interval:f.interval!=null?+f.interval:undefined, angle:f.angle!=null?+f.angle:undefined,
+      freq:f.freq!=null?+f.freq:undefined, qpulse:f.qpulse!=null?+f.qpulse:undefined, air:!!f.air, note:f.note?String(f.note):"" })) };
+  }
+  function parseLightBurnXml(xml, mats){
+    const doc2 = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc2.querySelector("parsererror")) throw new Error("invalid XML");
+    let added = 0;
+    doc2.querySelectorAll("Material").forEach(me => {
+      const name = me.getAttribute("name") || me.getAttribute("Name") || "Material";
+      const mat = { name, thickness:+(me.getAttribute("thickness")||0)||0, finishes:[] };
+      // Each entry wraps one or more CutSetting blocks; map every CutSetting to a finish.
+      const cuts = me.querySelectorAll("CutSetting");
+      cuts.forEach(cs => {
+        const g = (t)=>{ const el = cs.querySelector(t); return el ? (el.getAttribute("Value") ?? el.textContent) : null; };
+        const typ = g("type") || "Line";
+        mat.finishes.push({
+          name: g("name") || typ, mode: typ==="Scan" ? "Fill" : (typ==="Cut" ? "Line" : typ),
+          speed: +(g("speed")||100), power: +(g("maxPower")||g("maxPowerValue")||0), pmin:+(g("minPower")||0),
+          passes:+(g("numPasses")||1), interval: g("interval")!=null?+g("interval"):undefined,
+          freq: g("QPulseWidth")!=null?undefined:(g("frequency")!=null?+g("frequency")/1000:undefined),
+          air: g("enableAirAssist")==="1", note: g("name")&&g("name")!==typ ? "" : "" });
+      });
+      if (!mat.finishes.length) mat.finishes.push({ name:name, mode:"Line", speed:100, power:50, passes:1 });
+      mats.push(mat); added++;
+    });
+    return added;
+  }
+  function parseCsvMaterials(csv, mats){
+    const lines = csv.split(/\r?\n/).filter(l=>l.trim()); if (!lines.length) return 0;
+    const head = lines[0].split(",").map(h=>h.trim().toLowerCase());
+    const col = (n)=>head.indexOf(n);
+    const ci = { material:col("material"), finish:col("finish"), mode:col("mode"), speed:col("speed"), power:col("power"), pmin:col("pmin"), passes:col("passes"), interval:col("interval"), freq:col("freq"), air:col("air"), note:col("note") };
+    if (ci.material < 0) throw new Error("CSV needs a 'material' column");
+    const byName = {}; let added = 0;
+    for (let i=1;i<lines.length;i++){
+      const c = lines[i].split(","); const mn = (c[ci.material]||"").trim(); if (!mn) continue;
+      let mat = byName[mn]; if (!mat){ mat = { name:mn, thickness:0, finishes:[] }; byName[mn]=mat; mats.push(mat); added++; }
+      mat.finishes.push({
+        name: (ci.finish>=0 && c[ci.finish] ? c[ci.finish].trim() : "Cut"), mode: (ci.mode>=0 && c[ci.mode] ? c[ci.mode].trim() : "Line"),
+        speed:+(ci.speed>=0?c[ci.speed]:100)||100, power:+(ci.power>=0?c[ci.power]:0)||0, pmin:+(ci.pmin>=0?c[ci.pmin]:0)||0,
+        passes:+(ci.passes>=0?c[ci.passes]:1)||1, interval: ci.interval>=0?+c[ci.interval]:undefined, freq: ci.freq>=0?+c[ci.freq]:undefined,
+        air: ci.air>=0 ? /^(1|true|yes)$/i.test((c[ci.air]||"").trim()) : false, note: ci.note>=0 ? (c[ci.note]||"").trim() : "" });
+    }
+    return added;
+  }
+  function exportMaterials(){
+    const mc = currentMachine();
+    const payload = { machine: mc.name, controller: mc.ctrl, materials: materialsFor(mc) };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a");
+    a.href = url; a.download = (mc.name||"machine").replace(/[^\w.-]+/g,"_") + "-materials.json";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  }
+  function openMaterials(){ renderMaterials(); $("matBg").classList.add("show"); }
   $("matBtn").onclick = openMaterials;
   $("matClose").onclick = $("matCancel").onclick = () => $("matBg").classList.remove("show");
+  $("matAdd").onclick = addMaterial;
+  $("matExport").onclick = exportMaterials;
+  $("matImport").onclick = () => $("matFile").click();
+  $("matFile").onchange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => importMaterialsText(String(r.result), f.name); r.readAsText(f); e.target.value = ""; };
 
   // arrange modal
   $("arClose").onclick = $("arCancel").onclick = () => $("arBg").classList.remove("show");
@@ -1833,6 +2039,10 @@
   Object.assign(I18N.de, { "mc.edit":"Maschine bearbeiten","mc.update":"Speichern","mc.delete":"Löschen","mc.features":"Funktionen","mc.cap.frame":"Rahmen (Umriss abfahren)","mc.cap.air":"Luftunterstützung","layer.pickcolor":"Ebenenfarbe wählen","layer.custom":"Benutzerdefiniert…","layer.resetcolor":"Standard" });
   Object.assign(I18N.fr, { "mc.edit":"Modifier la machine","mc.update":"Enregistrer","mc.delete":"Supprimer","mc.features":"Fonctions","mc.cap.frame":"Cadre (parcours du contour)","mc.cap.air":"Assistance d'air","layer.pickcolor":"Choisir la couleur du calque","layer.custom":"Personnalisé…","layer.resetcolor":"Par défaut" });
   Object.assign(I18N["pt-BR"], { "mc.edit":"Editar máquina","mc.update":"Salvar","mc.delete":"Excluir","mc.features":"Recursos","mc.cap.frame":"Moldura (percorrer contorno)","mc.cap.air":"Assistência de ar","layer.pickcolor":"Escolher cor da camada","layer.custom":"Personalizado…","layer.resetcolor":"Padrão" });
+  Object.assign(I18N.es, { "mat.import":"Importar…","mat.export":"Exportar","mat.addmat":"Añadir material","mat.apply":"Aplicar","mat.addfinish":"+ Acabado","mat.empty":"Aún no hay materiales. Añada uno o importe una biblioteca.","mat.newname":"Nombre del material","mat.delconfirm":"¿Eliminar este material y sus acabados?","mat.importerr":"No se pudo leer el archivo: ","mat.importnone":"No se encontraron ajustes en el archivo.","action.rename":"Renombrar","action.edit":"Editar","fx.title":"Acabado","fx.add":"Añadir acabado","fx.edit":"Editar acabado","fx.name":"Nombre del acabado","fx.mode":"Modo","fx.note":"Efecto esperado / nota","fx.untitled":"Acabado" });
+  Object.assign(I18N.de, { "mat.import":"Importieren…","mat.export":"Exportieren","mat.addmat":"Material hinzufügen","mat.apply":"Anwenden","mat.addfinish":"+ Finish","mat.empty":"Noch keine Materialien. Fügen Sie eines hinzu oder importieren Sie eine Bibliothek.","mat.newname":"Materialname","mat.delconfirm":"Dieses Material und seine Finishes löschen?","mat.importerr":"Datei konnte nicht gelesen werden: ","mat.importnone":"Keine Presets in der Datei gefunden.","action.rename":"Umbenennen","action.edit":"Bearbeiten","fx.title":"Finish","fx.add":"Finish hinzufügen","fx.edit":"Finish bearbeiten","fx.name":"Finish-Name","fx.mode":"Modus","fx.note":"Erwartete Wirkung / Notiz","fx.untitled":"Finish" });
+  Object.assign(I18N.fr, { "mat.import":"Importer…","mat.export":"Exporter","mat.addmat":"Ajouter un matériau","mat.apply":"Appliquer","mat.addfinish":"+ Finition","mat.empty":"Aucun matériau pour l'instant. Ajoutez-en un ou importez une bibliothèque.","mat.newname":"Nom du matériau","mat.delconfirm":"Supprimer ce matériau et ses finitions ?","mat.importerr":"Impossible de lire le fichier : ","mat.importnone":"Aucun préréglage trouvé dans le fichier.","action.rename":"Renommer","action.edit":"Modifier","fx.title":"Finition","fx.add":"Ajouter une finition","fx.edit":"Modifier la finition","fx.name":"Nom de la finition","fx.mode":"Mode","fx.note":"Effet attendu / note","fx.untitled":"Finition" });
+  Object.assign(I18N["pt-BR"], { "mat.import":"Importar…","mat.export":"Exportar","mat.addmat":"Adicionar material","mat.apply":"Aplicar","mat.addfinish":"+ Acabamento","mat.empty":"Ainda não há materiais. Adicione um ou importe uma biblioteca.","mat.newname":"Nome do material","mat.delconfirm":"Excluir este material e seus acabamentos?","mat.importerr":"Não foi possível ler o arquivo: ","mat.importnone":"Nenhuma predefinição encontrada no arquivo.","action.rename":"Renomear","action.edit":"Editar","fx.title":"Acabamento","fx.add":"Adicionar acabamento","fx.edit":"Editar acabamento","fx.name":"Nome do acabamento","fx.mode":"Modo","fx.note":"Efeito esperado / nota","fx.untitled":"Acabamento" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
