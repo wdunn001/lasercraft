@@ -559,13 +559,15 @@
       const col = PALETTE[(sh.cut_index)%PALETTE.length];
       const dd = shapeD(sh);
       if (!dd) return;
-      const selAttr = (selected===i) ? ` stroke-width="2.5"` : ` stroke-width="1.6"`;
+      const isSel = sel.has(i);
+      const selAttr = isSel ? ` stroke-width="2.5"` : ` stroke-width="1.6"`;
       s += `<path d="${dd}" fill="none" stroke="${col}"${selAttr}/>`;
-      if (selected===i) {
+      if (isSel) {
         const bb = bbox(sh);
         const a=mm2px(p(bb.x0,bb.y1)), b=mm2px(p(bb.x1,bb.y0));
         s += `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="#3b82f6" stroke-dasharray="4 3"/>`;
-        if (tool === "select"){
+        // Transform handles only for a lone selected shape; a group just shows boxes.
+        if (tool === "select" && sel.size === 1){
           const cxp = (a.x+b.x)/2;
           transformHandles(sh).forEach(h => { const d = mm2px(h);
             if (h.kind==="rotate"){ s += `<line x1="${cxp}" y1="${a.y}" x2="${d.x}" y2="${d.y}" stroke="#3b82f6" stroke-width="1"/><circle cx="${d.x}" cy="${d.y}" r="5" fill="#28c08a" stroke="#fff" stroke-width="1.2"/>`; }
@@ -574,6 +576,8 @@
         }
       }
     });
+    // A dashed box around the whole group when more than one shape is selected.
+    if (sel.size > 1){ const gb = groupBBox(); if (gb){ const a=mm2px(p(gb.x0,gb.y1)), b=mm2px(p(gb.x1,gb.y0)); s += `<rect x="${a.x-2}" y="${a.y-2}" width="${b.x-a.x+4}" height="${b.y-a.y+4}" fill="none" stroke="#6ea8ff" stroke-dasharray="2 4"/>`; } }
     // node-edit handles on the selected shape
     if (tool === "node" && selected != null && doc.shapes[selected]) {
       const hs = nodeHandles(doc.shapes[selected]);
@@ -688,6 +692,15 @@
 
   // ---- interaction ----
   let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null, xform = null;
+  let sel = new Set(), dragLast = null, marquee = null;
+  // Select exactly one shape, or clear with null. `selected` stays the primary
+  // index for the single-shape tools (node edit, text edit, transform handles).
+  function selectOnly(i){ selected = (i==null) ? null : i; sel = (i==null) ? new Set() : new Set([i]); }
+  function groupBBox(){ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,any=false; for (const i of sel){ const sh=doc.shapes[i]; if(!sh) continue; const bb=bbox(sh); x0=Math.min(x0,bb.x0);y0=Math.min(y0,bb.y0);x1=Math.max(x1,bb.x1);y1=Math.max(y1,bb.y1);any=true; } return any?{x0,y0,x1,y1}:null; }
+  function marqueeHits(x0,y0,x1,y1){ const lo={x:Math.min(x0,x1),y:Math.min(y0,y1)}, hi={x:Math.max(x0,x1),y:Math.max(y0,y1)}; const out=[]; doc.shapes.forEach((sh,i)=>{ const b=bbox(sh); if (b.x1>=lo.x&&b.x0<=hi.x&&b.y1>=lo.y&&b.y0<=hi.y) out.push(i); }); return out; }
+  function deleteSelection(){ const idx=[...sel].sort((a,b)=>b-a); for (const i of idx) doc.shapes.splice(i,1); selectOnly(null); snapshot(); render(); refreshCounts(); }
+  function duplicateSelection(){ const added=[]; for (const i of [...sel].sort((a,b)=>a-b)){ const c=JSON.parse(JSON.stringify(doc.shapes[i])); moveShapeTo2(c,5,5); added.push(c); } const startIdx=doc.shapes.length; doc.shapes.push(...added); sel=new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1?startIdx:(added.length?startIdx:null); snapshot(); render(); refreshCounts(); }
+  function setLayerForSelection(cutIndex){ for (const i of sel){ if (doc.shapes[i]) doc.shapes[i].cut_index = cutIndex; } snapshot(); render(); generate(); }
   let penAnchors = [], penDrag = false, measureA = null;
   // The ruler overlay between two mm points: a dashed line with a distance and
   // angle label at the midpoint. Angle is measured from the positive x axis.
@@ -722,7 +735,7 @@
       for (let i = 0; i < A.length-1; i++) segs.push({ Cubic:{ c1:p(A[i].hOut.x,A[i].hOut.y), c2:p(A[i+1].hIn.x,A[i+1].hIn.y), to:p(A[i+1].p.x,A[i+1].p.y) } });
       if (closed) segs.push({ Cubic:{ c1:p(A[A.length-1].hOut.x,A[A.length-1].hOut.y), c2:p(A[0].hIn.x,A[0].hIn.y), to:p(A[0].p.x,A[0].p.y) } });
       doc.shapes.push({ kind:"Path", cut_index:doc.layers[activeLayer].index, geometry:{ Path:{ start:p(A[0].p.x,A[0].p.y), segments:segs, closed } } });
-      selected = doc.shapes.length - 1;
+      selectOnly(doc.shapes.length - 1);
     }
     penAnchors = []; penDrag = false; drawing = null; render(); refreshCounts();
   }
@@ -751,16 +764,25 @@
     if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
-      if (dragNode == null) { selected = hitTest(m); }   // no node hit: pick a shape to edit
+      if (dragNode == null) { selectOnly(hitTest(m)); }   // no node hit: pick a shape to edit
       render(); return;
     }
     if (tool === "select") {
       const h = hitHandle(e.clientX, e.clientY);
-      if (h){ const orig = JSON.parse(JSON.stringify(doc.shapes[selected])); const bb=bbox(orig);
+      if (h && sel.size===1){ const orig = JSON.parse(JSON.stringify(doc.shapes[selected])); const bb=bbox(orig);
         xform = { h, orig, cx:(bb.x0+bb.x1)/2, cy:(bb.y0+bb.y1)/2, startAng: Math.atan2(m.y-(bb.y0+bb.y1)/2, m.x-(bb.x0+bb.x1)/2) };
         render(); return; }
-      selected = hitTest(m); dragShape = selected;
-      if (selected!=null){ const bb=bbox(doc.shapes[selected]); dragOff = { x: m.x-bb.x0, y: m.y-bb.y0 }; }
+      const hit = hitTest(m);
+      if (hit == null){
+        // Empty space: start a marquee. Plain click clears, shift keeps the set.
+        if (!e.shiftKey) selectOnly(null);
+        marquee = { x0:m.x, y0:m.y, base:new Set(sel) }; dragShape = null; render(); return;
+      }
+      if (e.shiftKey){ if (sel.has(hit)) sel.delete(hit); else sel.add(hit); selected = sel.size ? hit : null; }
+      else if (!sel.has(hit)){ selectOnly(hit); }
+      else { selected = hit; }
+      dragShape = hit; dragLast = m;
+      const bb=bbox(doc.shapes[hit]); dragOff = { x: m.x-bb.x0, y: m.y-bb.y0 };
       render();
     }
   });
@@ -781,9 +803,15 @@
       }
       doc.shapes[selected] = sh2; render(); return;
     }
+    if (tool==="select" && marquee){ const a=mm2px(p(Math.min(marquee.x0,m.x),Math.max(marquee.y0,m.y))), b=mm2px(p(Math.max(marquee.x0,m.x),Math.min(marquee.y0,m.y)));
+      drawing = `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="rgba(110,168,255,.08)" stroke="#6ea8ff" stroke-dasharray="3 3"/>`; render(); return; }
     if (!start) return;
     if (tool==="node" && dragNode!=null && doc.shapes[selected]){ const hs=nodeHandles(doc.shapes[selected]); const h=hs[dragNode]; if (h){ h.p.x=+m.x.toFixed(3); h.p.y=+m.y.toFixed(3); } render(); return; }
-    if (tool==="select" && dragShape!=null){ moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y); render(); return; }
+    if (tool==="select" && dragShape!=null){
+      if (sel.size > 1 && dragLast){ const dx=m.x-dragLast.x, dy=m.y-dragLast.y; for (const i of sel){ if (doc.shapes[i]) translateShape(doc.shapes[i], dx, dy); } dragLast=m; }
+      else moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y);
+      render(); return;
+    }
     if (tool==="rect" || tool==="ellipse"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=PALETTE[activeLayer%PALETTE.length];
       drawing = tool==="rect" ? `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`
         : `<ellipse cx="${(a.x+b.x)/2}" cy="${(a.y+b.y)/2}" rx="${Math.abs(b.x-a.x)/2}" ry="${Math.abs(b.y-a.y)/2}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`;
@@ -791,12 +819,16 @@
   });
   window.addEventListener("mouseup", e => {
     if (xform){ xform=null; start=null; dragShape=null; render(); refreshCounts(); return; }
+    if (tool==="select" && marquee){ const m0=px2mm(e.clientX,e.clientY); const hits=marqueeHits(marquee.x0,marquee.y0,m0.x,m0.y);
+      sel = new Set(marquee.base); for (const i of hits) sel.add(i); selected = sel.size===1 ? [...sel][0] : (sel.size?selected:null); if (selected!=null && !sel.has(selected)) selected = hits.length?hits[hits.length-1]:null;
+      marquee=null; start=null; drawing=null; render(); refreshCounts(); return; }
+    if (tool==="select" && dragShape!=null){ dragShape=null; dragLast=null; start=null; snapshot(); render(); refreshCounts(); return; }
     if (tool==="measure"){ measureA=null; start=null; return; }
     if (tool==="pen"){ penDrag=false; start=null; return; }
     if (!start){ return; }
     const m = px2mm(e.clientX, e.clientY);
-    if (tool==="rect" && Math.abs(m.x-start.x)>1){ doc.shapes.push(rect(Math.min(start.x,m.x),Math.min(start.y,m.y),Math.abs(m.x-start.x),Math.abs(m.y-start.y),doc.layers[activeLayer].index)); selected=doc.shapes.length-1; }
-    else if (tool==="ellipse" && Math.abs(m.x-start.x)>1){ doc.shapes.push(ellipse((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,doc.layers[activeLayer].index)); selected=doc.shapes.length-1; }
+    if (tool==="rect" && Math.abs(m.x-start.x)>1){ doc.shapes.push(rect(Math.min(start.x,m.x),Math.min(start.y,m.y),Math.abs(m.x-start.x),Math.abs(m.y-start.y),doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
+    else if (tool==="ellipse" && Math.abs(m.x-start.x)>1){ doc.shapes.push(ellipse((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
     start=null; drawing=null; dragShape=null; dragNode=null; render(); refreshCounts();
   });
   function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
@@ -815,24 +847,29 @@
   document.addEventListener("click", closeCtx);
   canvas.addEventListener("contextmenu", e => {
     e.preventDefault();
-    if (selected == null){ const hit = hitTest(px2mm(e.clientX, e.clientY)); if (hit != null){ selected = hit; render(); } }
-    if (selected == null || !doc.shapes[selected]){ closeCtx(); return; }
-    const sh = doc.shapes[selected];
+    // Right-clicking a shape outside the selection selects just it. Right-clicking
+    // inside a multi-selection keeps the group, so the menu acts on all of it.
+    const hit = hitTest(px2mm(e.clientX, e.clientY));
+    if (hit == null){ closeCtx(); return; }
+    if (!sel.has(hit)) selectOnly(hit);
+    render();
+    const n = sel.size;
     const layerItems = doc.layers.map(L=>`<div class="mi" data-setlayer="${L.index}"><span class="swatch" style="background:${PALETTE[L.index%PALETTE.length]}"></span>${L.name}</div>`).join("");
-    ctx.innerHTML =
-      `<div class="mi has-sub"><span class="caret">&#9656;</span><span data-i18n="ctx.changelayer">Change layer</span><div class="sub">${layerItems}</div></div>`
+    const head = n > 1 ? `<div class="mi" style="color:var(--muted);pointer-events:none">${n} selected</div><div class="sep"></div>` : "";
+    ctx.innerHTML = head
+      + `<div class="mi has-sub"><span class="caret">&#9656;</span><span data-i18n="ctx.changelayer">Change layer</span><div class="sub">${layerItems}</div></div>`
       + `<div class="mi" data-ctx="dupe" data-i18n="action.dupe">Duplicate</div>`
       + `<div class="mi" data-ctx="front" data-i18n="ctx.front">Bring to front</div>`
       + `<div class="mi" data-ctx="back" data-i18n="ctx.back">Send to back</div>`
       + `<div class="sep"></div>`
       + `<div class="mi" data-ctx="delete" data-i18n="action.delete">Delete</div>`;
-    ctx.querySelectorAll("[data-setlayer]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); sh.cut_index=+el.dataset.setlayer; snapshot(); render(); generate(); closeCtx(); });
+    ctx.querySelectorAll("[data-setlayer]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); setLayerForSelection(+el.dataset.setlayer); closeCtx(); });
     ctx.querySelectorAll("[data-ctx]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); const a=el.dataset.ctx;
-      if(a==="dupe"){ const c=JSON.parse(JSON.stringify(sh)); moveShapeTo2(c,5,5); doc.shapes.push(c); selected=doc.shapes.length-1; }
-      else if(a==="delete"){ doc.shapes.splice(selected,1); selected=null; }
-      else if(a==="front"){ const c=doc.shapes.splice(selected,1)[0]; doc.shapes.push(c); selected=doc.shapes.length-1; }
-      else if(a==="back"){ const c=doc.shapes.splice(selected,1)[0]; doc.shapes.unshift(c); selected=0; }
-      snapshot(); render(); refreshCounts(); closeCtx();
+      if(a==="dupe"){ duplicateSelection(); }
+      else if(a==="delete"){ deleteSelection(); }
+      else if(a==="front"){ const picked=[...sel].sort((x,y)=>x-y).map(i=>doc.shapes[i]); doc.shapes=doc.shapes.filter((_,i)=>!sel.has(i)).concat(picked); sel=new Set(picked.map((_,k)=>doc.shapes.length-picked.length+k)); selected=sel.size===1?[...sel][0]:selected; snapshot(); render(); refreshCounts(); }
+      else if(a==="back"){ const picked=[...sel].sort((x,y)=>x-y).map(i=>doc.shapes[i]); doc.shapes=picked.concat(doc.shapes.filter((_,i)=>!sel.has(i))); sel=new Set(picked.map((_,k)=>k)); selected=sel.size===1?0:selected; snapshot(); render(); refreshCounts(); }
+      closeCtx();
     });
     ctx.style.left = Math.min(e.clientX, window.innerWidth-210)+"px";
     ctx.style.top = Math.min(e.clientY, window.innerHeight-230)+"px";
@@ -1072,7 +1109,7 @@
     if (history.length > 100) history.shift();
     hptr = history.length - 1;
   }
-  function restore(){ doc = JSON.parse(history[hptr]); selected = null; render(); renderLayers(); renderPalette(); generate(); }
+  function restore(){ doc = JSON.parse(history[hptr]); selectOnly(null); render(); renderLayers(); renderPalette(); generate(); }
   function undo(){ if (hptr > 0){ hptr--; restore(); } }
   function redo(){ if (hptr < history.length - 1){ hptr++; restore(); } }
 
@@ -1086,7 +1123,7 @@
     let out; try { out = JSON.parse(weld(JSON.stringify(polys))); } catch(e){ return; }
     doc.shapes = doc.shapes.filter(s => !(s.cut_index === cut && s.geometry.Polyline && s.geometry.Polyline.closed));
     out.forEach(ring => doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: ring.map(a => p(a[0], a[1])), closed:true } } }));
-    selected = null;
+    selectOnly(null);
   }
   function booleanWith(op){
     if (!ready || selected == null) return;
@@ -1103,7 +1140,7 @@
     const remove = new Set([selected, ...others.map(s => doc.shapes.indexOf(s))]);
     doc.shapes = doc.shapes.filter((s, i) => !remove.has(i));
     out.forEach(ring => doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: ring.map(x => p(x[0], x[1])), closed:true } } }));
-    selected = null;
+    selectOnly(null);
   }
   function concentricFill(){
     if (!ready || selected == null) return;
@@ -1136,7 +1173,7 @@
     const str = ($("textIn").value||"").trim(); if (!str) return;
     const h = +$("textH").value || 8; const al = $("textAlign") ? $("textAlign").value : "left";
     doc.shapes.push({ kind:"Text", cut_index:doc.layers[activeLayer].index, geometry:{ Text:{ s:str, x, y:y - h/2, h, gap:h*0.28, align:al } } });
-    selected = doc.shapes.length - 1; snapshot(); render(); refreshCounts(); updateToolbar();
+    selectOnly(doc.shapes.length - 1); snapshot(); render(); refreshCounts(); updateToolbar();
   }
   $("addText").onclick = () => placeText(20, BED.h/2);
   $("textIn").addEventListener("keydown", e => { if (e.key === "Enter" && !selText()) $("addText").click(); });
@@ -1227,9 +1264,9 @@
   document.addEventListener("click", ()=>document.querySelectorAll(".menubar .m").forEach(x=>x.classList.remove("open")));
   document.querySelectorAll(".dropdown div").forEach(d => d.onclick = () => {
     const a=d.dataset.act;
-    if (a==="new"){ doc.shapes=[]; selected=null; }
-    else if (a==="delete" && selected!=null){ doc.shapes.splice(selected,1); selected=null; }
-    else if (a==="dupe" && selected!=null){ const c=JSON.parse(JSON.stringify(doc.shapes[selected])); moveShapeTo2(c,5,5); doc.shapes.push(c); selected=doc.shapes.length-1; }
+    if (a==="new"){ doc.shapes=[]; selectOnly(null); }
+    else if (a==="delete" && sel.size){ deleteSelection(); return; }
+    else if (a==="dupe" && sel.size){ duplicateSelection(); return; }
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ $("imgFile").click(); }
     else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
@@ -1283,7 +1320,9 @@
     if (tool==="pen" && penAnchors.length){ if (e.key==="Enter"){ e.preventDefault(); finishPen(false); return; } if (e.key==="Escape"){ penAnchors=[]; penDrag=false; drawing=null; render(); return; } }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); return; }
-    if ((e.key==="Delete"||e.key==="Backspace") && selected!=null && !/INPUT/.test(document.activeElement.tagName)){ doc.shapes.splice(selected,1); selected=null; render(); refreshCounts(); }
+    if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="a" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); sel=new Set(doc.shapes.map((_,i)=>i)); selected=sel.size===1?0:null; render(); return; }
+    if (e.key==="Escape" && sel.size){ selectOnly(null); render(); return; }
+    if ((e.key==="Delete"||e.key==="Backspace") && sel.size && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ deleteSelection(); }
   });
 
   // SVG import (basic: rect, circle, ellipse, polygon, polyline, path M/L/C/Z)
@@ -1321,7 +1360,7 @@
         else if (!dark && run >= 0){ added.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points:[p(bx+run*px, yy), p(bx+x*px, yy)], closed:false } } }); run = -1; }
       }
     }
-    doc.shapes.push(...added); selected = null; render(); refreshCounts();
+    doc.shapes.push(...added); selectOnly(null); render(); refreshCounts();
   }
   $("file").onchange = ev => {
     const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
@@ -1345,7 +1384,7 @@
     if (!ready) return;
     let polys; try { polys = JSON.parse(import_dxf(text)); } catch(e){ console.error(e); return; }
     for (const pl of polys){ if (pl.points.length >= 2){ const cut = layerIndexForName(pl.layer); doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.points.map(a => p(a[0], a[1])), closed: !!pl.closed } } }); } }
-    renderLayers(); renderPalette(); selected = null;
+    renderLayers(); renderPalette(); selectOnly(null);
   }
   // Export every shape as DXF polylines. Cubic paths flatten to polylines first.
   function exportDxf(){
@@ -1561,7 +1600,7 @@
   const urlTab = params.get("tab");
   if (urlTab) { const tb = document.querySelector(`.docktabs button[data-dock="${urlTab}"]`); if (tb) tb.click(); }
   const urlTool = params.get("tool");
-  if (urlTool) { const tb = document.querySelector(`.tool[data-tool="${urlTool}"]`); if (tb) tb.click(); if (urlTool === "node") { selected = 0; render(); } }
+  if (urlTool) { const tb = document.querySelector(`.tool[data-tool="${urlTool}"]`); if (tb) tb.click(); if (urlTool === "node") { selectOnly(0); render(); } }
   const mIdx = params.get("machine");
   if (mIdx != null && allMachines()[+mIdx]) $("machine").value = mIdx;
   applyMachine(allMachines()[+($("machine").value) || 0]);
@@ -1571,19 +1610,19 @@
   init().then(()=>{
     ready=true; generate();
     const act = params.get("act");
-    if (act==="concentric"){ selected=0; concentricFill(); render(); refreshCounts(); }
+    if (act==="concentric"){ selectOnly(0); concentricFill(); render(); refreshCounts(); }
     else if (act==="weld"){ doc.shapes.push(rect(70,45,70,45,0)); weldActive(); render(); refreshCounts(); }
-    else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selected=0; booleanWith("difference"); render(); refreshCounts(); }
+    else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selectOnly(0); booleanWith("difference"); render(); refreshCounts(); }
     else if (act==="materials"){ openMaterials(); }
     else if (act==="cs"){ openCutSettings(2); }
-    else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selected=doc.shapes.length-1; render(); refreshCounts(); }
+    else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="dither"){ const c=document.createElement("canvas"); c.width=220; c.height=150; const cx=c.getContext("2d"); const g=cx.createRadialGradient(110,75,8,110,75,100); g.addColorStop(0,"#fff"); g.addColorStop(1,"#000"); cx.fillStyle=g; cx.fillRect(0,0,220,150); const im=new Image(); im.onload=()=>ditherImage(im); im.src=c.toDataURL(); }
-    else if (act==="arraygrid"){ doc.shapes=[rect(15,15,24,16,0)]; selected=0; arrayGrid(4,3,6,6); openArrange(); }
-    else if (act==="arraycircular"){ doc.shapes=[rect(66,18,18,12,0)]; selected=0; arrayCircular(9,30); openArrange(); }
-    else if (act==="alignbed"){ doc.shapes=[rect(8,8,26,18,0)]; selected=0; alignBed("center"); openArrange(); }
-    else if (act==="text"){ doc.shapes=[...engineTextShapes("LaserCraft 2026", 12, 95, 13, 0), ...engineTextShapes("SN-0042 / 19.5mm", 12, 60, 10, 1), ...engineTextShapes("ABCDEFG HIJKLM", 12, 30, 9, 2)]; selected=null; render(); refreshCounts(); }
-    else if (act==="nodes"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:25,y:35}, segments:[{Cubic:{c1:{x:40,y:80},c2:{x:95,y:80},to:{x:120,y:35}}},{Cubic:{c1:{x:95,y:-5},c2:{x:40,y:-5},to:{x:25,y:35}}}], closed:true } } }]; selected=0; const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); render(); refreshCounts(); }
-    else if (act==="offset"){ doc.shapes=[{ kind:"Rect", cut_index:0, geometry:{ Polyline:{ points:[p(60,60),p(100,60),p(100,95),p(60,95)], closed:true } } }]; selected=0; offsetSelected(6); offsetSelected(-6); openArrange(); }
+    else if (act==="arraygrid"){ doc.shapes=[rect(15,15,24,16,0)]; selectOnly(0); arrayGrid(4,3,6,6); openArrange(); }
+    else if (act==="arraycircular"){ doc.shapes=[rect(66,18,18,12,0)]; selectOnly(0); arrayCircular(9,30); openArrange(); }
+    else if (act==="alignbed"){ doc.shapes=[rect(8,8,26,18,0)]; selectOnly(0); alignBed("center"); openArrange(); }
+    else if (act==="text"){ doc.shapes=[...engineTextShapes("LaserCraft 2026", 12, 95, 13, 0), ...engineTextShapes("SN-0042 / 19.5mm", 12, 60, 10, 1), ...engineTextShapes("ABCDEFG HIJKLM", 12, 30, 9, 2)]; selectOnly(null); render(); refreshCounts(); }
+    else if (act==="nodes"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:25,y:35}, segments:[{Cubic:{c1:{x:40,y:80},c2:{x:95,y:80},to:{x:120,y:35}}},{Cubic:{c1:{x:95,y:-5},c2:{x:40,y:-5},to:{x:25,y:35}}}], closed:true } } }]; selectOnly(0); const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); render(); refreshCounts(); }
+    else if (act==="offset"){ doc.shapes=[{ kind:"Rect", cut_index:0, geometry:{ Polyline:{ points:[p(60,60),p(100,60),p(100,95),p(60,95)], closed:true } } }]; selectOnly(0); offsetSelected(6); offsetSelected(-6); openArrange(); }
     else if (act==="measure"){ const tb=document.querySelector('.tool[data-tool="measure"]'); if (tb) tb.click(); drawing = measureOverlay(p(30,40), p(110,95)); render(); }
     else if (act==="dxf"){ const L=[], pr=(c,v)=>{L.push(c);L.push(v);};
       pr(0,"SECTION");pr(2,"ENTITIES");
@@ -1593,11 +1632,12 @@
       pr(0,"LINE");pr(10,20);pr(20,160);pr(11,120);pr(21,185);
       pr(0,"ENDSEC");pr(0,"EOF");
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
+    else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
     else if (act==="textobj"){ $("textIn").value="Hello 2026"; $("textH").value=16;
       doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"Hello 2026", x:18, y:95, h:16, gap:16*0.28, align:"left" } } },
         { kind:"Text", cut_index:1, geometry:{ Text:{ s:"centered label", x:75, y:55, h:11, gap:11*0.28, align:"center" } } },
         { kind:"Text", cut_index:2, geometry:{ Text:{ s:"SN-00421", x:138, y:20, h:9, gap:9*0.28, align:"right" } } }];
-      selected=0; render(); refreshCounts(); }
+      selectOnly(0); render(); refreshCounts(); }
     else if (act==="svgpath"){ const svg = '<svg xmlns="http://www.w3.org/2000/svg">'
       + '<path d="M 30 40 C 50 90 100 90 120 40 C 100 10 50 10 30 40 Z"/>'
       + '<path d="M 20 120 L 60 100 L 100 130 L 140 110"/></svg>';
