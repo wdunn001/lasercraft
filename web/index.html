@@ -806,7 +806,7 @@
   const TOOL_GROUPS = [
     { name:"Select", color:"#8b93a7", tools:[ ["select","M4 2l9 16 2-7 7-2z"], ["node","M5 5h3v3H5z M16 16h3v3h-3z M7 7l10 10"] ] },
     { name:"Vector", color:"#3b82f6", tools:[ ["rect","M3 5h18v14H3z"], ["rrect","M6 5h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z"], ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"], ["ngon","M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"], ["poly","M12 3l9 7-3 11H6L3 10z"], ["star","M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"], ["slot","M8 7h8a5 5 0 0 1 0 10H8a5 5 0 0 1 0-10z"], ["line","M4 20L20 4"], ["pen","M4 20l7-2 8-8-5-5-8 8z"], ["text","M5 5h14 M12 5v14 M9 19h6"] ] },
-    { name:"CAD", color:"#28c08a", tools:[ ["measure","M3 17L17 3l4 4L7 21z M7 13l2 2 M11 9l2 2 M15 5l2 2"] ] },
+    { name:"CAD", color:"#28c08a", tools:[ ["measure","M3 17L17 3l4 4L7 21z M7 13l2 2 M11 9l2 2 M15 5l2 2"], ["trim","M4 20L20 4 M14 6l6-2-2 6 M4 8l4-4"], ["extend","M3 12h12 M12 9l3 3-3 3 M19 5v14"] ] },
     { name:"Image", color:"#b06ef5", tools:[ ["image","M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M8 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"] ] },
   ];
   const TOOLS = TOOL_GROUPS.flatMap(g => g.tools);
@@ -825,6 +825,8 @@
     pen:"Click for anchors, drag for handles. Enter finishes, Escape cancels.",
     text:"Type text, then click on the canvas to place it.",
     measure:"Drag to measure distance and angle.",
+    trim:"Click a segment to trim it back to the nearest crossing.",
+    extend:"Click near an open end to extend it to the nearest shape.",
   };
   function updateToolbar(){
     const t = (typeof selText === "function") ? selText() : null;
@@ -1003,6 +1005,73 @@
   function scaleShapeAbout(sh, ox, oy, sx, sy){ eachPoint(sh, q => { q.x=+(ox+(q.x-ox)*sx).toFixed(3); q.y=+(oy+(q.y-oy)*sy).toFixed(3); }); }
   // Modify tools (ported from SolidCraft's sketch-modify set, polyline form).
   // Round or bevel every corner of a polyline. `arc` true = fillet, false = chamfer.
+  // Segment intersection: returns {x,y,t,u} with params along each segment, or null.
+  function segInt(a,b,c,d){
+    const r={x:b.x-a.x,y:b.y-a.y}, s={x:d.x-c.x,y:d.y-c.y};
+    const den=r.x*s.y-r.y*s.x; if (Math.abs(den)<1e-9) return null;
+    const t=((c.x-a.x)*s.y-(c.y-a.y)*s.x)/den, u=((c.x-a.x)*r.y-(c.y-a.y)*r.x)/den;
+    if (t<-1e-6||t>1+1e-6||u<-1e-6||u>1+1e-6) return null;
+    return { x:a.x+t*r.x, y:a.y+t*r.y, t, u };
+  }
+  // Every segment of a shape's polyline, as {a,b,i} (i = index of the start point).
+  function polyEdges(sh){
+    const g=sh&&sh.geometry&&sh.geometry.Polyline; if (!g) return [];
+    const pts=g.points, closed=g.closed, out=[];
+    for (let i=0;i<pts.length-1;i++) out.push({a:pts[i],b:pts[i+1],i});
+    if (closed && pts.length>2) out.push({a:pts[pts.length-1],b:pts[0],i:pts.length-1});
+    return out;
+  }
+  function distToSeg(pt,a,b){ const dx=b.x-a.x,dy=b.y-a.y,L2=dx*dx+dy*dy; let t=L2?((pt.x-a.x)*dx+(pt.y-a.y)*dy)/L2:0; t=Math.max(0,Math.min(1,t)); return { d:Math.hypot(pt.x-(a.x+dx*t), pt.y-(a.y+dy*t)), t }; }
+  // Find the polyline edge nearest a point, across all shapes.
+  function nearestEdge(pt, maxD){
+    let best=null;
+    doc.shapes.forEach((sh,si)=>{ if (sh.locked) return; const g=sh.geometry&&sh.geometry.Polyline; if (!g) return;
+      const pts=g.points, closed=g.closed, n=pts.length;
+      const segs = closed ? n : n-1;
+      for (let i=0;i<segs;i++){ const a=pts[i], b=pts[(i+1)%n]; const {d,t}=distToSeg(pt,a,b); if (d<(maxD||6) && (!best||d<best.d)) best={si,i,d,t,a,b}; }
+    });
+    return best;
+  }
+  // Trim: remove the clicked piece of a polyline between the nearest crossings.
+  function trimAt(pt){
+    const hit = nearestEdge(pt, 6); if (!hit) return;
+    const sh = doc.shapes[hit.si]; const pl = sh.geometry.Polyline; const pts = pl.points; const closed = pl.closed;
+    const a = pts[hit.i], b = pts[(hit.i+1)%pts.length];
+    // Intersections of this edge with every other shape.
+    const cuts = [];
+    doc.shapes.forEach((o,oi)=>{ if (oi===hit.si) return; polyEdges(o).forEach(e=>{ const x=segInt(a,b,e.a,e.b); if (x && x.t>1e-4 && x.t<1-1e-4) cuts.push(x.t); }); });
+    cuts.push(0,1); cuts.sort((p,q)=>p-q);
+    // The click sits between two adjacent cut params.
+    let lo=0, hi=1; for (let k=0;k<cuts.length-1;k++){ if (hit.t>=cuts[k] && hit.t<=cuts[k+1]){ lo=cuts[k]; hi=cuts[k+1]; break; } }
+    const lerp=(t)=>p(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t);
+    const Plo=lerp(lo), Phi=lerp(hi), i=hit.i, n=pts.length;
+    let newShapes=[];
+    if (closed){
+      // Open the loop, dropping the clicked piece: start after the cut, wrap to before it.
+      const seq=[]; seq.push(Phi); for (let k=1;k<n;k++) seq.push(pts[(i+k)%n]); if (lo>0) seq.push(Plo);
+      newShapes=[seq];
+    } else {
+      const left=[]; for (let k=0;k<=i;k++) left.push(pts[k]); if (lo>0) left.push(Plo); if (left.length>=2) newShapes.push(left);
+      const right=[]; if (hi<1) right.push(Phi); for (let k=i+1;k<n;k++) right.push(pts[k]); if (right.length>=2) newShapes.push(right);
+    }
+    doc.shapes.splice(hit.si,1);
+    const added = newShapes.map(seq=>({ kind:"Path", cut_index:sh.cut_index, geometry:{ Polyline:{ points:seq.map(q=>p(q.x,q.y)), closed:false } } }));
+    doc.shapes.push(...added); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
+  }
+  // Extend: push the clicked open end of a polyline to the nearest crossing.
+  function extendAt(pt){
+    let best=null;
+    doc.shapes.forEach((sh,si)=>{ const g=sh.geometry&&sh.geometry.Polyline; if (!g || g.closed) return; const pts=g.points; if (pts.length<2) return;
+      [[0,1],[pts.length-1,pts.length-2]].forEach(([endI,nbI])=>{ const e=pts[endI]; const d=Math.hypot(pt.x-e.x,pt.y-e.y); if (d<8 && (!best||d<best.d)) best={si,endI,nbI,d}; });
+    });
+    if (!best) return;
+    const sh=doc.shapes[best.si]; const pts=sh.geometry.Polyline.points; const end=pts[best.endI], nb=pts[best.nbI];
+    const dir={x:end.x-nb.x,y:end.y-nb.y}; const far={x:end.x+dir.x*1e4,y:end.y+dir.y*1e4};
+    let hitPt=null, bestT=Infinity;
+    doc.shapes.forEach((o,oi)=>{ if (oi===best.si) return; polyEdges(o).forEach(e=>{ const x=segInt(end,far,e.a,e.b); if (x && x.t>1e-4 && x.t<bestT){ bestT=x.t; hitPt=x; } }); });
+    if (!hitPt) return;
+    pts[best.endI]=p(hitPt.x,hitPt.y); snapshot(); render(); generate(); refreshCounts();
+  }
   function cornerMod(pts, closed, amount, arc, K){
     const n = pts.length; if (n < 3) return pts.slice();
     const out = [];
@@ -1268,6 +1337,8 @@
       polyAnchors.push({ x:m.x, y:m.y }); drawing = polyPreview(m); render(); return;
     }
     if (tool === "text"){ placeText(m.x, m.y); return; }
+    if (tool === "trim"){ trimAt(m); return; }
+    if (tool === "extend"){ extendAt(m); return; }
     if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
@@ -3024,6 +3095,10 @@
   Object.assign(I18N.de, { "tool.hint.rrect":"Ziehen, um ein abgerundetes Rechteck zu zeichnen.","tool.hint.ngon":"Ziehen, um ein regelmäßiges Vieleck zu zeichnen.","tool.hint.slot":"Ziehen, um ein Langloch zu zeichnen." });
   Object.assign(I18N.fr, { "tool.hint.rrect":"Faites glisser pour dessiner un rectangle arrondi.","tool.hint.ngon":"Faites glisser pour dessiner un polygone régulier.","tool.hint.slot":"Faites glisser pour dessiner une lumière." });
   Object.assign(I18N["pt-BR"], { "tool.hint.rrect":"Arraste para desenhar um retângulo arredondado.","tool.hint.ngon":"Arraste para desenhar um polígono regular.","tool.hint.slot":"Arraste para desenhar um rasgo." });
+  Object.assign(I18N.es, { "tool.hint.trim":"Haga clic en un segmento para recortarlo hasta el cruce más cercano.","tool.hint.extend":"Haga clic cerca de un extremo abierto para extenderlo a la forma más cercana." });
+  Object.assign(I18N.de, { "tool.hint.trim":"Auf ein Segment klicken, um es bis zur nächsten Kreuzung zu stutzen.","tool.hint.extend":"In die Nähe eines offenen Endes klicken, um es zur nächsten Form zu verlängern." });
+  Object.assign(I18N.fr, { "tool.hint.trim":"Cliquez sur un segment pour le rogner jusqu'au croisement le plus proche.","tool.hint.extend":"Cliquez près d'une extrémité ouverte pour l'étendre à la forme la plus proche." });
+  Object.assign(I18N["pt-BR"], { "tool.hint.trim":"Clique em um segmento para apará-lo até o cruzamento mais próximo.","tool.hint.extend":"Clique perto de uma extremidade aberta para estendê-la à forma mais próxima." });
   Object.assign(I18N.de, { "action.fillet":"Ecken abrunden (Verrundung)…","action.chamfer":"Ecken fasen…","mod.filletamt":"Verrundungsradius mm","mod.chamferamt":"Fasenabstand mm" });
   Object.assign(I18N.fr, { "action.fillet":"Arrondir les coins (congé)…","action.chamfer":"Chanfreiner les coins…","mod.filletamt":"Rayon de congé mm","mod.chamferamt":"Distance de chanfrein mm" });
   Object.assign(I18N["pt-BR"], { "action.fillet":"Arredondar cantos (filete)…","action.chamfer":"Chanfrar cantos…","mod.filletamt":"Raio do filete mm","mod.chamferamt":"Distância do chanfro mm" });
@@ -3104,6 +3179,7 @@
     else if (act==="galvosettings"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); }
     else if (act==="fillet"){ doc.shapes=[rect(40,30,70,50,0)]; sel=new Set([0]); selected=0; const g=doc.shapes[0].geometry.Polyline; g.points=cornerMod(g.points,true,12,true,8).map(q=>p(q.x,q.y)); render(); refreshCounts(); }
     else if (act==="shapes"){ doc.shapes=[roundedRect(20,70,50,35,8,0), regPolygon(110,88,22,22,6,0), slotShape(20,25,70,20,1)]; selectOnly(null); render(); refreshCounts(); }
+    else if (act==="trim"){ doc.shapes=[rect(50,45,60,40,0), { kind:"Path", cut_index:1, geometry:{ Polyline:{ points:[p(20,65),p(140,65)], closed:false } } }]; render(); trimAt({x:80,y:65}); }
     else if (act==="galvoports"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); const pb=document.querySelector('.gdtabs button[data-gd="ports"]'); if(pb) pb.click(); addIoPort(); addIoPort(); gdIoPorts[0].purpose="reddot"; gdIoPorts[1].purpose="marking"; renderIoTable(); }
     else if (act==="star"){ doc.shapes.push(star(75,55,40,40,5,0)); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="cs"){ openCutSettings(2); }
