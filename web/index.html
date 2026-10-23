@@ -2723,6 +2723,23 @@
     }
     doc.shapes.push(...added); activeLayer = doc.layers.length - 1; selectOnly(null); snapshot(); renderLayers(); render(); refreshCounts();
   }
+  // ---- format registry: one table of formats, extensions and options ----
+  // Modeled on SolidCraft's FormatSpec. Register a format once; it populates every
+  // file-dialog accept list here, and is the single source for what LaserCraft reads
+  // and writes.
+  const FORMATS = [
+    { id:"svg",      ext:[".svg"],                                        label:"SVG",                   io:"both",   role:"vector",   input:"file" },
+    { id:"dxf",      ext:[".dxf"],                                        label:"DXF",                   io:"both",   role:"vector",   input:"file" },
+    { id:"image",    ext:[".png",".jpg",".jpeg",".gif",".bmp",".webp"],   label:"Image",                 io:"import", role:"image",    input:"imgFile" },
+    { id:"project",  ext:[".lcproj",".json"],                             label:"LaserCraft project",    io:"both",   role:"project",  input:"projFile" },
+    { id:"gcode",    ext:[".gcode",".nc",".ngc"],                         label:"G-code",                io:"export", role:"gcode" },
+    { id:"material", ext:[".json",".lbset",".lbsettings",".clb",".xml",".csv"], label:"Material library", io:"import", role:"material", input:"matFile" },
+    { id:"cor",      ext:[".cor",".bin"],                                 label:"Galvo correction (COR)",io:"import", role:"cor",      input:"gdCorFile" },
+    { id:"lbrn",     ext:[".lbrn",".lbrn2"],                              label:"LightBurn project",     io:"none",   role:"vector" },   // documented target, import not yet built
+  ];
+  function acceptFor(inputId){ return FORMATS.filter(f=>f.input===inputId).flatMap(f=>f.ext).join(","); }
+  // Drive every file input's accept list from the registry.
+  ["file","imgFile","projFile","matFile","gdCorFile"].forEach(id => { const el=$(id); if (!el) return; const a=acceptFor(id); if (a) el.accept = (id==="imgFile") ? ("image/*,"+a) : a; });
   $("file").onchange = ev => {
     const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
     const isDxf = /\.dxf$/i.test(f.name);
