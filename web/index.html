@@ -726,7 +726,34 @@
 
   // ---- interaction ----
   let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null, xform = null;
-  let sel = new Set(), dragLast = null, marquee = null;
+  let sel = new Set(), dragLast = null, marquee = null, activeNode = null;
+  // Delete the active node from the selected polyline, keeping a usable shape.
+  function nodeDelete(){
+    if (selected == null || activeNode == null) return;
+    const g = doc.shapes[selected] && doc.shapes[selected].geometry;
+    if (!g || !g.Polyline) return;
+    const min = g.Polyline.closed ? 3 : 2;
+    if (g.Polyline.points.length <= min) return;
+    g.Polyline.points.splice(activeNode, 1); activeNode = null; dragNode = null;
+    snapshot(); render(); generate();
+  }
+  // Insert a node on the nearest edge of the selected polyline at mm point m.
+  function nodeInsert(m){
+    if (selected == null) return;
+    const g = doc.shapes[selected] && doc.shapes[selected].geometry;
+    if (!g || !g.Polyline) return;
+    const pts = g.Polyline.points, n = pts.length; if (n < 2) return;
+    let best = -1, bestD = 1e9, bestPt = null;
+    const segs = g.Polyline.closed ? n : n - 1;
+    for (let i = 0; i < segs; i++){
+      const a = pts[i], b = pts[(i+1)%n];
+      const dx = b.x-a.x, dy = b.y-a.y, L2 = dx*dx+dy*dy;
+      let t = L2 ? ((m.x-a.x)*dx + (m.y-a.y)*dy)/L2 : 0; t = Math.max(0, Math.min(1, t));
+      const px = a.x+dx*t, py = a.y+dy*t, d = Math.hypot(m.x-px, m.y-py);
+      if (d < bestD){ bestD = d; best = i; bestPt = { x:+px.toFixed(3), y:+py.toFixed(3) }; }
+    }
+    if (best >= 0 && bestD < 6){ pts.splice(best+1, 0, bestPt); snapshot(); render(); generate(); }
+  }
   // Select exactly one shape, or clear with null. `selected` stays the primary
   // index for the single-shape tools (node edit, text edit, transform handles).
   function selectOnly(i){ selected = (i==null) ? null : i; sel = (i==null) ? new Set() : new Set([i]); }
@@ -802,6 +829,7 @@
     if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
+      activeNode = dragNode;
       if (dragNode == null) { selectOnly(hitTest(m)); }   // no node hit: pick a shape to edit
       render(); return;
     }
@@ -880,6 +908,8 @@
   canvas.addEventListener("wheel", e => { e.preventDefault(); const f=e.deltaY<0?1.1:1/1.1; view.s*=f; render(); }, { passive:false });
 
   // ---- right-click context menu (options depend on what is under the cursor) ----
+  // Double-click in the node tool inserts a node on the nearest edge.
+  canvas.addEventListener("dblclick", e => { if (tool==="node"){ nodeInsert(px2mm(e.clientX, e.clientY)); } });
   const ctx = $("ctxmenu");
   function closeCtx(){ ctx.classList.remove("show"); }
   document.addEventListener("click", closeCtx);
@@ -1421,6 +1451,7 @@
       if (k==="v"){ e.preventDefault(); pasteClipboard(); return; }
     }
     if (e.key==="Escape" && sel.size){ selectOnly(null); render(); return; }
+    if ((e.key==="Delete"||e.key==="Backspace") && tool==="node" && activeNode!=null && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); nodeDelete(); return; }
     if ((e.key==="Delete"||e.key==="Backspace") && sel.size && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ deleteSelection(); }
   });
 
@@ -1775,6 +1806,7 @@
     else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
     else if (act==="pages"){ doc.shapes=[rect(30,30,80,50,0)]; addPage(); doc.shapes=[ellipse(90,90,40,30,1)]; addPage(); doc.shapes=[rect(20,20,40,40,2), ellipse(100,100,30,30,0)]; renderPageTabs(); render(); refreshCounts(); }
     else if (act==="copypaste"){ doc.shapes=[rect(30,30,42,30,0), ellipse(55,45,12,10,1)]; sel=new Set([0,1]); selected=null; copySelection(); pasteClipboard(); pasteClipboard(); render(); refreshCounts(); }
+    else if (act==="nodeedit"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(40,40),p(110,40),p(110,95),p(40,95)], closed:true } } }]; selectOnly(0); const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); nodeInsert(p(110,67)); activeNode=0; nodeDelete(); render(); refreshCounts(); }
     else if (act==="projround"){ doc.shapes=[rect(30,30,65,45,0), ellipse(110,95,25,20,1)]; stashPage();
       const out={ format:"lasercraft-project", version:1, pageIdx, pages: pages.map(pg=>({ name:pg.name, activeLayer:pg.activeLayer, view:pg.view, doc:pg.doc })) };
       const json=JSON.stringify(out,(k,v)=>(typeof k==="string"&&k.startsWith("_"))?undefined:v);
