@@ -2204,7 +2204,7 @@
       }
     });
     gdIoPorts = JSON.parse(JSON.stringify(g.ioPorts || [])); renderIoTable();
-    $("gdTitle").textContent = tr("gd.title","Galvo device settings") + " — " + mc.name;
+    $("gdTitle").textContent = tr("gd.title","Galvo device settings") + ": " + mc.name;
     $("gdNote").textContent = mcIdx < BUILTIN_COUNT ? tr("gd.builtinnote","Saving a built-in machine keeps a custom copy.") : "";
     document.querySelectorAll(".gdtabs button").forEach((b,i)=>b.classList.toggle("active", i===0));
     ["basic","ports","addl","ext"].forEach((tab,i)=>$("gdpane_"+tab).style.display = i===0?"":"none");
@@ -2300,7 +2300,7 @@
       $("galvo").innerHTML = `${tr("stat.galvo","Galvo")} <b>${bytes.length}</b> B`;
       if (isGalvo()) {
         $("gcode").textContent =
-          `; BJJCZ LMC galvo list buffer — EZCAD2 / JCZFiber\n`+
+          `; BJJCZ LMC galvo list buffer. EZCAD2 / JCZFiber\n`+
           `; USB 0x9588:0x9899, 12-byte commands, written to the bulk OUT endpoint\n`+
           `; ${bytes.length} bytes = ${bytes.length/12} commands\n`+
           `; first command: ${hex(bytes.slice(0,12))}\n`+
@@ -2601,7 +2601,7 @@
       $("sendBtn").disabled = false;
       $("connectBtn").textContent = "Connected";
       setDev(`Connected: ${dev.productName || "BJJCZ galvo"} (vendor 0x9588, bulk OUT EP ${epOut}, IN EP ${epIn}).`);
-    } catch (e) { setDev("Connect failed: " + e.message + " — on Windows the board usually needs the WinUSB driver (Zadig), and EZCAD/LightBurn cannot be using it at the same time."); }
+    } catch (e) { setDev("Connect failed: " + e.message + ". On Windows the board usually needs the WinUSB driver (Zadig). EZCAD or LightBurn cannot be using it at the same time."); }
   }
 
   // The init_laser control sequence (galvoplotter defaults), then reset -> write
@@ -2633,7 +2633,7 @@
       }
       await ctl(OP.Fiber_SetMo, 1);       // open MO so the fiber can emit (best guess)
       await ctl(OP.ExecuteList);
-      setDev(`Sent full session: init, list (${written} bytes), ExecuteList. EXPERIMENTAL and unverified on hardware — if it does not mark, tell me where it stalled and I will adjust the sequence.`);
+      setDev(`Sent full session: init, list (${written} bytes), ExecuteList. EXPERIMENTAL and unverified on hardware. If it does not mark, tell me where it stalled and I will adjust the sequence.`);
     } catch (e) { setDev("Send failed at the USB layer: " + e.message); }
   }
   $("connectBtn") && ($("connectBtn").onclick = connectGalvo);
@@ -2720,7 +2720,12 @@
       return;
     }
     if (line.startsWith("ALARM")){
-      SERIAL.paused = true; setDev("GRBL " + line + " — click Unlock ($X) to clear."); updateDeviceButtons();
+      // GRBL enters alarm state and will not acknowledge queued commands, so a
+      // running job is finished. Stop it and unwind every parked sendLine waiter.
+      // Leaving a stale okq slot would let a later ok resolve the wrong promise
+      // and deadlock the next job.
+      SERIAL.running = false; SERIAL.paused = true; drainOkq();
+      setDev("GRBL " + line + ". Click Unlock ($X) to clear."); updateDeviceButtons();
       return;
     }
     // Status report: <Idle|MPos:0.000,0.000,0.000|...>
@@ -3268,7 +3273,7 @@
     jogPos.y = Math.max(0, Math.min(0xFFFF, jogPos.y + mm2dev(dy*jogDist)));
     updatePos();
     if (USB.dev){ try { await ctl(GotoXY, jogPos.x, jogPos.y, 0, 0); $("moveStat").textContent = `Moved to device ${jogPos.x}, ${jogPos.y}.`; } catch(e){ $("moveStat").textContent = "Move failed: " + e.message; } }
-    else $("moveStat").textContent = "Not connected — showing the simulated position.";
+    else $("moveStat").textContent = "Not connected. Showing the simulated position.";
   }
   async function jogHome(){ jogPos = { x:0x8000, y:0x8000 }; updatePos(); if (USB.dev){ try { await ctl(GotoXY, 0x8000, 0x8000, 0, 0); } catch(e){} } }
   $("jogHome").onclick = jogHome;
