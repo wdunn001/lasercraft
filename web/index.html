@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="mirrorline" data-i18n="action.mirrorline">Mirror across line</div><div data-act="nest" data-i18n="action.nest">Nest shapes</div><div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div><div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div><div data-act="toline" data-i18n="action.toline">Convert to line</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="mirrorline" data-i18n="action.mirrorline">Mirror across line</div><div data-act="nest" data-i18n="action.nest">Nest shapes</div><div data-act="cylinder" data-i18n="action.cylinder">Cylinder correction&hellip;</div><div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div><div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div><div data-act="toline" data-i18n="action.toline">Convert to line</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -1145,6 +1145,28 @@
     if (!sel.size) return;
     for (const i of sel){ if (doc.shapes[i]) mirrorShapeAcross(doc.shapes[i], ax, ay, bx, by); }
     snapshot(); render(); generate();
+  }
+  // Cylinder correction (LightBurn "Cylinder Correction"): warp the design along
+  // one axis so a flat engraving lands correctly on a cylinder of the given
+  // diameter. A surface arc-length d maps to the flat machine position R*sin(d/R),
+  // which compresses the design toward the edges to match the curve. Applies to
+  // the selection, or the whole design when nothing is selected.
+  function cylinderCorrect(diameter, axis){
+    const idxs = sel.size ? [...sel] : doc.shapes.map((_, i) => i);
+    const R = diameter / 2;
+    if (!idxs.length || !(R > 0)) return;
+    let lo = 1e9, hi = -1e9;
+    for (const i of idxs){ const b = bbox(doc.shapes[i]); if (!b) continue; if (axis === "y"){ lo = Math.min(lo, b.y0); hi = Math.max(hi, b.y1); } else { lo = Math.min(lo, b.x0); hi = Math.max(hi, b.x1); } }
+    const c = (lo + hi) / 2;
+    const warp = (v) => { const d = Math.max(-R, Math.min(R, v - c)); return +(c + R * Math.sin(d / R)).toFixed(3); };
+    for (const i of idxs){ if (!doc.shapes[i]) continue; eachPoint(doc.shapes[i], q => { if (axis === "y") q.y = warp(q.y); else q.x = warp(q.x); }); }
+    snapshot(); render(); generate(); refreshCounts();
+  }
+  function startCylinder(){
+    const dia = parseFloat(prompt(tr("cyl.dia","Cylinder diameter mm"), "40"));
+    if (!(dia > 0)) return;
+    const ax = (prompt(tr("cyl.axis","Curved axis: x (around) or y"), "x") || "x").trim().toLowerCase();
+    cylinderCorrect(dia, ax === "y" ? "y" : "x");
   }
   // Nest shapes into rows so they pack onto the bed with little waste (LightBurn
   // "Nest"). A shelf pack: tallest first, filling each row left to right and
@@ -3342,6 +3364,7 @@
     else if (a==="reverse"){ reversePathDir(); return; }
     else if (a==="mirrorline"){ startMirror(); return; }
     else if (a==="nest"){ nestSelection(); return; }
+    else if (a==="cylinder"){ startCylinder(); return; }
     else if (a==="nodebreak"){ nodeBreak(); return; }
     else if (a==="tocurve"){ nodeToCurve(); return; }
     else if (a==="toline"){ nodeToLine(); return; }
@@ -4027,7 +4050,7 @@
     };
     for (const loc in MH){ const t=MH[loc]; Object.assign(I18N[loc], { "tool.mod.select":t.sel,"tool.mod.rect":t.sq,"tool.mod.rrect":t.sq,"tool.mod.slot":t.sq,"tool.mod.ellipse":t.ci,"tool.mod.ngon":t.rg,"tool.mod.star":t.rg,"tool.mod.line":t.ln }); }
   }
-  Object.assign(I18N.es, { "action.nest":"Anidar formas" }); Object.assign(I18N.de, { "action.nest":"Formen verschachteln" }); Object.assign(I18N.fr, { "action.nest":"Imbriquer les formes" }); Object.assign(I18N["pt-BR"], { "action.nest":"Aninhar formas" });
+  Object.assign(I18N.es, { "action.nest":"Anidar formas","action.cylinder":"Corrección de cilindro…","cyl.dia":"Diámetro del cilindro mm","cyl.axis":"Eje curvo: x (alrededor) o y" }); Object.assign(I18N.de, { "action.nest":"Formen verschachteln","action.cylinder":"Zylinderkorrektur…","cyl.dia":"Zylinderdurchmesser mm","cyl.axis":"Gekrümmte Achse: x (herum) oder y" }); Object.assign(I18N.fr, { "action.nest":"Imbriquer les formes","action.cylinder":"Correction de cylindre…","cyl.dia":"Diamètre du cylindre mm","cyl.axis":"Axe courbe : x (autour) ou y" }); Object.assign(I18N["pt-BR"], { "action.nest":"Aninhar formas","action.cylinder":"Correção de cilindro…","cyl.dia":"Diâmetro do cilindro mm","cyl.axis":"Eixo curvo: x (ao redor) ou y" });
   Object.assign(I18N.es, { "action.nodebreak":"Romper en el nodo","action.tocurve":"Convertir en curva","action.toline":"Convertir en línea","action.mirrorline":"Reflejar sobre línea","mir.need":"Seleccione formas y luego haga clic en dos puntos para la línea.","mir.hint":"Haga clic en dos puntos para la línea de reflejo. Escape cancela." });
   Object.assign(I18N.de, { "action.nodebreak":"Am Knoten trennen","action.tocurve":"In Kurve umwandeln","action.toline":"In Linie umwandeln","action.mirrorline":"An Linie spiegeln","mir.need":"Formen auswählen, dann zwei Punkte für die Linie anklicken.","mir.hint":"Zwei Punkte für die Spiegelachse anklicken. Escape bricht ab." });
   Object.assign(I18N.fr, { "action.nodebreak":"Rompre au nœud","action.tocurve":"Convertir en courbe","action.toline":"Convertir en ligne","action.mirrorline":"Miroir sur une ligne","mir.need":"Sélectionnez des formes puis cliquez deux points pour la ligne.","mir.hint":"Cliquez deux points pour l'axe du miroir. Échap annule." });
@@ -4237,6 +4260,7 @@
     else if (act==="nodebreak"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(45,45),p(110,45),p(110,95),p(45,95)], closed:true } } }]; selectOnly(0); activeNode=1; nodeBreak(); render(); refreshCounts(); }
     else if (act==="mirrorline"){ const base={ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(30,40),p(70,50),p(35,85),p(55,60)], closed:true } } }; doc.shapes=[base, JSON.parse(JSON.stringify(base))]; sel=new Set([1]); selected=1; mirrorSelAcross(80,20,80,100); render(); refreshCounts(); }
     else if (act==="nest"){ doc.shapes=[rect(10,10,45,30,0), rect(10,10,20,50,0), rect(10,10,35,18,0), rect(10,10,25,40,0), rect(10,10,30,22,0), rect(10,10,15,35,0)]; sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; nestSelection(); selectOnly(null); render(); refreshCounts(); }
+    else if (act==="cylinder"){ doc.shapes=[]; for (let i=0;i<=16;i++){ const x=30+i*5; doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(x,40),p(x,90)], closed:false } } }); } sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; cylinderCorrect(60,"x"); selectOnly(null); render(); refreshCounts(); }
     else if (act==="mods"){ doc.shapes=[];
       // Shift constrains a wide drag (30..110, 40..65) into a square.
       MODS.shift=true; MODS.alt=false; let b=applyBoxMods(30,40,110,65); doc.shapes.push(dragBoxShape("rect",b[0],b[1],b[2],b[3],0));
