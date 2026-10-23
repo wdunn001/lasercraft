@@ -38,7 +38,7 @@ because every item ships at once.
 
 ## By area (condensed)
 
-- Document/File: core open/save/import/export, LightBurn .lbrn import Done. Many import formats (AI/PDF/HPGL/Gerber/3D) Gap. Templates, bundles, print: Gap.
+- Document/File: core open/save/import/export, LightBurn .lbrn import, HPGL (.plt) import Done. AI/PDF/Gerber/3D import Gap. Templates, bundles, print: Gap.
 - Drawing: primary shapes, rounded rect, slot, regular N-gon, star, Code 128, QR code (byte mode, versions 1 to 10, decoder-verified) Done; other 1D/2D symbologies Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
 - Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
 - Node editing: insert/delete/move, trim, extend Done; convert-curve/break/optimize/warp/deform: Gap.
