@@ -59,7 +59,7 @@ because every item ships at once.
   Direction and level count set in Preferences.
 - Camera: overlay, 4-corner align, print-and-cut marks Done; lens calibration wizard, head-mounted, LiDAR: Gap.
 - Rotary: Done (setup dialog: type, axis, steps, diameter, speeds, reverse, return). Galvo rotary-marking extras: Gap.
-- Advanced: preview, cylinder correction (sine warp for engraving on a cylinder) Done; settings/prefs Partial (language done); hotkeys, bundles, center finder, dual laser: Gap.
+- Advanced: preview, cylinder correction, keyboard shortcuts (undo/redo, select-all, copy/cut/paste, group/ungroup, duplicate, arrow-nudge) Done; settings/prefs Partial (language done); bundles, center finder, dual laser: Gap.
 
 ## Done this session (2026-10-23)
 

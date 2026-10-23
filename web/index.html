@@ -3450,6 +3450,16 @@
       if (k==="x"){ if (sel.size){ copySelection(); deleteSelection(); } return; }
       if (k==="v"){ e.preventDefault(); pasteClipboard(); return; }
       if (k==="g"){ e.preventDefault(); if (e.shiftKey) ungroupSelection(); else groupSelection(); return; }
+      if (k==="d"){ e.preventDefault(); if (sel.size) duplicateSelection(); return; }
+    }
+    // Arrow keys nudge the selection: 1 mm, 10 mm with Shift, 0.1 mm with Alt.
+    if (sel.size && /^Arrow/.test(e.key) && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : (e.altKey ? 0.1 : 1);
+      const dx = e.key==="ArrowLeft" ? -step : e.key==="ArrowRight" ? step : 0;
+      const dy = e.key==="ArrowDown" ? -step : e.key==="ArrowUp" ? step : 0;
+      for (const i of sel){ if (doc.shapes[i] && !doc.shapes[i].locked) translateShape(doc.shapes[i], dx, dy); }
+      snapshot(); render(); generate(); refreshCounts(); return;
     }
     if (e.key==="Escape"){
       // Escape backs out: cancel a pending mirror, drop any selection, then the tool.
