@@ -83,7 +83,10 @@
   .cols { display: grid; grid-template-columns: 46px 1fr 96px; padding: 5px 14px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
   .cols span:nth-child(n+4) { text-align: center; }
   .layers { overflow-y: auto; max-height: 190px; }
-  .row { display: grid; grid-template-columns: 46px 1fr 96px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); cursor: pointer; position: relative; }
+  .row { display: grid; grid-template-columns: 42px 1fr 72px 26px 24px; align-items: center; gap: 2px; padding: 8px 12px; border-top: 1px solid var(--line); cursor: pointer; position: relative; }
+  .row.dragover { box-shadow: inset 0 2px 0 var(--accent); }
+  .row .eye { font-size: 13px; justify-self: center; cursor: pointer; opacity: .85; }
+  .row .eye.off { opacity: .35; }
   .row.sel { background: #223046; }
   .row.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--sel); }
   .lyr { display: flex; align-items: center; gap: 8px; }
@@ -704,7 +707,9 @@
     s += `<circle cx="${o.x}" cy="${o.y}" r="4" fill="#28c08a"/>`;
     // shapes
     doc.shapes.forEach((sh, i) => {
-      const col = layerColor(layerByIndex(sh.cut_index));
+      const Lsh = layerByIndex(sh.cut_index);
+      if (Lsh && Lsh.show === false && !sel.has(i)) return;   // hidden layer, still show if selected
+      const col = layerColor(Lsh);
       const dd = shapeD(sh);
       if (!dd) return;
       const isSel = sel.has(i);
@@ -1113,16 +1118,29 @@
       const col=layerColor(L);
       const cls = L.mode==="Fill"?"fill":(L.mode==="Image"?"img":"line");
       const el=document.createElement("div"); el.className="row"+(i===activeLayer?" sel":"");
+      const out = L.output!==false, shown = L.show!==false;
       el.innerHTML=`<div class="lyr"><span class="sw" title="${tr("layer.pickcolor","Pick layer color")}" style="background:${col}"></span><span class="n">${L.name}</span></div>`
         +`<span class="badge ${cls}">${trMode(L.mode)}</span>`
-        +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`;
+        +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`
+        +`<span class="sw-toggle ${out?"":"off"}" title="${tr("layer.output","Output this layer")}"></span>`
+        +`<span class="eye ${shown?"":"off"}" title="${tr("layer.show","Show this layer")}">${shown?"&#128065;":"&#8856;"}</span>`;
+      el.draggable = true;
       // Click a row: make it active, and select its shapes on the canvas so the
       // selection and the layer stay in step.
-      el.onclick=(ev)=>{ if (ev.target.closest(".sw")) return; activeLayer=i; selectLayerShapes(L.index); renderLayers(); render(); };
+      el.onclick=(ev)=>{ if (ev.target.closest(".sw")||ev.target.closest(".sw-toggle")||ev.target.closest(".eye")) return; activeLayer=i; selectLayerShapes(L.index); renderLayers(); render(); };
       // Double-click the name to rename in place.
       el.querySelector(".n").ondblclick=(ev)=>{ ev.stopPropagation(); beginRenameLayer(el, i); };
       // Click the swatch to open the color palette for this layer.
       el.querySelector(".sw").onclick=(ev)=>{ ev.stopPropagation(); openColorPicker(ev.currentTarget, L); };
+      // Output and Show toggles mirror LightBurn: Output drops the layer from the
+      // job, Show hides it on the canvas.
+      el.querySelector(".sw-toggle").onclick=(ev)=>{ ev.stopPropagation(); L.output = L.output===false; renderLayers(); generate(); };
+      el.querySelector(".eye").onclick=(ev)=>{ ev.stopPropagation(); L.show = L.show===false; renderLayers(); render(); };
+      // Drag a row onto another to reorder cut order.
+      el.ondragstart=(ev)=>{ ev.dataTransfer.setData("text/plain", String(i)); ev.dataTransfer.effectAllowed="move"; };
+      el.ondragover=(ev)=>{ ev.preventDefault(); el.classList.add("dragover"); };
+      el.ondragleave=()=>el.classList.remove("dragover");
+      el.ondrop=(ev)=>{ ev.preventDefault(); el.classList.remove("dragover"); const from=+ev.dataTransfer.getData("text/plain"); reorderLayer(from, i); };
       host.appendChild(el);
     });
     $("shapeCount").textContent=doc.shapes.length;
@@ -1131,6 +1149,14 @@
   // renderPalette is retired with the bottom palette bar; kept as a no-op so the
   // many existing call sites stay valid.
   function renderPalette(){}
+  // Drag-reorder layers. List order is cut order, top to bottom.
+  function reorderLayer(from, to){
+    const arr = doc.layers; if (from===to || from<0 || from>=arr.length || to<0 || to>=arr.length) return;
+    const activeL = arr[activeLayer];
+    const [m] = arr.splice(from, 1); arr.splice(to, 0, m);
+    activeLayer = Math.max(0, arr.indexOf(activeL));
+    snapshot(); renderLayers(); render(); generate();
+  }
   // Select every shape that sits on one layer, so clicking the layer lights up its
   // work in the canvas.
   function selectLayerShapes(layerIndex){
@@ -1187,6 +1213,8 @@
       + `<div class="f2"><label data-i18n="lp.passes">Passes</label><input id="lp_passes" type="number" min="1" value="${L.num_passes}"></div>`
       + ((L.mode==="Fill"||L.mode==="Concentric")?`<div class="f2"><label data-i18n="lp.interval">Line interval mm</label><input id="lp_interval" type="number" step="0.05" min="0.01" value="${L.interval}"></div><div class="f2"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="lp_angle" type="number" value="${L.angle}"></div>`:"")
       + (galvo?`<div class="f2"><label data-i18n="lp.freq">Frequency kHz</label><input id="lp_freq" type="number" value="${L.freq}"></div><div class="f2"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="lp_qpulse" type="number" value="${L.qpulse}"></div>`:"")
+      + (L.mode==="Line"?`<div class="f2"><label data-i18n="lp.kerf">Kerf offset mm</label><input id="lp_kerf" type="number" step="0.01" value="${L.kerf||0}"></div><div class="f2"><label></label><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="lp_tabs" style="width:auto" ${L.tabs?"checked":""}> <span data-i18n="lp.tabs">Tabs / bridges</span></label></div>`:"")
+      + ((L.mode==="Line"&&L.tabs)?`<div class="f2"><label data-i18n="lp.tabsize">Tab size mm</label><input id="lp_tabsize" type="number" step="0.1" value="${L.tabSize||0.5}"></div><div class="f2"><label data-i18n="lp.tabspace">Tab spacing mm</label><input id="lp_tabspace" type="number" step="1" value="${L.tabSpacing||50}"></div>`:"")
       + (curAir?`<div class="f2 full"><label><input type="checkbox" id="lp_air" style="width:auto" ${L.air_assist?"checked":""}> <span data-i18n="lp.air">Air assist</span></label></div>`:"");
     localizeIn(host);
     const commit=()=>{ render(); generate(); renderLayers(); };
@@ -1201,7 +1229,11 @@
     bind("lp_angle",e=>L.angle=+e.value||0);
     bind("lp_freq",e=>L.freq=+e.value||30);
     bind("lp_qpulse",e=>L.qpulse=+e.value||200);
+    bind("lp_kerf",e=>L.kerf=+e.value||0);
+    bind("lp_tabsize",e=>L.tabSize=+e.value||0.5);
+    bind("lp_tabspace",e=>L.tabSpacing=+e.value||50);
     const air=$("lp_air"); if(air) air.onchange=()=>{ L.air_assist=air.checked; };
+    const tabs=$("lp_tabs"); if(tabs) tabs.onchange=()=>{ L.tabs=tabs.checked; snapshot(); commit(); };
   }
   // Add a new colour-coded layer and select it.
   function addLayer(){
@@ -1527,16 +1559,19 @@
     return [sh];
   }
   function toProject(){
+    // Only layers marked for output reach the engine; a shape on a muted layer is
+    // dropped from the job entirely.
+    const outIdx = new Set(doc.layers.filter(L=>L.output!==false).map(L=>L.index));
     return {
       app_version: "web",
-      shapes: doc.shapes.flatMap(expandShape),
+      shapes: doc.shapes.filter(sh=>outIdx.has(sh.cut_index)).flatMap(expandShape),
       cut_settings: doc.layers.map(L=>({
         index:L.index, name:L.name, speed_mm_s:L.speed_mm_s, power_min:L.power_min, power_max:L.power_max,
         num_passes:L.num_passes, air_assist:L.air_assist,
         galvo: { mode:L.mode, frequency_khz:L.freq, q_pulse_width_ns:L.qpulse, global_passes:1,
-          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:0, auto_rotate:false, dot_width_adjust:false, dot_width_mm:0.08, ramp_length_mm:0, ramp_outer_edge:false },
-          line:{ kerf_offset_mm:0, perforation:false, perforation_cut_mm:0.1, perforation_skip_mm:0.1 },
-          tabs:{ enabled:false, automatic:true, size_mm:0.5, spacing_mm:50, tabs_per_shape:1, skip_inner_shapes:false, cut_power_pct:0 },
+          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:0, auto_rotate:false, dot_width_adjust:false, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:false },
+          line:{ kerf_offset_mm:L.kerf||0, perforation:!!L.perf, perforation_cut_mm:L.perfCut||0.1, perforation_skip_mm:L.perfSkip||0.1 },
+          tabs:{ enabled:!!L.tabs, automatic:true, size_mm:L.tabSize||0.5, spacing_mm:L.tabSpacing||50, tabs_per_shape:1, skip_inner_shapes:false, cut_power_pct:0 },
           wobble:{ enabled:false, step_mm:0.05, size_mm:0.1 },
           timing_override:{ jump_speed_mm_s:4000, min_jump_delay_us:500, max_jump_delay_us:500, jump_distance_limit_mm:0, laser_on_tc_us:L.on_us, laser_off_tc_us:L.off_us, end_tc_us:300, polygon_tc_us:L.poly_us, pause_before_ms:0, pause_after_ms:0 } },
       })),
@@ -2295,6 +2330,10 @@
   Object.assign(I18N.de, { "tab.props":"Eigenschaften","props.empty":"Wählen Sie ein Objekt, um Position, Größe und Drehung zu bearbeiten.","props.x":"X mm","props.y":"Y mm","props.w":"Breite mm","props.h":"Höhe mm","props.lock":"Seitenverhältnis sperren","props.rot":"Drehen °","props.fliph":"Horizontal spiegeln","props.flipv":"Vertikal spiegeln","tool.snap":"Am Raster einrasten","tool.gridmm":"mm","mc.origin":"Nullpunkt-Ecke","mc.start":"Jobstart","mc.baud":"Baud","dev.connect":"Verbinden (USB seriell)","dev.disconnect":"Trennen","dev.run":"▶ Job starten","dev.pause":"Pause","dev.resume":"Fortsetzen","dev.stop":"Stopp","dev.home":"Referenzfahrt","dev.setorigin":"Nullpunkt setzen","dev.unlock":"Entsperren","dev.noserial":"WebSerial nicht verfügbar. Chrome oder Edge über HTTPS verwenden.","dev.connected":"Seriell verbunden mit ","dev.connfail":"Serielle Verbindung fehlgeschlagen: ","dev.disconnected":"Getrennt.","dev.framing":"Rahmen","dev.running2":"Läuft","dev.complete":"fertig","dev.busy":"Es läuft bereits ein Job.","dev.connectfirst":"Zuerst eine Maschine verbinden.","dev.gennext":"Zuerst G-Code erzeugen.","dev.runconfirm":"Diesen Job jetzt am Laser starten? Der Strahl feuert. Deckel geschlossen, Bereich frei, und Sie erreichen Stopp?","dev.paused":"Pausiert.","dev.resumed":"Fortgesetzt.","dev.stopped":"Gestoppt." });
   Object.assign(I18N.fr, { "tab.props":"Propriétés","props.empty":"Sélectionnez un objet pour modifier sa position, sa taille et sa rotation.","props.x":"X mm","props.y":"Y mm","props.w":"Largeur mm","props.h":"Hauteur mm","props.lock":"Verrouiller les proportions","props.rot":"Pivoter °","props.fliph":"Miroir horizontal","props.flipv":"Miroir vertical","tool.snap":"Aligner sur la grille","tool.gridmm":"mm","mc.origin":"Coin d'origine","mc.start":"Départ du travail","mc.baud":"Bauds","dev.connect":"Connecter (USB série)","dev.disconnect":"Déconnecter","dev.run":"▶ Lancer le travail","dev.pause":"Pause","dev.resume":"Reprendre","dev.stop":"Arrêter","dev.home":"Origine machine","dev.setorigin":"Définir l'origine","dev.unlock":"Déverrouiller","dev.noserial":"WebSerial indisponible. Utilisez Chrome ou Edge en HTTPS.","dev.connected":"Connecté en série à ","dev.connfail":"Échec de la connexion série : ","dev.disconnected":"Déconnecté.","dev.framing":"Cadrage","dev.running2":"En cours","dev.complete":"terminé","dev.busy":"Un travail est déjà en cours.","dev.connectfirst":"Connectez d'abord une machine.","dev.gennext":"Générez d'abord le G-code.","dev.runconfirm":"Lancer ce travail maintenant ? Le faisceau va tirer. Capot fermé, zone dégagée, et vous pouvez atteindre Arrêter ?","dev.paused":"En pause.","dev.resumed":"Repris.","dev.stopped":"Arrêté." });
   Object.assign(I18N["pt-BR"], { "tab.props":"Propriedades","props.empty":"Selecione um objeto para editar posição, tamanho e rotação.","props.x":"X mm","props.y":"Y mm","props.w":"Largura mm","props.h":"Altura mm","props.lock":"Travar proporção","props.rot":"Girar °","props.fliph":"Espelhar horizontal","props.flipv":"Espelhar vertical","tool.snap":"Ajustar à grade","tool.gridmm":"mm","mc.origin":"Canto de origem","mc.start":"Início do trabalho","mc.baud":"Baud","dev.connect":"Conectar (USB serial)","dev.disconnect":"Desconectar","dev.run":"▶ Executar trabalho","dev.pause":"Pausar","dev.resume":"Retomar","dev.stop":"Parar","dev.home":"Referência","dev.setorigin":"Definir origem","dev.unlock":"Desbloquear","dev.noserial":"WebSerial indisponível. Use Chrome ou Edge por HTTPS.","dev.connected":"Conectado por serial a ","dev.connfail":"Falha na conexão serial: ","dev.disconnected":"Desconectado.","dev.framing":"Enquadrando","dev.running2":"Executando","dev.complete":"concluído","dev.busy":"Já há um trabalho em execução.","dev.connectfirst":"Conecte uma máquina primeiro.","dev.gennext":"Gere o G-code primeiro.","dev.runconfirm":"Executar este trabalho agora? O feixe vai disparar. Tampa fechada, área livre e você alcança Parar?","dev.paused":"Pausado.","dev.resumed":"Retomado.","dev.stopped":"Parado." });
+  Object.assign(I18N.es, { "layer.output":"Salida de esta capa","layer.show":"Mostrar esta capa","lp.kerf":"Compensación de corte mm","lp.tabs":"Pestañas / puentes","lp.tabsize":"Tamaño de pestaña mm","lp.tabspace":"Espaciado de pestañas mm" });
+  Object.assign(I18N.de, { "layer.output":"Diese Ebene ausgeben","layer.show":"Diese Ebene anzeigen","lp.kerf":"Schnittfugen-Versatz mm","lp.tabs":"Stege / Brücken","lp.tabsize":"Steggröße mm","lp.tabspace":"Stegabstand mm" });
+  Object.assign(I18N.fr, { "layer.output":"Sortir ce calque","layer.show":"Afficher ce calque","lp.kerf":"Compensation de saignée mm","lp.tabs":"Pattes / ponts","lp.tabsize":"Taille de patte mm","lp.tabspace":"Espacement des pattes mm" });
+  Object.assign(I18N["pt-BR"], { "layer.output":"Saída desta camada","layer.show":"Mostrar esta camada","lp.kerf":"Compensação de corte mm","lp.tabs":"Abas / pontes","lp.tabsize":"Tamanho da aba mm","lp.tabspace":"Espaçamento das abas mm" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
