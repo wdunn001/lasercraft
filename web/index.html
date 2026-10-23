@@ -3347,14 +3347,15 @@
     { id:"cor",      ext:[".cor",".bin"],                                 label:"Galvo correction (COR)",io:"import", role:"cor",      input:"gdCorFile" },
     { id:"lbrn",     ext:[".lbrn",".lbrn2"],                              label:"LightBurn project",     io:"import", role:"vector",   input:"file" },
     { id:"hpgl",     ext:[".plt",".hpgl"],                                label:"HPGL plot",             io:"import", role:"vector",   input:"file" },
+    { id:"gcin",     ext:[".gc",".nc",".cnc"],                            label:"G-code program",        io:"import", role:"vector",   input:"file" },
   ];
   function acceptFor(inputId){ return FORMATS.filter(f=>f.input===inputId).flatMap(f=>f.ext).join(","); }
   // Drive every file input's accept list from the registry.
   ["file","imgFile","projFile","matFile","gdCorFile"].forEach(id => { const el=$(id); if (!el) return; const a=acceptFor(id); if (a) el.accept = (id==="imgFile") ? ("image/*,"+a) : a; });
   $("file").onchange = ev => {
     const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
-    const isDxf = /\.dxf$/i.test(f.name), isLbrn = /\.lbrn2?$/i.test(f.name), isHpgl = /\.(plt|hpgl)$/i.test(f.name);
-    rd.onload = () => { try { if (isLbrn) importLbrn(rd.result); else if (isDxf) importDxf(rd.result); else if (isHpgl) importHpgl(rd.result); else importSvg(rd.result); render(); refreshCounts(); } catch(e){ console.error(e); } };
+    const isDxf = /\.dxf$/i.test(f.name), isLbrn = /\.lbrn2?$/i.test(f.name), isHpgl = /\.(plt|hpgl)$/i.test(f.name), isGcode = /\.(gc|nc|cnc|gcode|ngc)$/i.test(f.name);
+    rd.onload = () => { try { if (isLbrn) importLbrn(rd.result); else if (isDxf) importDxf(rd.result); else if (isHpgl) importHpgl(rd.result); else if (isGcode) importGcode(rd.result); else importSvg(rd.result); render(); refreshCounts(); } catch(e){ console.error(e); } };
     rd.readAsText(f);
   };
   // Import an ASCII DXF through the engine reader, one shape per entity polyline.
@@ -3403,6 +3404,40 @@
     if (!polys.length){ alert(tr("hpgl.none","No plottable paths found in that HPGL file.")); return; }
     const toMm = (v) => v / unitsPerMm;
     const added = polys.map(pl => ({ kind:"Path", cut_index: layerIndexForPen(pl.pen), geometry:{ Polyline:{ points: pl.pts.map(([px,py]) => p(toMm(px), toMm(py))), closed:false } } }));
+    doc.shapes.push(...added); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
+  }
+  // Import a G-code program (.gc/.nc/.cnc/.gcode): replay the motion and lay each
+  // run of cutting moves as a polyline. G0 is travel and breaks the run; G1/G2/G3
+  // draw while the laser is on. G90/G91 set absolute or relative, G20/G21 set the
+  // unit. Arcs are approximated by a straight move to their end point.
+  function importGcode(text){
+    let x = 0, y = 0, abs = true, unit = 1, enabled = true, power = 1, cur = null;
+    const polys = [];
+    const flush = () => { if (cur && cur.length >= 2) polys.push(cur); cur = null; };
+    for (const raw of text.split(/\r?\n/)){
+      const line = raw.replace(/;.*/, "").replace(/\([^)]*\)/g, "").trim();
+      if (!line) continue;
+      const U = line.toUpperCase();
+      if (/\bG20\b/.test(U)) unit = 25.4; if (/\bG21\b/.test(U)) unit = 1;
+      if (/\bG90\b/.test(U)) abs = true; if (/\bG91\b/.test(U)) abs = false;
+      if (/\bM0?5\b/.test(U)) enabled = false;
+      if (/\bM0?[34]\b/.test(U)) enabled = true;
+      const sM = U.match(/\bS(-?[\d.]+)/); if (sM) power = +sM[1];
+      const gM = U.match(/\bG0*([0-3])(?!\d)/);
+      const xM = U.match(/\bX(-?[\d.]+)/), yM = U.match(/\bY(-?[\d.]+)/);
+      if (gM && (xM || yM)){
+        const g = +gM[1];
+        const nx = xM ? (abs ? +xM[1] * unit : x + +xM[1] * unit) : x;
+        const ny = yM ? (abs ? +yM[1] * unit : y + +yM[1] * unit) : y;
+        const cutting = g >= 1 && enabled && power > 0;
+        if (cutting){ if (!cur) cur = [[x, y]]; cur.push([nx, ny]); } else flush();
+        x = nx; y = ny;
+      }
+    }
+    flush();
+    if (!polys.length){ alert(tr("gci.none","No cutting moves found in that G-code.")); return; }
+    const cut = doc.layers[activeLayer].index;
+    const added = polys.map(pl => ({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.map(([px,py]) => p(px, py)), closed:false } } }));
     doc.shapes.push(...added); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
   }
   // Import a LightBurn project (.lbrn/.lbrn2). Each CutSetting becomes a layer; Rect,
@@ -3705,10 +3740,10 @@
   Object.assign(I18N.de, { "action.mergecsv":"CSV in Text einfügen…","merge.need":"Wählen Sie zuerst ein Textobjekt, dann eine CSV.","merge.empty":"Diese CSV hat keine Datenzeilen.","action.textpath":"Text auf Pfad","top.need":"Wählen Sie ein Textobjekt und einen Pfad.","top.badpath":"Diese Form hat keinen nutzbaren Pfad." });
   Object.assign(I18N.fr, { "action.mergecsv":"Fusionner un CSV dans le texte…","merge.need":"Sélectionnez d'abord un objet texte, puis choisissez un CSV.","merge.empty":"Ce CSV n'a aucune ligne de données.","action.textpath":"Texte sur chemin","top.need":"Sélectionnez un objet texte et un chemin.","top.badpath":"Cette forme n'a pas de chemin utilisable." });
   Object.assign(I18N["pt-BR"], { "action.mergecsv":"Mesclar CSV no texto…","merge.need":"Selecione primeiro um objeto de texto, depois escolha um CSV.","merge.empty":"Esse CSV não tem linhas de dados.","action.textpath":"Texto no caminho","top.need":"Selecione um objeto de texto e um caminho.","top.badpath":"Essa forma não tem um caminho utilizável." });
-  Object.assign(I18N.es, { "hpgl.none":"No se encontraron trazos en ese archivo HPGL." });
-  Object.assign(I18N.de, { "hpgl.none":"Keine Pfade in dieser HPGL-Datei gefunden." });
-  Object.assign(I18N.fr, { "hpgl.none":"Aucun tracé trouvé dans ce fichier HPGL." });
-  Object.assign(I18N["pt-BR"], { "hpgl.none":"Nenhum traço encontrado nesse arquivo HPGL." });
+  Object.assign(I18N.es, { "hpgl.none":"No se encontraron trazos en ese archivo HPGL.","gci.none":"No se encontraron movimientos de corte en ese G-code." });
+  Object.assign(I18N.de, { "hpgl.none":"Keine Pfade in dieser HPGL-Datei gefunden.","gci.none":"Keine Schnittbewegungen in diesem G-Code gefunden." });
+  Object.assign(I18N.fr, { "hpgl.none":"Aucun tracé trouvé dans ce fichier HPGL.","gci.none":"Aucun mouvement de coupe trouvé dans ce G-code." });
+  Object.assign(I18N["pt-BR"], { "hpgl.none":"Nenhum traço encontrado nesse arquivo HPGL.","gci.none":"Nenhum movimento de corte encontrado nesse G-code." });
   Object.assign(I18N.es, { "action.qr":"Crear código QR…","qr.text":"Texto o URL del QR","qr.module":"Tamaño de módulo mm","qr.toolong":"Ese texto es demasiado largo para este codificador (máx. unos 213 bytes)." });
   Object.assign(I18N.de, { "action.qr":"QR-Code erstellen…","qr.text":"QR-Text oder URL","qr.module":"Modulgröße mm","qr.toolong":"Dieser Text ist für diesen Encoder zu lang (max. etwa 213 Byte)." });
   Object.assign(I18N.fr, { "action.qr":"Créer un code QR…","qr.text":"Texte ou URL du QR","qr.module":"Taille de module mm","qr.toolong":"Ce texte est trop long pour cet encodeur (max. environ 213 octets)." });
@@ -3851,6 +3886,7 @@
     else if (act==="prefs"){ $("prefBg").classList.add("show"); }
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
     else if (act==="hpgl"){ importHpgl("IN;SP1;PU1000,1000;PD3000,1000,3000,2800,1000,2800,1000,1000;SP2;PU3600,1000;PD5600,1000,4600,3200,3600,1000;"); }
+    else if (act==="gcin"){ importGcode("G21 G90\nM4 S0\nG0 X25 Y30\nG1 X70 Y30 S500\nG1 X70 Y70\nG1 X25 Y70\nG1 X25 Y30\nM5\nG0 X85 Y30\nM4 S500\nG1 X120 Y30\nG1 X102 Y72\nG1 X85 Y30\nM5\nG0 X0 Y0\n"); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
     else if (act==="code39"){ console.log("C39 entries", Object.keys(C39).length); doc.shapes=barcode39("LC-39", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
