@@ -75,6 +75,11 @@
   /* right dock */
   .dock { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .dock .section { border-bottom: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .collapsehead { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+  .collapsehead .chev { font-size: 10px; color: var(--muted); display: inline-block; transition: transform .15s; }
+  .collapsible.collapsed > .collapse-body { display: none; }
+  .collapsible.collapsed .chev { transform: rotate(-90deg); }
+  .collapse-body { display: flex; flex-direction: column; min-height: 0; }
   .dock h3 { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); padding: 11px 14px 7px; display: flex; align-items: center; }
   .dock h3 .mini { margin-left: auto; display: flex; gap: 4px; }
   .dock h3 .mini span { width: 22px; height: 22px; border: 1px solid var(--line); background: var(--field); border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; font-size: 12px; }
@@ -298,12 +303,13 @@
         </div>
         <div class="layers" id="layers"></div>
       </div>
-      <div class="section" id="lpSection">
-        <div class="lp" id="lp"></div>
+      <div class="section collapsible" id="lpSection">
+        <h3 class="collapsehead"><span class="chev">▾</span> <span data-i18n="panel.cutsettings">Cut settings</span></h3>
+        <div class="collapse-body"><div class="lp" id="lp"></div></div>
       </div>
-      <div class="section" style="flex:1">
-        <h3 data-i18n="panel.laser">Laser</h3>
-        <div class="out">
+      <div class="section collapsible" style="flex:1">
+        <h3 class="collapsehead"><span class="chev">▾</span> <span data-i18n="panel.laser">Laser</span></h3>
+        <div class="collapse-body"><div class="out">
           <div class="devrow"><select id="machine" title="Machine" style="flex:1"></select><button class="btn" id="editMachine" title="Edit machine" data-i18n-t="mc.edit"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button></div>
           <div class="devrow" id="galvoRow" style="display:none">
             <button class="btn" id="connectBtn" style="flex:1" data-i18n="galvo.connect">Connect galvo (WebUSB)</button>
@@ -328,6 +334,7 @@
           <div class="gcode"><div class="gchdr"><button class="btn sm" id="copyBtn" data-i18n="action.copy">Copy</button></div><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
           <div class="stat"><span><span data-i18n="stat.lines">Lines</span> <b id="lineCount">0</b></span><span><span data-i18n="stat.shapes">Shapes</span> <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
+      </div>
       </div>
       </div>
 
@@ -2753,6 +2760,8 @@
   // ---- Move / jog panel ----
   const GotoXY = 0x000D, LaserSignalOn = 0x000F, LaserSignalOff = 0x000E;
   let jogDist = 10, jogPos = { x: 0x8000, y: 0x8000 };   // device units, 0x8000 is centre
+  // Collapsible right-dock sections: a header click folds its body away.
+  document.querySelectorAll(".collapsehead").forEach(h => h.onclick = () => { const c = h.closest(".collapsible"); if (c) c.classList.toggle("collapsed"); });
   document.querySelectorAll(".docktabs button").forEach(b => b.onclick = () => {
     document.querySelectorAll(".docktabs button").forEach(x => x.classList.toggle("active", x === b));
     $("designPane").style.display = b.dataset.dock === "design" ? "flex" : "none";
@@ -2960,7 +2969,8 @@
   Object.assign(I18N.de, { "action.depth":"Tiefengravur (Textur)…","prefs.depthlevels":"Tiefenstufen","prefs.depthinvert":"Tiefenrichtung","prefs.depthinvertlbl":"Dunkler schneidet tiefer (umkehren)" });
   Object.assign(I18N.fr, { "action.depth":"Gravure en profondeur (texture)…","prefs.depthlevels":"Niveaux de profondeur","prefs.depthinvert":"Sens de la profondeur","prefs.depthinvertlbl":"Le plus foncé coupe plus profond (inverser)" });
   Object.assign(I18N["pt-BR"], { "action.depth":"Gravação em profundidade (textura)…","prefs.depthlevels":"Níveis de profundidade","prefs.depthinvert":"Direção da profundidade","prefs.depthinvertlbl":"Mais escuro corta mais fundo (inverter)" });
-  Object.assign(I18N.es, { "action.fillet":"Redondear esquinas (empalme)…","action.chamfer":"Chaflán de esquinas…","mod.filletamt":"Radio de empalme mm","mod.chamferamt":"Distancia de chaflán mm" });
+  Object.assign(I18N.es, { "action.fillet":"Redondear esquinas (empalme)…","action.chamfer":"Chaflán de esquinas…","mod.filletamt":"Radio de empalme mm","mod.chamferamt":"Distancia de chaflán mm","panel.cutsettings":"Ajustes de corte" });
+  Object.assign(I18N.de, { "panel.cutsettings":"Schnitteinstellungen" }); Object.assign(I18N.fr, { "panel.cutsettings":"Réglages de coupe" }); Object.assign(I18N["pt-BR"], { "panel.cutsettings":"Ajustes de corte" });
   Object.assign(I18N.de, { "action.fillet":"Ecken abrunden (Verrundung)…","action.chamfer":"Ecken fasen…","mod.filletamt":"Verrundungsradius mm","mod.chamferamt":"Fasenabstand mm" });
   Object.assign(I18N.fr, { "action.fillet":"Arrondir les coins (congé)…","action.chamfer":"Chanfreiner les coins…","mod.filletamt":"Rayon de congé mm","mod.chamferamt":"Distance de chanfrein mm" });
   Object.assign(I18N["pt-BR"], { "action.fillet":"Arredondar cantos (filete)…","action.chamfer":"Chanfrar cantos…","mod.filletamt":"Raio do filete mm","mod.chamferamt":"Distância do chanfro mm" });
