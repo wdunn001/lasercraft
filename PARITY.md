@@ -1,0 +1,62 @@
+# LightBurn feature parity checklist
+
+This tracks LaserCraft against LightBurn's documented features and controls, drawn
+from the official reference at docs.lightburnsoftware.com. Status is one of Done,
+Partial, or Gap. The goal is 1:1 coverage of the documented controls. The long tail
+(barcodes, LiDAR, nesting, dual-laser, taper warp) is listed so nothing is lost, not
+because every item ships at once.
+
+## Most-prominent 25 (baseline a reimplementation is judged on)
+
+| # | Feature | Status | Notes |
+|---|---------|--------|-------|
+| 1 | New / Open / Save / Import / Export, project files | Done | Native .lcproj; SVG/DXF/image import; GCode/DXF export. LightBurn .lbrn import is a Gap. |
+| 2 | Draw lines + shape tools (rect, ellipse, polygon, star) | Partial | rect/ellipse/polygon/line/pen done; star added. More regular polygons: Gap. |
+| 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
+| 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
+| 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled). |
+| 6 | Variable text (serial, date/time, CSV merge) | Gap | |
+| 7 | Group / Ungroup | Done | Group id on shapes, group-aware selection, Ctrl+G / Ctrl+Shift+G. |
+| 8 | Align and distribute | Partial | Align to bed done; distribute: Partial. |
+| 9 | Boolean union / subtract / intersect + weld | Done | |
+| 10 | Offset shapes | Done | |
+| 11 | Grid array and circular array | Done | Arrange dialog. |
+| 12 | Cuts/Layers window + colour palette | Done | Layers with colour picker, output/show toggles, cut-order reorder. |
+| 13 | Cut settings editor: Line/Fill/Image/Offset-fill | Done | Line/Fill/Concentric/Image modes. |
+| 14 | Speed, max/min power, passes | Done | |
+| 15 | Scan angle, line interval, cross-hatch | Partial | Angle + interval done; cross-hatch: Gap. |
+| 16 | Image dithering modes | Partial | Dither import present; explicit mode picker: Gap. |
+| 17 | Trace image (vectorize) | Done | |
+| 18 | Laser window: start, frame, pause, stop | Done | GRBL serial: Run (confirm), Frame (beam-off), Pause/Resume, Stop. |
+| 19 | Job origin / start from (abs, current, user) | Partial | Absolute and current position done; user origin: Partial. |
+| 20 | Jog + position readout | Done | Move tab jog; GRBL position readout. |
+| 21 | Device setup and connection | Done | Machine add/edit/delete; serial and galvo USB. |
+| 22 | Bed size, origin corner, grid/snapping | Done | Bed size, origin corner stored, grid snap. |
+| 23 | Material library (save, assign, link presets) | Done | Per-machine materials with finishes; JSON/XML/CSV import, JSON export. |
+| 24 | Preview / simulation before running | Done | Cut preview modal plays back the toolpath. |
+| 25 | Camera overlay, calibration, alignment | Done | Camera tab with 4-corner alignment, registration marks. |
+
+## By area (condensed)
+
+- Document/File: core open/save/import/export Done. Many import formats (AI/PDF/HPGL/Gerber/3D) Gap. Templates, bundles, print: Gap.
+- Drawing: primary shapes Done; star Done; triangle/pentagon/octagon/bar-code Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
+- Edit/Transform: selection, clipboard, undo/redo, align, arrays, boolean, offset, draw-order, lock Done/Partial. Nesting, dock, two-point rotate, mirror-across-line: Gap.
+- Node editing: insert/delete/move Done; trim/extend/convert/break/optimize/warp/deform: Gap.
+- Text: core + alignment + fonts Done; variable text, text-on-path, bending, bar code: Gap.
+- Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, kerf, tabs, perforation, ramp Done; lead-in/out, overcut, sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
+- Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
+- Fill/scan: interval, angle Done; cross-hatch, bidirectional, overscan, DPI, fill grouping, flood fill: Gap.
+- Image/art: trace + dither import Done; adjust image, dither-mode picker, mask, convert-to-bitmap, 3D depth map: Gap.
+- Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position Done; console, macros, file list, bridge, full device-settings pages: Gap.
+- Coordinate/work area: bed, origin corner, grid snap Done; units mm/inch, guidelines, snap distances, alignment guides: Gap.
+- Camera: overlay, 4-corner align, print-and-cut marks Done; lens calibration wizard, head-mounted, LiDAR: Gap.
+- Rotary: Gap.
+- Advanced: preview Done; settings/prefs Partial (language done); hotkeys, bundles, center finder, cylinder correction, taper, dual laser: Gap.
+
+## Done this session (2026-10-23)
+
+Hardware control (GRBL serial run/frame/pause/stop, position readout), machine
+add/edit/delete with capabilities and origin/baud/job-start, Properties tab, grid
+snap, per-layer output/show toggles, cut-order drag reorder, kerf, tabs/bridges,
+machine-scoped material library with finishes and 3-format import, group/ungroup,
+star tool, cut preview. Full i18n across en/es/de/fr/pt-BR for every new control.

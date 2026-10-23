@@ -119,6 +119,7 @@
   .gchdr { position: sticky; top: -10px; margin: -10px -10px 6px; padding: 6px 8px; display: flex; justify-content: flex-end; background: var(--field); border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; }
   .btn.sm { padding: 3px 10px; font-size: 11px; }
   .devpos { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; color: var(--muted); align-self: center; }
+  .pvctl { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
   .gcode pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; line-height: 1.5; color: #cdd3e0; white-space: pre; }
   .stat { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); }
   .stat b { color: var(--ink); }
@@ -214,7 +215,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -435,6 +436,23 @@
     </div>
   </div>
 
+  <!-- cut preview / simulation -->
+  <div class="modal-bg" id="pvBg">
+    <div class="modal" style="width:760px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="pv.title">Preview</h2><span class="spacer"></span><span class="btn" id="pvClose">&times;</span></div>
+      <div class="mbody">
+        <div style="background:var(--bed);border:1px solid var(--line);border-radius:8px;overflow:hidden"><svg id="pvCanvas" width="100%" height="420" style="display:block"></svg></div>
+        <div class="pvctl">
+          <button class="btn" id="pvPlay" data-i18n="pv.play">&#9654; Play</button>
+          <input type="range" id="pvScrub" min="0" max="1000" value="1000" style="flex:1">
+          <label class="tpcheck"><input type="checkbox" id="pvTravel" checked> <span data-i18n="pv.travel">Show travel</span></label>
+          <span class="devpos" id="pvTime">&mdash;</span>
+        </div>
+      </div>
+      <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="pv.note">Green is cutting, grey is rapid travel.</span><button class="btn" id="pvCancel" data-i18n="action.cancel">Close</button></div>
+    </div>
+  </div>
+
   <!-- add machine -->
   <div class="modal-bg" id="mcBg">
     <div class="modal" style="width:440px">
@@ -549,9 +567,16 @@
     const pts = []; for (let i=0;i<64;i++){ const t=i/64*Math.PI*2; pts.push(p(cx+rx*Math.cos(t), cy+ry*Math.sin(t))); }
     return { kind: "Ellipse", cut_index: cut, geometry: { Polyline: { points: pts, closed: true } } };
   }
+  // A star fit to a bounding ellipse (rx,ry). Points alternate outer and inner radii.
+  function star(cx, cy, rx, ry, npoints, cut) {
+    const n = Math.max(3, npoints|0), inner = 0.42, pts = [];
+    for (let i=0;i<n*2;i++){ const t = -Math.PI/2 + i/(n*2)*Math.PI*2; const f = (i%2===0) ? 1 : inner; pts.push(p(cx+rx*f*Math.cos(t), cy+ry*f*Math.sin(t))); }
+    return { kind: "Path", cut_index: cut, geometry: { Polyline: { points: pts, closed: true } } };
+  }
+  let starPoints = 5;
   function p(x,y){ return { x:+x.toFixed(3), y:+y.toFixed(3) }; }
   let snapOn = false, gridMM = 10;
-  const DRAW_TOOLS = { rect:1, ellipse:1, poly:1, line:1, pen:1 };
+  const DRAW_TOOLS = { rect:1, ellipse:1, poly:1, star:1, line:1, pen:1 };
   // Snap a point to the grid, but only while a drawing tool is active and snap is on.
   function snapForTool(pt){
     if (!snapOn || !DRAW_TOOLS[tool] || !(gridMM > 0)) return pt;
@@ -629,7 +654,7 @@
   // CAD and image sides read apart the way the user framed them.
   const TOOL_GROUPS = [
     { name:"Select", color:"#8b93a7", tools:[ ["select","M4 2l9 16 2-7 7-2z"], ["node","M5 5h3v3H5z M16 16h3v3h-3z M7 7l10 10"] ] },
-    { name:"Vector", color:"#3b82f6", tools:[ ["rect","M3 5h18v14H3z"], ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"], ["poly","M12 3l9 7-3 11H6L3 10z"], ["line","M4 20L20 4"], ["pen","M4 20l7-2 8-8-5-5-8 8z"], ["text","M5 5h14 M12 5v14 M9 19h6"] ] },
+    { name:"Vector", color:"#3b82f6", tools:[ ["rect","M3 5h18v14H3z"], ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"], ["poly","M12 3l9 7-3 11H6L3 10z"], ["star","M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"], ["line","M4 20L20 4"], ["pen","M4 20l7-2 8-8-5-5-8 8z"], ["text","M5 5h14 M12 5v14 M9 19h6"] ] },
     { name:"CAD", color:"#28c08a", tools:[ ["measure","M3 17L17 3l4 4L7 21z M7 13l2 2 M11 9l2 2 M15 5l2 2"] ] },
     { name:"Image", color:"#b06ef5", tools:[ ["image","M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M8 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"] ] },
   ];
@@ -641,6 +666,7 @@
     rect:"Drag to draw a rectangle.",
     ellipse:"Drag to draw an ellipse.",
     poly:"Click to add points. Double-click to finish.",
+    star:"Drag to draw a star.",
     line:"Drag to draw a line.",
     pen:"Click for anchors, drag for handles. Enter finishes, Escape cancels.",
     text:"Type text, then click on the canvas to place it.",
@@ -923,6 +949,20 @@
   // Select exactly one shape, or clear with null. `selected` stays the primary
   // index for the single-shape tools (node edit, text edit, transform handles).
   function selectOnly(i){ selected = (i==null) ? null : i; sel = (i==null) ? new Set() : new Set([i]); }
+  // Grouping: shapes that share a group id move and select together.
+  function groupMembers(i){
+    const sh = doc.shapes[i]; if (!sh || !sh.group) return [i];
+    const out = []; doc.shapes.forEach((s,k)=>{ if (s.group === sh.group) out.push(k); }); return out.length ? out : [i];
+  }
+  function groupSelection(){
+    if (sel.size < 2) return; const gid = doc.shapes.reduce((m,s)=>Math.max(m, s.group||0), 0) + 1;
+    for (const i of sel){ if (doc.shapes[i]) doc.shapes[i].group = gid; }
+    snapshot(); render();
+  }
+  function ungroupSelection(){
+    let any = false; for (const i of sel){ if (doc.shapes[i] && doc.shapes[i].group){ delete doc.shapes[i].group; any = true; } }
+    if (any){ snapshot(); render(); }
+  }
   function groupBBox(){ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,any=false; for (const i of sel){ const sh=doc.shapes[i]; if(!sh) continue; const bb=bbox(sh); x0=Math.min(x0,bb.x0);y0=Math.min(y0,bb.y0);x1=Math.max(x1,bb.x1);y1=Math.max(y1,bb.y1);any=true; } return any?{x0,y0,x1,y1}:null; }
   function marqueeHits(x0,y0,x1,y1){ const lo={x:Math.min(x0,x1),y:Math.min(y0,y1)}, hi={x:Math.max(x0,x1),y:Math.max(y0,y1)}; const out=[]; doc.shapes.forEach((sh,i)=>{ const b=bbox(sh); if (b.x1>=lo.x&&b.x0<=hi.x&&b.y1>=lo.y&&b.y0<=hi.y) out.push(i); }); return out; }
   function deleteSelection(){ const idx=[...sel].sort((a,b)=>b-a); for (const i of idx) doc.shapes.splice(i,1); selectOnly(null); snapshot(); render(); refreshCounts(); }
@@ -1010,8 +1050,9 @@
         if (!e.shiftKey) selectOnly(null);
         marquee = { x0:m.x, y0:m.y, base:new Set(sel) }; dragShape = null; render(); return;
       }
-      if (e.shiftKey){ if (sel.has(hit)) sel.delete(hit); else sel.add(hit); selected = sel.size ? hit : null; }
-      else if (!sel.has(hit)){ selectOnly(hit); }
+      const grp = groupMembers(hit);   // clicking one grouped shape grabs the whole group
+      if (e.shiftKey){ if (sel.has(hit)) grp.forEach(i=>sel.delete(i)); else grp.forEach(i=>sel.add(i)); selected = sel.size ? hit : null; }
+      else if (!sel.has(hit)){ sel = new Set(grp); selected = grp.length===1 ? hit : hit; }
       else { selected = hit; }
       dragShape = hit; dragLast = m;
       const bb=bbox(doc.shapes[hit]); dragOff = { x: m.x-bb.x0, y: m.y-bb.y0 };
@@ -1044,8 +1085,9 @@
       else moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y);
       render(); return;
     }
-    if (tool==="rect" || tool==="ellipse"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=layerColor(doc.layers[activeLayer]);
+    if (tool==="rect" || tool==="ellipse" || tool==="star"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=layerColor(doc.layers[activeLayer]);
       drawing = tool==="rect" ? `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`
+        : tool==="star" ? (()=>{ const sh=star((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,starPoints,0); const d=shapeD(sh); return `<path d="${d}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`; })()
         : `<ellipse cx="${(a.x+b.x)/2}" cy="${(a.y+b.y)/2}" rx="${Math.abs(b.x-a.x)/2}" ry="${Math.abs(b.y-a.y)/2}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`;
       render(); }
   });
@@ -1061,6 +1103,7 @@
     const m = px2mm(e.clientX, e.clientY);
     if (tool==="rect" && Math.abs(m.x-start.x)>1){ doc.shapes.push(rect(Math.min(start.x,m.x),Math.min(start.y,m.y),Math.abs(m.x-start.x),Math.abs(m.y-start.y),doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
     else if (tool==="ellipse" && Math.abs(m.x-start.x)>1){ doc.shapes.push(ellipse((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
+    else if (tool==="star" && Math.abs(m.x-start.x)>1){ doc.shapes.push(star((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,starPoints,doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
     start=null; drawing=null; dragShape=null; dragNode=null; render(); refreshCounts();
   });
   function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
@@ -1461,6 +1504,87 @@
     a.href = url; a.download = (mc.name||"machine").replace(/[^\w.-]+/g,"_") + "-materials.json";
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 1000);
   }
+  // ---- cut preview / simulation ----
+  // Parse the generated G-code into travel and cut segments, draw them, and play
+  // the toolpath back so the operator can check order and framing before a run.
+  let pvSegs = [], pvBoundsP = null, pvAnim = null, pvPlaying = false, pvT = 1;
+  function parseGcodeSegments(g){
+    const segs = []; let x = 0, y = 0, on = false, lastF = 0, time = 0;
+    const lines = g.split("\n");
+    for (let raw of lines){
+      const line = raw.replace(/;.*/, "").trim(); if (!line) continue;
+      const up = line.toUpperCase();
+      const g0 = /\bG0\b/.test(up), g1 = /\bG1\b/.test(up);
+      if (/\bM3\b|\bM4\b/.test(up)) on = true;
+      if (/\bM5\b/.test(up)) on = false;
+      const fx = up.match(/F(-?[\d.]+)/); if (fx) lastF = +fx[1];
+      const mx = up.match(/X(-?[\d.]+)/), my = up.match(/Y(-?[\d.]+)/);
+      if ((g0 || g1) && (mx || my)){
+        const nx = mx ? +mx[1] : x, ny = my ? +my[1] : y;
+        const cut = g1;   // G1 is a cutting/engraving move, G0 a rapid
+        const dist = Math.hypot(nx - x, ny - y);
+        const feed = (cut && lastF > 0) ? lastF : 6000;   // mm/min
+        time += dist / (feed / 60);
+        segs.push({ x0:x, y0:y, x1:nx, y1:ny, cut, t:time });
+        x = nx; y = ny;
+      }
+    }
+    return { segs, total: time };
+  }
+  function pvBounds(segs){
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for (const s of segs){ x0=Math.min(x0,s.x0,s.x1); y0=Math.min(y0,s.y0,s.y1); x1=Math.max(x1,s.x1,s.x0); y1=Math.max(y1,s.y1,s.y0); }
+    if (x0>x1){ x0=0;y0=0;x1=BED.w;y1=BED.h; }
+    return {x0,y0,x1,y1};
+  }
+  function drawPreview(){
+    const svg = $("pvCanvas"); const W = svg.clientWidth || 720, H = 420;
+    const b = pvBoundsP; const pad = 14;
+    const sx = (W-2*pad)/Math.max(1, b.x1-b.x0), sy = (H-2*pad)/Math.max(1, b.y1-b.y0), s = Math.min(sx, sy);
+    const X = v => pad + (v - b.x0)*s, Y = v => H - pad - (v - b.y0)*s;
+    const showTravel = $("pvTravel").checked;
+    const cutoff = pvT * (pvSegs.length ? pvSegs[pvSegs.length-1].t : 0);
+    let out = "";
+    for (const sg of pvSegs){
+      if (sg.t > cutoff && pvT < 1) continue;
+      if (!sg.cut && !showTravel) continue;
+      const col = sg.cut ? "#28c08a" : "#5a6274";
+      const dash = sg.cut ? "" : ` stroke-dasharray="3 3"`;
+      out += `<line x1="${X(sg.x0).toFixed(1)}" y1="${Y(sg.y0).toFixed(1)}" x2="${X(sg.x1).toFixed(1)}" y2="${Y(sg.y1).toFixed(1)}" stroke="${col}" stroke-width="${sg.cut?1.4:0.8}"${dash}/>`;
+    }
+    // Head marker at the cutoff point.
+    const head = pvSegs.filter(sg=>sg.t<=cutoff).slice(-1)[0];
+    if (head) out += `<circle cx="${X(head.x1).toFixed(1)}" cy="${Y(head.y1).toFixed(1)}" r="4" fill="#ff5a3c"/>`;
+    svg.innerHTML = out;
+    const total = pvSegs.length ? pvSegs[pvSegs.length-1].t : 0;
+    const cur = pvT*total; const f=x=>`${Math.floor(x/60)}m ${(x%60).toFixed(0)}s`;
+    $("pvTime").textContent = `${f(cur)} / ${f(total)}`;
+  }
+  function openPreview(){
+    if (!ready) return;
+    let g; try { g = isGalvo() ? generate_gcode(JSON.stringify(toProject()), MOTION, "grbl") : $("gcode").textContent; } catch(e){ g = $("gcode").textContent; }
+    const parsed = parseGcodeSegments(g || "");
+    pvSegs = parsed.segs; pvBoundsP = pvBounds(pvSegs); pvT = 1; pvPlaying = false;
+    $("pvScrub").value = 1000; $("pvPlay").innerHTML = "&#9654; " + tr("pv.play","Play");
+    $("pvBg").classList.add("show");
+    requestAnimationFrame(drawPreview);
+  }
+  function pvStep(){
+    if (!pvPlaying) return;
+    pvT = Math.min(1, pvT + 0.012);
+    $("pvScrub").value = Math.round(pvT*1000);
+    drawPreview();
+    if (pvT >= 1){ pvPlaying = false; $("pvPlay").innerHTML = "&#9654; " + tr("pv.play","Play"); return; }
+    pvAnim = requestAnimationFrame(pvStep);
+  }
+  $("pvPlay") && ($("pvPlay").onclick = () => {
+    if (pvPlaying){ pvPlaying = false; $("pvPlay").innerHTML = "&#9654; " + tr("pv.play","Play"); return; }
+    if (pvT >= 1) pvT = 0;
+    pvPlaying = true; $("pvPlay").innerHTML = "&#10073;&#10073; " + tr("pv.pause","Pause"); pvStep();
+  });
+  $("pvScrub") && ($("pvScrub").oninput = () => { pvPlaying = false; $("pvPlay").innerHTML = "&#9654; " + tr("pv.play","Play"); pvT = +$("pvScrub").value/1000; drawPreview(); });
+  $("pvTravel") && ($("pvTravel").onchange = drawPreview);
+  $("pvClose") && ($("pvClose").onclick = $("pvCancel").onclick = () => { pvPlaying = false; $("pvBg").classList.remove("show"); });
   function openMaterials(){ renderMaterials(); $("matBg").classList.add("show"); }
   $("matBtn").onclick = openMaterials;
   $("matClose").onclick = $("matCancel").onclick = () => $("matBg").classList.remove("show");
@@ -1963,6 +2087,9 @@
     if (a==="new"){ doc.shapes=[]; selectOnly(null); }
     else if (a==="delete" && sel.size){ deleteSelection(); return; }
     else if (a==="dupe" && sel.size){ duplicateSelection(); return; }
+    else if (a==="group"){ groupSelection(); return; }
+    else if (a==="ungroup"){ ungroupSelection(); return; }
+    else if (a==="preview"){ openPreview(); return; }
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
     else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
@@ -2025,6 +2152,7 @@
       if (k==="c"){ copySelection(); return; }
       if (k==="x"){ if (sel.size){ copySelection(); deleteSelection(); } return; }
       if (k==="v"){ e.preventDefault(); pasteClipboard(); return; }
+      if (k==="g"){ e.preventDefault(); if (e.shiftKey) ungroupSelection(); else groupSelection(); return; }
     }
     if (e.key==="Escape"){
       // Escape backs out: drop any selection, then fall back to the select tool.
@@ -2334,6 +2462,10 @@
   Object.assign(I18N.de, { "layer.output":"Diese Ebene ausgeben","layer.show":"Diese Ebene anzeigen","lp.kerf":"Schnittfugen-Versatz mm","lp.tabs":"Stege / Brücken","lp.tabsize":"Steggröße mm","lp.tabspace":"Stegabstand mm" });
   Object.assign(I18N.fr, { "layer.output":"Sortir ce calque","layer.show":"Afficher ce calque","lp.kerf":"Compensation de saignée mm","lp.tabs":"Pattes / ponts","lp.tabsize":"Taille de patte mm","lp.tabspace":"Espacement des pattes mm" });
   Object.assign(I18N["pt-BR"], { "layer.output":"Saída desta camada","layer.show":"Mostrar esta camada","lp.kerf":"Compensação de corte mm","lp.tabs":"Abas / pontes","lp.tabsize":"Tamanho da aba mm","lp.tabspace":"Espaçamento das abas mm" });
+  Object.assign(I18N.es, { "action.group":"Agrupar","action.ungroup":"Desagrupar","action.preview":"Vista previa…","pv.title":"Vista previa","pv.play":"Reproducir","pv.pause":"Pausar","pv.travel":"Mostrar desplazamiento","pv.note":"Verde es corte, gris es desplazamiento rápido.","tool.hint.star":"Arrastre para dibujar una estrella." });
+  Object.assign(I18N.de, { "action.group":"Gruppieren","action.ungroup":"Gruppierung aufheben","action.preview":"Vorschau…","pv.title":"Vorschau","pv.play":"Abspielen","pv.pause":"Pause","pv.travel":"Leerfahrten zeigen","pv.note":"Grün ist Schneiden, Grau ist Eilgang.","tool.hint.star":"Ziehen, um einen Stern zu zeichnen." });
+  Object.assign(I18N.fr, { "action.group":"Grouper","action.ungroup":"Dégrouper","action.preview":"Aperçu…","pv.title":"Aperçu","pv.play":"Lire","pv.pause":"Pause","pv.travel":"Afficher les déplacements","pv.note":"Vert = coupe, gris = déplacement rapide.","tool.hint.star":"Faites glisser pour dessiner une étoile." });
+  Object.assign(I18N["pt-BR"], { "action.group":"Agrupar","action.ungroup":"Desagrupar","action.preview":"Visualização…","pv.title":"Visualização","pv.play":"Reproduzir","pv.pause":"Pausar","pv.travel":"Mostrar deslocamento","pv.note":"Verde é corte, cinza é deslocamento rápido.","tool.hint.star":"Arraste para desenhar uma estrela." });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -2406,6 +2538,8 @@
     else if (act==="weld"){ doc.shapes.push(rect(70,45,70,45,0)); weldActive(); render(); refreshCounts(); }
     else if (act==="subtract"){ doc.shapes.push(rect(70,45,70,45,0)); selectOnly(0); booleanWith("difference"); render(); refreshCounts(); }
     else if (act==="materials"){ openMaterials(); }
+    else if (act==="preview"){ generate(); openPreview(); }
+    else if (act==="star"){ doc.shapes.push(star(75,55,40,40,5,0)); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="cs"){ openCutSettings(2); }
     else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="dither"){ const c=document.createElement("canvas"); c.width=220; c.height=150; const cx=c.getContext("2d"); const g=cx.createRadialGradient(110,75,8,110,75,100); g.addColorStop(0,"#fff"); g.addColorStop(1,"#000"); cx.fillStyle=g; cx.fillRect(0,0,220,150); const im=new Image(); im.onload=()=>ditherImage(im); im.src=c.toDataURL(); }
