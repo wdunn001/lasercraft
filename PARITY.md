@@ -11,7 +11,7 @@ because every item ships at once.
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
 | 1 | New / Open / Save / Import / Export, project files | Done | Native .lcproj; SVG/DXF/image import; GCode/DXF export. LightBurn .lbrn import is a Gap. |
-| 2 | Draw lines + shape tools (rect, ellipse, polygon, star) | Partial | rect/ellipse/polygon/line/pen done; star added. More regular polygons: Gap. |
+| 2 | Draw lines + shape tools (rect, ellipse, polygon, star) | Done | rect, rounded rect, ellipse, regular N-gon, freeform poly, star, slot, line, pen, text. |
 | 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
 | 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
 | 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled). |
@@ -40,8 +40,8 @@ because every item ships at once.
 
 - Document/File: core open/save/import/export Done. Many import formats (AI/PDF/HPGL/Gerber/3D) Gap. Templates, bundles, print: Gap.
 - Drawing: primary shapes Done; star Done; triangle/pentagon/octagon/bar-code Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
-- Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
-- Node editing: insert/delete/move Done; trim/extend/convert/break/optimize/warp/deform: Gap.
+- Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
+- Node editing: insert/delete/move, trim, extend Done; convert-curve/break/optimize/warp/deform: Gap.
 - Text: core + alignment + fonts Done; variable text, text-on-path, bending, bar code: Gap.
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, kerf, tabs, perforation, ramp Done; lead-in/out, overcut, sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
