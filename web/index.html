@@ -246,17 +246,17 @@
               <option value="linuxcnc">LinuxCNC</option>
               <option value="galvo">EZCAD2 / JCZFiber (galvo)</option>
             </select>
-            <button class="btn" id="copyBtn">Copy</button>
+            <button class="btn" id="copyBtn" data-i18n="action.copy">Copy</button>
           </div>
           <div class="devrow" id="galvoRow" style="display:none">
             <button class="btn" id="connectBtn" style="flex:1" data-i18n="galvo.connect">Connect galvo (WebUSB)</button>
             <button class="btn" id="sendBtn" disabled data-i18n="galvo.send">Send</button>
           </div>
-          <div class="stat" id="devstat" style="display:none">Galvo not connected. Plug in the board and click Connect.</div>
+          <div class="stat" id="devstat" style="display:none" data-i18n="galvo.notconnected">Galvo not connected. Plug in the board and click Connect.</div>
           <div class="devrow"><button class="btn" id="frameBtn" style="flex:1" data-i18n="action.frame">Frame</button><button class="btn primary" id="genBtn" style="flex:1" data-i18n="action.generate">Generate</button></div>
           <button class="btn" id="matBtn" style="width:100%" data-i18n="mat.open">Material Library&hellip;</button>
           <div class="gcode"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
-          <div class="stat"><span>Lines <b id="lineCount">0</b></span><span>Shapes <b id="shapeCount">0</b></span><span id="galvo"></span></div>
+          <div class="stat"><span><span data-i18n="stat.lines">Lines</span> <b id="lineCount">0</b></span><span><span data-i18n="stat.shapes">Shapes</span> <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
       </div>
       </div>
@@ -539,13 +539,13 @@
       if (document.activeElement !== $("textH")) $("textH").value = t.h;
       if ($("textAlign")) $("textAlign").value = t.align || "left";
       if ($("textFont")) $("textFont").value = t.font || "mark";
-      if (lbl) lbl.textContent = "Edit Text";
+      if (lbl) lbl.textContent = tr("text.edit", "Edit Text");
       $("addText").style.display = "none";
     } else {
-      if (lbl) lbl.textContent = "Add Text";
+      if (lbl) lbl.textContent = tr("text.add", "Add Text");
       $("addText").style.display = "";
     }
-    const h = $("toolHint"); if (h) h.textContent = TOOL_HINT[tool] || TOOL_HINT.select;
+    const h = $("toolHint"); if (h) h.textContent = tr("tool.hint." + tool, TOOL_HINT[tool] || TOOL_HINT.select);
   }
   const toolsEl = $("tools");
   function setTool(name){
@@ -931,6 +931,7 @@
       + `<div class="mi" data-ctx="back" data-i18n="ctx.back">Send to back</div>`
       + `<div class="sep"></div>`
       + `<div class="mi" data-ctx="delete" data-i18n="action.delete">Delete</div>`;
+    localizeIn(ctx);
     ctx.querySelectorAll("[data-setlayer]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); setLayerForSelection(+el.dataset.setlayer); closeCtx(); });
     ctx.querySelectorAll("[data-ctx]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); const a=el.dataset.ctx;
       if(a==="dupe"){ duplicateSelection(); }
@@ -980,6 +981,7 @@
       + ((L.mode==="Fill"||L.mode==="Concentric")?`<div class="f2"><label data-i18n="lp.interval">Line interval mm</label><input id="lp_interval" type="number" step="0.05" min="0.01" value="${L.interval}"></div><div class="f2"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="lp_angle" type="number" value="${L.angle}"></div>`:"")
       + (galvo?`<div class="f2"><label data-i18n="lp.freq">Frequency kHz</label><input id="lp_freq" type="number" value="${L.freq}"></div><div class="f2"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="lp_qpulse" type="number" value="${L.qpulse}"></div>`:"")
       + `<div class="f2 full"><label><input type="checkbox" id="lp_air" style="width:auto" ${L.air_assist?"checked":""}> <span data-i18n="lp.air">Air assist</span></label></div>`;
+    localizeIn(host);
     const commit=()=>{ render(); generate(); renderLayers(); };
     $("lp_seg").querySelectorAll("button").forEach(b=>b.onclick=()=>{ L.mode=b.dataset.m; snapshot(); commit(); });
     const bind=(id,set)=>{ const e=$(id); if(e) e.oninput=()=>{ set(e); render(); generate(); const row=$("layers").children[activeLayer]; if(row){ const sp=row.querySelector(".sp"); if(sp) sp.innerHTML=`${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span>`; } }; };
@@ -1150,7 +1152,7 @@
       const secs = estimate_seconds(pj, MOTION); const mm=Math.floor(secs/60), ss=(secs-mm*60).toFixed(1);
       $("est").textContent = `${mm}m ${ss}s`;
       const bytes = generate_galvo_lmc(pj, 110, 16, 30, 100, 2048);
-      $("galvo").innerHTML = `Galvo <b>${bytes.length}</b> B`;
+      $("galvo").innerHTML = `${tr("stat.galvo","Galvo")} <b>${bytes.length}</b> B`;
       if (isGalvo()) {
         $("gcode").textContent =
           `; BJJCZ LMC galvo list buffer — EZCAD2 / JCZFiber\n`+
@@ -1722,6 +1724,19 @@
   Object.assign(I18N.de, { "action.exportdxf":"DXF exportieren…" });
   Object.assign(I18N.fr, { "action.exportdxf":"Exporter DXF…" });
   Object.assign(I18N["pt-BR"], { "action.exportdxf":"Exportar DXF…" });
+  // New-feature strings, translated across all shipped locales for full coverage.
+  Object.assign(I18N.es, { "action.open":"Abrir proyecto…","action.save":"Guardar proyecto…","action.trace":"Trazar imagen (vector)…","action.prefs":"Preferencias…","action.ok":"Aceptar","tab.layers":"Capas","text.place":"Colocar","ctx.changelayer":"Cambiar capa","ctx.front":"Traer al frente","ctx.back":"Enviar al fondo","lp.name":"Nombre de capa","lp.speed":"Velocidad mm/s","lp.power":"Potencia máx %","lp.pmin":"Potencia mín %","lp.passes":"Pasadas","lp.interval":"Intervalo de línea mm","lp.angle":"Ángulo de trama°","lp.freq":"Frecuencia kHz","lp.qpulse":"Ancho de pulso ns","lp.air":"Asistencia de aire","prefs.title":"Preferencias","prefs.lang":"Idioma","prefs.langnote":"El valor predeterminado sigue su navegador.","pnc.title":"Imprimir y cortar","pnc.add":"Añadir marcas de registro","pnc.note":"Las marcas se imprimen en las esquinas del diseño. Imprima la hoja, colóquela en la cama y calibre la cámara sobre las marcas impresas.","tool.hint.select":"Seleccionar y mover. Arrastre un tirador para escalar o rotar." });
+  Object.assign(I18N.de, { "action.open":"Projekt öffnen…","action.save":"Projekt speichern…","action.trace":"Bild vektorisieren…","action.prefs":"Einstellungen…","action.ok":"OK","tab.layers":"Ebenen","text.place":"Platzieren","ctx.changelayer":"Ebene ändern","ctx.front":"In den Vordergrund","ctx.back":"In den Hintergrund","lp.name":"Ebenenname","lp.speed":"Geschwindigkeit mm/s","lp.power":"Leistung max %","lp.pmin":"Leistung min %","lp.passes":"Durchgänge","lp.interval":"Linienabstand mm","lp.angle":"Schraffurwinkel°","lp.freq":"Frequenz kHz","lp.qpulse":"Pulsbreite ns","lp.air":"Luftunterstützung","prefs.title":"Einstellungen","prefs.lang":"Sprache","prefs.langnote":"Die Vorgabe folgt Ihrem Browser.","pnc.title":"Drucken und schneiden","pnc.add":"Passermarken hinzufügen","pnc.note":"Die Marken drucken an den Ecken des Designs. Blatt drucken, auf die Arbeitsfläche legen, dann die Kamera auf die gedruckten Marken kalibrieren.","tool.hint.select":"Auswählen und verschieben. Ziehen Sie einen Griff zum Skalieren oder Drehen." });
+  Object.assign(I18N.fr, { "action.open":"Ouvrir un projet…","action.save":"Enregistrer le projet…","action.trace":"Vectoriser l'image…","action.prefs":"Préférences…","action.ok":"OK","tab.layers":"Calques","text.place":"Placer","ctx.changelayer":"Changer de calque","ctx.front":"Mettre au premier plan","ctx.back":"Mettre à l'arrière-plan","lp.name":"Nom du calque","lp.speed":"Vitesse mm/s","lp.power":"Puissance max %","lp.pmin":"Puissance min %","lp.passes":"Passes","lp.interval":"Intervalle de ligne mm","lp.angle":"Angle de hachure°","lp.freq":"Fréquence kHz","lp.qpulse":"Largeur d'impulsion ns","lp.air":"Assistance d'air","prefs.title":"Préférences","prefs.lang":"Langue","prefs.langnote":"La valeur par défaut suit votre navigateur.","pnc.title":"Impression et découpe","pnc.add":"Ajouter des repères","pnc.note":"Les repères s'impriment aux coins du dessin. Imprimez la feuille, placez-la sur le plateau, puis calibrez la caméra sur les repères imprimés.","tool.hint.select":"Sélectionner et déplacer. Faites glisser une poignée pour redimensionner ou pivoter." });
+  Object.assign(I18N["pt-BR"], { "action.open":"Abrir projeto…","action.save":"Salvar projeto…","action.trace":"Traçar imagem (vetor)…","action.prefs":"Preferências…","action.ok":"OK","tab.layers":"Camadas","text.place":"Colocar","ctx.changelayer":"Mudar camada","ctx.front":"Trazer para frente","ctx.back":"Enviar para trás","lp.name":"Nome da camada","lp.speed":"Velocidade mm/s","lp.power":"Potência máx %","lp.pmin":"Potência mín %","lp.passes":"Passagens","lp.interval":"Intervalo de linha mm","lp.angle":"Ângulo de hachura°","lp.freq":"Frequência kHz","lp.qpulse":"Largura de pulso ns","lp.air":"Assistência de ar","prefs.title":"Preferências","prefs.lang":"Idioma","prefs.langnote":"O padrão segue o seu navegador.","pnc.title":"Imprimir e cortar","pnc.add":"Adicionar marcas de registro","pnc.note":"As marcas imprimem nos cantos do desenho. Imprima a folha, coloque-a na mesa e calibre a câmera sobre as marcas impressas.","tool.hint.select":"Selecionar e mover. Arraste uma alça para dimensionar ou girar." });
+  Object.assign(I18N.es, { "text.add":"Añadir texto","text.edit":"Editar texto","tool.hint.node":"Editar nodos. Arrastre un ancla o un tirador de Bézier.","tool.hint.rect":"Arrastre para dibujar un rectángulo.","tool.hint.ellipse":"Arrastre para dibujar una elipse.","tool.hint.poly":"Haga clic para añadir puntos. Doble clic para terminar.","tool.hint.line":"Arrastre para dibujar una línea.","tool.hint.pen":"Haga clic para anclas, arrastre para tiradores. Enter termina, Escape cancela.","tool.hint.text":"Escriba el texto, luego haga clic en el lienzo para colocarlo.","tool.hint.measure":"Arrastre para medir distancia y ángulo." });
+  Object.assign(I18N.de, { "text.add":"Text hinzufügen","text.edit":"Text bearbeiten","tool.hint.node":"Knoten bearbeiten. Ziehen Sie einen Ankerpunkt oder Bézier-Griff.","tool.hint.rect":"Ziehen, um ein Rechteck zu zeichnen.","tool.hint.ellipse":"Ziehen, um eine Ellipse zu zeichnen.","tool.hint.poly":"Klicken, um Punkte hinzuzufügen. Doppelklick zum Abschließen.","tool.hint.line":"Ziehen, um eine Linie zu zeichnen.","tool.hint.pen":"Klicken für Ankerpunkte, ziehen für Griffe. Enter schließt ab, Escape bricht ab.","tool.hint.text":"Text eingeben, dann zum Platzieren auf die Arbeitsfläche klicken.","tool.hint.measure":"Ziehen, um Abstand und Winkel zu messen." });
+  Object.assign(I18N.fr, { "text.add":"Ajouter du texte","text.edit":"Modifier le texte","tool.hint.node":"Modifier les nœuds. Faites glisser une ancre ou une poignée de Bézier.","tool.hint.rect":"Faites glisser pour dessiner un rectangle.","tool.hint.ellipse":"Faites glisser pour dessiner une ellipse.","tool.hint.poly":"Cliquez pour ajouter des points. Double-cliquez pour terminer.","tool.hint.line":"Faites glisser pour dessiner une ligne.","tool.hint.pen":"Cliquez pour les ancres, faites glisser pour les poignées. Entrée termine, Échap annule.","tool.hint.text":"Saisissez le texte, puis cliquez sur le plateau pour le placer.","tool.hint.measure":"Faites glisser pour mesurer la distance et l'angle." });
+  Object.assign(I18N["pt-BR"], { "text.add":"Adicionar texto","text.edit":"Editar texto","tool.hint.node":"Editar nós. Arraste uma âncora ou alça de Bézier.","tool.hint.rect":"Arraste para desenhar um retângulo.","tool.hint.ellipse":"Arraste para desenhar uma elipse.","tool.hint.poly":"Clique para adicionar pontos. Clique duplo para finalizar.","tool.hint.line":"Arraste para desenhar uma linha.","tool.hint.pen":"Clique para âncoras, arraste para alças. Enter finaliza, Escape cancela.","tool.hint.text":"Digite o texto e clique na tela para colocá-lo.","tool.hint.measure":"Arraste para medir distância e ângulo." });
+  Object.assign(I18N.es, { "panel.layers":"Capas","action.copy":"Copiar","stat.lines":"Líneas","stat.shapes":"Formas","galvo.notconnected":"Galvo no conectado. Conecte la placa y haga clic en Conectar." });
+  Object.assign(I18N.de, { "panel.layers":"Ebenen","action.copy":"Kopieren","stat.lines":"Linien","stat.shapes":"Formen","galvo.notconnected":"Galvo nicht verbunden. Platine anschließen und auf Verbinden klicken." });
+  Object.assign(I18N.fr, { "panel.layers":"Calques","action.copy":"Copier","stat.lines":"Lignes","stat.shapes":"Formes","galvo.notconnected":"Galvo non connecté. Branchez la carte et cliquez sur Connecter." });
+  Object.assign(I18N["pt-BR"], { "panel.layers":"Camadas","action.copy":"Copiar","stat.lines":"Linhas","stat.shapes":"Formas","galvo.notconnected":"Galvo não conectado. Conecte a placa e clique em Conectar." });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -1740,13 +1755,21 @@
   Object.assign(I18N["pt-BR"], { "cs.title":"Configurações de corte","cs.freq":"Frequência de pulso","cs.qpulse":"Largura de pulso","cs.pmin":"Potência mín.","cs.interval":"Intervalo de linhas","cs.angle":"Ângulo de hachura","cs.on":"Ligado","cs.off":"Desligado","cs.onus":"Atraso laser ligado","cs.offus":"Atraso laser desligado","cs.polyus":"Atraso de canto","cs.tabcut":"Corte","cs.tabtimings":"Tempos","cs.reset":"Redefinir camada" });
   let curLang = "en";
   function trMode(m){ const t = I18N[curLang] || {}; return t["mode." + String(m).toLowerCase()] || m; }
+  // Generic catalog lookup for strings rendered from JS, with English fallback.
+  function tr(key, fallback){ const t = I18N[curLang] || {}, en = I18N.en || {}; return t[key] !== undefined ? t[key] : (en[key] !== undefined ? en[key] : fallback); }
   document.querySelectorAll("[data-i18n]").forEach(el => I18N.en[el.dataset.i18n] = el.textContent);
   document.querySelectorAll("[data-i18n-ph]").forEach(el => I18N.en[el.dataset.i18nPh] = el.getAttribute("placeholder"));
+  // Translate the data-i18n elements inside one subtree, with English fallback.
+  // Dynamic panels call this so their labels localize without re-rendering layers.
+  function localizeIn(root){
+    if (!root) return;
+    const t = I18N[curLang] || {}, en = I18N.en || {};
+    root.querySelectorAll("[data-i18n]").forEach(el => { const k = el.dataset.i18n; el.textContent = t[k] !== undefined ? t[k] : (en[k] || el.textContent); });
+    root.querySelectorAll("[data-i18n-ph]").forEach(el => { const k = el.dataset.i18nPh; el.placeholder = t[k] !== undefined ? t[k] : (en[k] || el.placeholder); });
+  }
   function applyLang(lang){
     curLang = lang;
-    const t = I18N[lang] || {}, en = I18N.en;
-    document.querySelectorAll("[data-i18n]").forEach(el => { const k = el.dataset.i18n; el.textContent = t[k] !== undefined ? t[k] : (en[k] || el.textContent); });
-    document.querySelectorAll("[data-i18n-ph]").forEach(el => { const k = el.dataset.i18nPh; el.placeholder = t[k] !== undefined ? t[k] : (en[k] || el.placeholder); });
+    localizeIn(document.body);
     renderLayers();
   }
   $("lang").onchange = () => applyLang($("lang").value);
