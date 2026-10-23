@@ -1136,19 +1136,30 @@
     rd.readAsText(f);
   };
   // Import an ASCII DXF through the engine reader, one shape per entity polyline.
+  // A named DXF layer maps to a cut layer of the same name, created if it is new,
+  // so a multi-layer drawing keeps its layer split. Layer "0" lands on the active
+  // layer, the AutoCAD default that usually means "no particular layer".
+  function layerIndexForName(name){
+    if (!name || name === "0") return doc.layers[activeLayer].index;
+    const existing = doc.layers.find(l => l.name === name);
+    if (existing) return existing.index;
+    const idx = doc.layers.reduce((m, l) => Math.max(m, l.index), -1) + 1;
+    doc.layers.push(layer(idx, name, 20, 80, "Line"));
+    return idx;
+  }
   function importDxf(text){
     if (!ready) return;
     let polys; try { polys = JSON.parse(import_dxf(text)); } catch(e){ console.error(e); return; }
-    const cut = doc.layers[activeLayer].index;
-    for (const pl of polys){ if (pl.points.length >= 2) doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.points.map(a => p(a[0], a[1])), closed: !!pl.closed } } }); }
-    selected = null;
+    for (const pl of polys){ if (pl.points.length >= 2){ const cut = layerIndexForName(pl.layer); doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.points.map(a => p(a[0], a[1])), closed: !!pl.closed } } }); } }
+    renderLayers(); renderPalette(); selected = null;
   }
   // Export every shape as DXF polylines. Cubic paths flatten to polylines first.
   function exportDxf(){
     if (!ready) return;
     const polys = doc.shapes.map(sh => {
       const closed = sh.geometry.Polyline ? !!sh.geometry.Polyline.closed : (sh.geometry.Path ? !!sh.geometry.Path.closed : false);
-      return { points: shapeFlatPts(sh).map(q => [q.x, q.y]), closed };
+      const L = doc.layers.find(l => l.index === sh.cut_index);
+      return { points: shapeFlatPts(sh).map(q => [q.x, q.y]), closed, layer: L ? L.name : "0" };
     }).filter(pl => pl.points.length >= 2);
     let text; try { text = export_dxf(JSON.stringify(polys)); } catch(e){ console.error(e); return; }
     const b = new Blob([text], { type:"application/dxf" }); const u = URL.createObjectURL(b);
@@ -1367,6 +1378,13 @@
       const polys = doc.shapes.map(sh => ({ points: shapeFlatPts(sh).map(q=>[q.x,q.y]), closed: sh.geometry.Polyline ? !!sh.geometry.Polyline.closed : false }));
       const text = export_dxf(JSON.stringify(polys));
       doc.shapes=[]; importDxf(text); render(); refreshCounts(); }
+    else if (act==="dxflayers"){ const L=[], pr=(c,v)=>{L.push(c);L.push(v);};
+      pr(0,"SECTION");pr(2,"ENTITIES");
+      pr(0,"LWPOLYLINE");pr(8,"CUT");pr(90,4);pr(70,1);pr(10,20);pr(20,25);pr(10,85);pr(20,25);pr(10,85);pr(20,75);pr(10,20);pr(20,75);
+      pr(0,"CIRCLE");pr(8,"ENGRAVE");pr(10,115);pr(20,50);pr(40,22);
+      pr(0,"LINE");pr(8,"SCORE");pr(10,20);pr(20,100);pr(11,130);pr(21,120);
+      pr(0,"ENDSEC");pr(0,"EOF");
+      doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>

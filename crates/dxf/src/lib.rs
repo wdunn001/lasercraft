@@ -29,6 +29,8 @@ pub struct DxfPolyline {
     pub points: Vec<(f64, f64)>,
     /// Whether the last point joins back to the first.
     pub closed: bool,
+    /// The DXF layer name the entity sat on. Defaults to `0`.
+    pub layer: String,
 }
 
 /// One group-code and value pair, the atom of an ASCII DXF file.
@@ -95,6 +97,16 @@ fn int_of(entity: &Entity, code: i32) -> i32 {
         .find(|(c, _)| *c == code)
         .and_then(|(_, v)| v.trim().parse::<i32>().ok())
         .unwrap_or(0)
+}
+
+/// The entity's layer name from group code 8, or `0` when absent.
+fn layer_of(entity: &Entity) -> String {
+    entity
+        .fields
+        .iter()
+        .find(|(c, _)| *c == 8)
+        .map(|(_, v)| v.clone())
+        .unwrap_or_else(|| "0".to_string())
 }
 
 /// Steps used to flatten a full circle. An arc uses a share of this by angle.
@@ -187,7 +199,11 @@ fn read_lwpolyline(entity: &Entity) -> Option<DxfPolyline> {
         closing.pop();
         points.extend(closing);
     }
-    Some(DxfPolyline { points, closed })
+    Some(DxfPolyline {
+        points,
+        closed,
+        layer: layer_of(entity),
+    })
 }
 
 /// Read the older POLYLINE, whose vertices are the VERTEX entities that follow it.
@@ -231,7 +247,14 @@ fn read_polyline(header: &Entity, rest: &[Entity]) -> (Option<DxfPolyline>, usiz
         closing.pop();
         points.extend(closing);
     }
-    (Some(DxfPolyline { points, closed }), consumed)
+    (
+        Some(DxfPolyline {
+            points,
+            closed,
+            layer: layer_of(header),
+        }),
+        consumed,
+    )
 }
 
 /// Read every supported entity in `text` into polylines.
@@ -251,6 +274,7 @@ pub fn parse_dxf(text: &str) -> Vec<DxfPolyline> {
                     out.push(DxfPolyline {
                         points: vec![(x1, y1), (x2, y2)],
                         closed: false,
+                        layer: layer_of(entity),
                     });
                 }
             }
@@ -265,6 +289,7 @@ pub fn parse_dxf(text: &str) -> Vec<DxfPolyline> {
                     out.push(DxfPolyline {
                         points,
                         closed: true,
+                        layer: layer_of(entity),
                     });
                 }
             }
@@ -285,6 +310,7 @@ pub fn parse_dxf(text: &str) -> Vec<DxfPolyline> {
                     out.push(DxfPolyline {
                         points: arc_points(cx, cy, r, start, end - start),
                         closed: false,
+                        layer: layer_of(entity),
                     });
                 }
             }
@@ -323,10 +349,15 @@ pub fn write_dxf(polylines: &[DxfPolyline]) -> String {
             continue;
         }
         let flag = if poly.closed { 1 } else { 0 };
+        let layer = if poly.layer.is_empty() {
+            "0"
+        } else {
+            poly.layer.as_str()
+        };
         // 66 marks that vertices follow, which R12 POLYLINE requires.
-        let _ = write!(out, "0\nPOLYLINE\n8\n0\n66\n1\n70\n{flag}\n");
+        let _ = write!(out, "0\nPOLYLINE\n8\n{layer}\n66\n1\n70\n{flag}\n");
         for &(x, y) in &poly.points {
-            let _ = write!(out, "0\nVERTEX\n8\n0\n10\n{x}\n20\n{y}\n30\n0\n");
+            let _ = write!(out, "0\nVERTEX\n8\n{layer}\n10\n{x}\n20\n{y}\n30\n0\n");
         }
         out.push_str("0\nSEQEND\n");
     }
@@ -431,15 +462,26 @@ mod tests {
             DxfPolyline {
                 points: vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)],
                 closed: true,
+                layer: "CUT".to_string(),
             },
             DxfPolyline {
                 points: vec![(1.0, 2.0), (3.0, 4.0)],
                 closed: false,
+                layer: "0".to_string(),
             },
         ];
         let text = write_dxf(&polys);
         let back = parse_dxf(&text);
         assert_eq!(back, polys);
+    }
+
+    #[test]
+    fn reads_the_entity_layer_name() {
+        let out = parse_dxf(&dxf("0\nLINE\n8\nENGRAVE\n10\n0\n20\n0\n11\n1\n21\n1\n"));
+        assert_eq!(out.len(), 1);
+        for poly in &out {
+            assert_eq!(poly.layer, "ENGRAVE");
+        }
     }
 
     #[test]

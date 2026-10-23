@@ -194,12 +194,14 @@ pub fn import_dxf(text: &str) -> Result<String, JsError> {
     struct Poly {
         points: Vec<(f64, f64)>,
         closed: bool,
+        layer: String,
     }
     let polys: Vec<Poly> = lasercraft_dxf::parse_dxf(text)
         .into_iter()
         .map(|p| Poly {
             points: p.points,
             closed: p.closed,
+            layer: p.layer,
         })
         .collect();
     serde_json::to_string(&polys).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
@@ -216,6 +218,8 @@ pub fn export_dxf(polylines_json: &str) -> Result<String, JsError> {
     struct Poly {
         points: Vec<(f64, f64)>,
         closed: bool,
+        #[serde(default)]
+        layer: String,
     }
     let polys: Vec<Poly> = parse(polylines_json, "polylines")?;
     let dxf: Vec<lasercraft_dxf::DxfPolyline> = polys
@@ -223,6 +227,7 @@ pub fn export_dxf(polylines_json: &str) -> Result<String, JsError> {
         .map(|p| lasercraft_dxf::DxfPolyline {
             points: p.points,
             closed: p.closed,
+            layer: if p.layer.is_empty() { "0".to_string() } else { p.layer },
         })
         .collect();
     Ok(lasercraft_dxf::write_dxf(&dxf))
