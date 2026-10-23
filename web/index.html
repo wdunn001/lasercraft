@@ -22,12 +22,26 @@
   .menubar .m:hover { background: var(--field); color: var(--ink); }
   .menubar .spacer { flex: 1; }
   .dropdown { position: absolute; top: 100%; left: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px; min-width: 190px; z-index: 50; box-shadow: 0 16px 40px rgba(0,0,0,.6); display: none; }
-  .menubar .m.open .dropdown { display: block; }
+  .menubar .m.open > .dropdown { display: block; }
   .dropdown div { padding: 7px 11px; border-radius: 6px; color: var(--ink); font-weight: 400; }
   .dropdown div:hover { background: var(--accent); color: #fff; }
+  .dropdown .sub { position: relative; padding-right: 22px; }
+  .dropdown .sub > .lbl { pointer-events: none; }
+  .dropdown .sub::after { content: "\25B8"; position: absolute; right: 10px; top: 7px; opacity: .55; }
+  .dropdown .sub > .dropdown { position: absolute; top: -6px; left: 100%; margin-left: -2px; display: none; padding: 5px; }
+  .dropdown .sub > .dropdown:hover { background: var(--panel); color: var(--ink); }
+  /* A JS hover-intent listener toggles .subopen with a short close delay, so the
+     submenu stays put while the cursor crosses the gap into it. */
+  .dropdown .sub.subopen > .dropdown { display: block; }
+  /* Invisible bridge over the parent-to-submenu gap so crossing it still counts
+     as hovering the row. Present while the row is hovered or its submenu is open. */
+  .dropdown .sub:hover::before, .dropdown .sub.subopen::before { content: ""; position: absolute; top: 0; right: -10px; width: 14px; height: 100%; }
   select, input { font: inherit; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; }
   .btn { font: inherit; border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 7px; padding: 7px 13px; cursor: pointer; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .alignbtns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .alignbtns2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .alignbtns .btn, .alignbtns2 .btn { padding: 7px 4px; text-align: center; }
   .btn.danger { border-color: #7a2b2b; color: #ff8d8d; }
   .btn.danger:hover { background: #3a1e1e; }
   .mccaps { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
@@ -80,6 +94,10 @@
   .collapse-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; max-height: 2400px; opacity: 1; transition: max-height .26s ease-in-out, opacity .2s ease-in-out; }
   .collapsible.collapsed > .collapse-body { max-height: 0; opacity: 0; }
   .collapsible.collapsed .chev { transform: rotate(-90deg); }
+  .csBody .collapsible { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .csBody .collapsehead { padding: 9px 11px; background: var(--panel2); font-weight: 600; font-size: 13px; }
+  .csBody .collapse-body { padding: 11px; gap: 10px; }
+  .csBody .collapsible.collapsed > .collapse-body { padding-top: 0; padding-bottom: 0; }
   /* Left tool strip: collapsible, colour-coded groups. */
   .toolgrp { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden; max-height: 600px; opacity: 1; transition: max-height .24s ease-in-out, opacity .18s ease-in-out; }
   .toolgrp.collapsed { max-height: 0; opacity: 0; margin: 0; }
@@ -126,7 +144,9 @@
 
   /* laser/output section */
   .out { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
-  .out .devrow { display: flex; gap: 8px; }
+  .out .devrow { display: flex; gap: 8px; align-items: center; }
+  .gchk { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .gchk input { width: auto; }
   .out .devrow select { flex: 1; }
   .out .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .gcode { position: relative; flex: 1; min-height: 80px; overflow: auto; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
@@ -252,7 +272,93 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="mirrorline" data-i18n="action.mirrorline">Mirror across line</div><div data-act="nest" data-i18n="action.nest">Nest shapes</div><div data-act="cylinder" data-i18n="action.cylinder">Cylinder correction&hellip;</div><div data-act="centerfind" data-i18n="action.centerfind">Find circle center</div><div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div><div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div><div data-act="toline" data-i18n="action.toline">Convert to line</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown">
+        <div data-act="undo" data-i18n="action.undo">Undo</div>
+        <div data-act="redo" data-i18n="action.redo">Redo</div>
+        <div class="sep"></div>
+        <div data-act="delete" data-i18n="action.delete">Delete selected</div>
+        <div data-act="dupe" data-i18n="action.dupe">Duplicate</div>
+        <div class="sep"></div>
+        <div data-act="lock" data-i18n="action.lock">Lock</div>
+        <div data-act="unlock" data-i18n="action.unlock">Unlock all</div>
+        <div class="sep"></div>
+        <div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div>
+      </div>
+    </span>
+    <span class="m" data-menu="arrange"><span data-i18n="menu.arrange">Arrange</span>
+      <div class="dropdown">
+        <div data-act="group" data-i18n="action.group">Group</div>
+        <div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div>
+        <div class="sep"></div>
+        <div class="sub"><span class="lbl" data-i18n="sub.align">Align</span>
+          <div class="dropdown">
+            <div data-act="al_left" data-i18n="al.left">Left edges</div>
+            <div data-act="al_cx" data-i18n="al.cx">Center horizontally</div>
+            <div data-act="al_right" data-i18n="al.right">Right edges</div>
+            <div class="sep"></div>
+            <div data-act="al_top" data-i18n="al.top">Top edges</div>
+            <div data-act="al_cy" data-i18n="al.cy">Center vertically</div>
+            <div data-act="al_bottom" data-i18n="al.bottom">Bottom edges</div>
+            <div class="sep"></div>
+            <div data-act="p2p" data-i18n="al.p2p">Point to point move&hellip;</div>
+          </div>
+        </div>
+        <div class="sub"><span class="lbl" data-i18n="sub.distribute">Distribute</span>
+          <div class="dropdown">
+            <div data-act="disth" data-i18n="action.disth">Distribute horizontally</div>
+            <div data-act="distv" data-i18n="action.distv">Distribute vertically</div>
+          </div>
+        </div>
+        <div class="sep"></div>
+        <div data-act="mirrorline" data-i18n="action.mirrorline">Mirror across line</div>
+        <div data-act="nest" data-i18n="action.nest">Nest shapes</div>
+        <div data-act="arrange" data-i18n="action.arrange">Array &amp; offset&hellip;</div>
+      </div>
+    </span>
+    <span class="m" data-menu="tools"><span data-i18n="menu.tools">Tools</span>
+      <div class="dropdown">
+        <div class="sub"><span class="lbl" data-i18n="sub.boolean">Boolean</span>
+          <div class="dropdown">
+            <div data-act="weld" data-i18n="action.weld">Weld (union)</div>
+            <div data-act="subtract" data-i18n="action.subtract">Subtract</div>
+            <div data-act="intersect" data-i18n="action.intersect">Intersect</div>
+            <div data-act="concentric" data-i18n="action.concentric">Concentric fill</div>
+          </div>
+        </div>
+        <div class="sep"></div>
+        <div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div>
+        <div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div>
+        <div class="sep"></div>
+        <div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div>
+        <div data-act="toline" data-i18n="action.toline">Convert to line</div>
+        <div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div>
+        <div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div>
+        <div class="sep"></div>
+        <div class="sub"><span class="lbl" data-i18n="sub.barcode">Barcodes</span>
+          <div class="dropdown">
+            <div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div>
+            <div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div>
+          </div>
+        </div>
+        <div class="sub"><span class="lbl" data-i18n="sub.text">Text</span>
+          <div class="dropdown">
+            <div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div>
+            <div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div>
+            <div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div>
+            <div data-act="textpath" data-i18n="action.textpath">Text on path</div>
+          </div>
+        </div>
+      </div>
+    </span>
+    <span class="m" data-menu="laser"><span data-i18n="menu.laser">Laser</span>
+      <div class="dropdown">
+        <div data-act="preview" data-i18n="action.preview">Preview&hellip;</div>
+        <div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div>
+        <div class="sep"></div>
+        <div data-act="centerfind" data-i18n="action.centerfind">Find circle center</div>
+        <div data-act="cylinder" data-i18n="action.cylinder">Cylinder correction&hellip;</div>
+        <div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div>
+      </div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -323,12 +429,16 @@
         <div class="collapse-body"><div class="out">
           <div class="devrow"><select id="machine" title="Machine" style="flex:1"></select><button class="btn" id="editMachine" title="Edit machine" data-i18n-t="mc.edit"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button></div>
           <div class="devrow" id="galvoRow" style="display:none">
-            <button class="btn" id="connectBtn" style="flex:1" data-i18n="galvo.connect">Connect galvo (WebUSB)</button>
-            <button class="btn" id="sendBtn" disabled data-i18n="galvo.send">Send</button>
+            <button class="btn sm" id="connectBtn" data-i18n="galvo.connect">Connect</button>
+            <label class="gchk"><input type="checkbox" id="galvoAuto"> <span data-i18n="galvo.auto">Auto-connect</span></label>
           </div>
           <div class="devrow" id="serialRow"><button class="btn" id="connectSerial" style="flex:1" data-i18n="dev.connect">Connect (USB serial)</button></div>
-          <div class="stat" id="devstat" style="display:none" data-i18n="galvo.notconnected">Galvo not connected. Plug in the board and click Connect.</div>
-          <div class="devrow"><button class="btn" id="frameBtn" style="flex:1" data-i18n="action.frame">Frame</button><button class="btn primary" id="genBtn" style="flex:1" data-i18n="action.generate">Generate</button></div>
+          <div class="stat" id="devstat" style="display:none;white-space:pre-line;max-height:150px;overflow:auto;font-size:11px;line-height:1.35;font-family:monospace" data-i18n="galvo.notconnected">Galvo not connected. Plug in the board and click Connect.</div>
+          <div class="devrow" id="galvoActRow" style="display:none">
+            <button class="btn" id="galvoFrameBtn" style="flex:1" data-i18n="action.frame">Frame</button>
+            <button class="btn primary" id="galvoCutBtn" style="flex:1" disabled data-i18n="dev.cut">Cut</button>
+          </div>
+          <div class="devrow" id="serialActRow"><button class="btn" id="frameBtn" style="flex:1" data-i18n="action.frame">Frame</button><button class="btn primary" id="genBtn" style="flex:1" data-i18n="action.generate">Generate</button></div>
           <div class="devrow" id="jobRow" style="display:none">
             <button class="btn primary" id="runBtn" style="flex:2" data-i18n="dev.run">&#9654; Run job</button>
             <button class="btn" id="pauseBtn" style="flex:1" data-i18n="dev.pause">Pause</button>
@@ -357,9 +467,12 @@
             </div>
           </div>
           <button class="btn" id="matBtn" style="width:100%" data-i18n="mat.open">Material Library&hellip;</button>
-          <div class="gcode collapsible" id="gcodeSection"><div class="gchdr collapsehead"><span class="chev">&#9662;</span> <span data-i18n="panel.gcode">G-code</span><span style="flex:1"></span><button class="btn sm" id="copyBtn" data-i18n="action.copy">Copy</button></div><div class="collapse-body"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div></div>
           <div class="stat"><span><span data-i18n="stat.lines">Lines</span> <b id="lineCount">0</b></span><span><span data-i18n="stat.shapes">Shapes</span> <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
+      </div>
+      <div class="section collapsible collapsed" id="gcodeSection">
+        <h3 class="collapsehead"><span class="chev">&#9662;</span> <span data-i18n="panel.gcode">G-code</span><span style="flex:1"></span><button class="btn sm" id="copyBtn" data-i18n="action.copy">Copy</button></h3>
+        <div class="collapse-body"><pre id="gcode" style="margin:0">Draw something, pick a layer, then Generate.</pre></div>
       </div>
       </div>
       </div>
@@ -378,6 +491,22 @@
           <div class="moveacts" style="margin-top:14px">
             <button class="btn" id="pr_fliph" data-i18n="props.fliph">Flip horizontal</button>
             <button class="btn" id="pr_flipv" data-i18n="props.flipv">Flip vertical</button>
+          </div>
+          <div id="prAlign" style="display:none;margin-top:16px">
+            <div class="stat" style="color:var(--muted);margin-bottom:6px" data-i18n="sub.align">Align</div>
+            <div class="alignbtns">
+              <button class="btn" data-palign="left" data-i18n="al.s.left">Left</button>
+              <button class="btn" data-palign="cx" data-i18n="al.s.cx">Center</button>
+              <button class="btn" data-palign="right" data-i18n="al.s.right">Right</button>
+              <button class="btn" data-palign="top" data-i18n="al.s.top">Top</button>
+              <button class="btn" data-palign="cy" data-i18n="al.s.cy">Middle</button>
+              <button class="btn" data-palign="bottom" data-i18n="al.s.bottom">Bottom</button>
+            </div>
+            <div class="alignbtns2" style="margin-top:8px">
+              <button class="btn" data-palign="disth" data-i18n="al.s.disth">Distribute H</button>
+              <button class="btn" data-palign="distv" data-i18n="al.s.distv">Distribute V</button>
+            </div>
+            <button class="btn" data-palign="p2p" style="width:100%;margin-top:8px" data-i18n="al.p2p">Point to point move&hellip;</button>
           </div>
         </div>
       </div>
@@ -485,89 +614,113 @@
   <div class="modal-bg" id="csBg">
     <div class="modal" style="width:620px">
       <div class="mhead"><span class="dot" id="csDot" style="width:12px;height:12px;border-radius:3px;background:#e23"></span><h2 data-i18n="cs.title">Cut settings</h2><span class="spacer"></span><label class="mccap" style="margin-right:12px"><input type="checkbox" id="cs_output"> <span data-i18n="layer.output2">Output</span></label><span class="btn" id="csClose">&times;</span></div>
-      <div class="mbody" style="max-height:66vh;overflow:auto">
-        <div class="f"><label data-i18n="lp.name">Layer name</label><input id="cs_name" style="width:100%"></div>
-        <div class="f" id="csLaserRow" style="margin-top:8px;display:none"><label data-i18n="lp.laser">Laser source</label><select id="cs_laser" style="width:100%"><option value="1">Laser 1</option><option value="2">Laser 2</option></select></div>
-        <div class="grid3" style="margin-top:12px">
-          <div class="f"><label data-i18n="lp.mode">Mode</label><select id="cs_mode" style="width:100%"><option value="Line">Line</option><option value="Fill">Fill</option><option value="Concentric">Offset Fill</option><option value="Image">Image</option></select></div>
-          <div class="f"><label data-i18n="lp.speed">Speed mm/s</label><input id="cs_speed" type="number" min="1" style="width:100%"></div>
-          <div class="f"><label data-i18n="lp.passes">Passes</label><input id="cs_passes" type="number" min="1" style="width:100%"></div>
-          <div class="f"><label data-i18n="lp.power">Power max %</label><input id="cs_power" type="number" min="0" max="100" style="width:100%"></div>
-          <div class="f"><label data-i18n="lp.pmin">Power min %</label><input id="cs_pmin" type="number" min="0" max="100" style="width:100%"></div>
-          <div class="f" id="csAirWrap"><label data-i18n="lp.air">Air assist</label><div style="padding-top:6px"><input type="checkbox" id="cs_air" style="width:auto"></div></div>
-        </div>
-        <div class="grid3" id="csGalvoRow" style="margin-top:12px;display:none">
-          <div class="f"><label data-i18n="lp.freq">Frequency kHz</label><input id="cs_freq" type="number" style="width:100%"></div>
-          <div class="f"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="cs_qpulse" type="number" style="width:100%"></div>
-          <div></div>
-        </div>
-        <div class="csgroup" id="csFillRow" style="display:none">
-          <div class="grid3">
-            <div class="f"><label data-i18n="lp.interval">Line interval mm</label><input id="cs_interval" type="number" step="0.01" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.dpi">Lines per inch</label><input id="cs_dpi" type="number" step="1" style="width:100%"></div>
-            <div class="f"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="cs_angle" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.angleinc">Angle increment&deg;</label><input id="cs_angleinc" type="number" style="width:100%"></div>
-          </div>
-          <div class="grid3" style="margin-top:10px">
-            <label class="mccap"><input type="checkbox" id="cs_autorotate"> <span data-i18n="cs.autorotate">Auto-rotate</span></label>
-            <div class="f"><label data-i18n="cs.ramp">Ramp length mm</label><input id="cs_ramp" type="number" step="0.1" style="width:100%"></div>
-            <label class="mccap"><input type="checkbox" id="cs_dotadj"> <span data-i18n="cs.dotadjust">Dot-width adjust</span></label>
-            <label class="mccap"><input type="checkbox" id="cs_crosshatch"> <span data-i18n="cs.crosshatch">Cross-hatch</span></label>
-            <div class="f"><label data-i18n="cs.overscan">Overscan mm</label><input id="cs_overscan" type="number" step="0.5" min="0" style="width:100%"></div>
-            <label class="mccap"><input type="checkbox" id="cs_bidir"> <span data-i18n="cs.bidir">Bi-directional</span></label>
-            <label class="mccap"><input type="checkbox" id="cs_flood"> <span data-i18n="cs.flood">Flood fill</span></label>
-            <label class="mccap"><input type="checkbox" id="cs_dotmode"> <span data-i18n="cs.dotmode">Dot mode</span></label>
-            <div class="f"><label data-i18n="cs.dottime">Dot ms</label><input id="cs_dottime" type="number" step="0.5" min="0.1" style="width:100%"></div>
+      <div class="mbody csBody" style="max-height:70vh;overflow:auto">
+        <div class="collapsible">
+          <div class="collapsehead"><span class="chev">&#9662;</span> <span data-i18n="cs.sec.basic">Basic settings</span></div>
+          <div class="collapse-body">
+            <div class="f"><label data-i18n="lp.name">Layer name</label><input id="cs_name" style="width:100%"></div>
+            <div class="f" id="csLaserRow" style="display:none"><label data-i18n="lp.laser">Laser source</label><select id="cs_laser" style="width:100%"><option value="1">Laser 1</option><option value="2">Laser 2</option></select></div>
+            <div class="grid3">
+              <div class="f"><label data-i18n="lp.mode">Mode</label><select id="cs_mode" style="width:100%"><option value="Line">Line</option><option value="Fill">Fill</option><option value="Concentric">Offset Fill</option><option value="Image">Image</option></select></div>
+              <div class="f"><label data-i18n="lp.speed">Speed mm/s</label><input id="cs_speed" type="number" min="1" style="width:100%"></div>
+              <div class="f"><label data-i18n="lp.passes">Passes</label><input id="cs_passes" type="number" min="1" style="width:100%"></div>
+              <div class="f"><label data-i18n="lp.power">Power max %</label><input id="cs_power" type="number" min="0" max="100" style="width:100%"></div>
+              <div class="f"><label data-i18n="lp.pmin">Power min %</label><input id="cs_pmin" type="number" min="0" max="100" style="width:100%"></div>
+              <div class="f" id="csAirWrap"><label data-i18n="lp.air">Air assist</label><div style="padding-top:6px"><input type="checkbox" id="cs_air" style="width:auto"></div></div>
+            </div>
+            <div class="grid3" id="csGalvoRow" style="display:none">
+              <div class="f"><label data-i18n="lp.freq">Frequency kHz</label><input id="cs_freq" type="number" style="width:100%"></div>
+              <div class="f"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="cs_qpulse" type="number" style="width:100%"></div>
+              <div></div>
+            </div>
           </div>
         </div>
-        <hr class="csrule">
-        <div class="grid3">
-          <div class="f"><label data-i18n="lp.kerf">Kerf offset mm</label><input id="cs_kerf" type="number" step="0.01" style="width:100%"></div>
-          <label class="mccap"><input type="checkbox" id="cs_perf"> <span data-i18n="cs.perf">Perforation</span></label>
-          <label class="mccap"><input type="checkbox" id="cs_wobble"> <span data-i18n="cs.wobble">Wobble</span></label>
-        </div>
-        <div class="grid3" id="csPerfRow" style="margin-top:10px;display:none">
-          <div class="f"><label data-i18n="cs.perfcut">Perf cut mm</label><input id="cs_perfcut" type="number" step="0.05" style="width:100%"></div>
-          <div class="f"><label data-i18n="cs.perfskip">Perf skip mm</label><input id="cs_perfskip" type="number" step="0.05" style="width:100%"></div>
-          <div></div>
-        </div>
-        <div class="grid3" style="margin-top:10px">
-          <div class="f"><label data-i18n="cs.overcut">Overcut mm</label><input id="cs_overcut" type="number" step="0.1" min="0" style="width:100%"></div>
-          <div class="f"><label data-i18n="cs.leadin">Lead-in mm</label><input id="cs_leadin" type="number" step="0.1" min="0" style="width:100%"></div>
-          <div class="f"><label data-i18n="cs.leadout">Lead-out mm</label><input id="cs_leadout" type="number" step="0.1" min="0" style="width:100%"></div>
-        </div>
-        <div class="grid3" id="csWobRow" style="margin-top:10px;display:none">
-          <div class="f"><label data-i18n="cs.wobstep">Wobble step mm</label><input id="cs_wobstep" type="number" step="0.01" style="width:100%"></div>
-          <div class="f"><label data-i18n="cs.wobsize">Wobble size mm</label><input id="cs_wobsize" type="number" step="0.01" style="width:100%"></div>
-          <div></div>
-        </div>
-        <hr class="csrule">
-        <label class="mccap"><input type="checkbox" id="cs_tabs"> <span data-i18n="lp.tabs">Tabs / bridges</span></label>
-        <div id="csTabRow" style="margin-top:10px;display:none">
-          <div class="grid3">
-            <div class="f"><label data-i18n="cs.tabsize">Tab size mm</label><input id="cs_tabsize" type="number" step="0.1" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.tabspacing">Even spacing mm</label><input id="cs_tabspacing" type="number" step="1" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.tabspershape">Tabs per shape</label><input id="cs_tabspershape" type="number" min="1" style="width:100%"></div>
-          </div>
-          <div class="grid3" style="margin-top:10px">
-            <div class="f"><label data-i18n="cs.tabpower">Tab cut power %</label><input id="cs_tabpower" type="number" min="0" max="100" style="width:100%"></div>
-            <label class="mccap"><input type="checkbox" id="cs_tabskipinner"> <span data-i18n="cs.tabskipinner">Skip inner shapes</span></label>
-            <div></div>
+        <div class="collapsible" id="csSecFill">
+          <div class="collapsehead"><span class="chev">&#9662;</span> <span data-i18n="cs.sec.fill">Fill and scan</span></div>
+          <div class="collapse-body">
+            <div class="csgroup" id="csFillRow">
+              <div class="grid3">
+                <div class="f"><label data-i18n="lp.interval">Line interval mm</label><input id="cs_interval" type="number" step="0.01" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.dpi">Lines per inch</label><input id="cs_dpi" type="number" step="1" style="width:100%"></div>
+                <div class="f"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="cs_angle" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.angleinc">Angle increment&deg;</label><input id="cs_angleinc" type="number" style="width:100%"></div>
+              </div>
+              <div class="grid3" style="margin-top:10px">
+                <label class="mccap"><input type="checkbox" id="cs_autorotate"> <span data-i18n="cs.autorotate">Auto-rotate</span></label>
+                <div class="f"><label data-i18n="cs.ramp">Ramp length mm</label><input id="cs_ramp" type="number" step="0.1" style="width:100%"></div>
+                <label class="mccap"><input type="checkbox" id="cs_dotadj"> <span data-i18n="cs.dotadjust">Dot-width adjust</span></label>
+                <label class="mccap"><input type="checkbox" id="cs_crosshatch"> <span data-i18n="cs.crosshatch">Cross-hatch</span></label>
+                <div class="f"><label data-i18n="cs.overscan">Overscan mm</label><input id="cs_overscan" type="number" step="0.5" min="0" style="width:100%"></div>
+                <label class="mccap"><input type="checkbox" id="cs_bidir"> <span data-i18n="cs.bidir">Bi-directional</span></label>
+                <label class="mccap"><input type="checkbox" id="cs_flood"> <span data-i18n="cs.flood">Flood fill</span></label>
+                <label class="mccap"><input type="checkbox" id="cs_dotmode"> <span data-i18n="cs.dotmode">Dot mode</span></label>
+                <div class="f"><label data-i18n="cs.dottime">Dot ms</label><input id="cs_dottime" type="number" step="0.5" min="0.1" style="width:100%"></div>
+              </div>
+            </div>
           </div>
         </div>
-        <hr class="csrule">
-        <label class="mccap"><input type="checkbox" id="cs_timing"> <span data-i18n="cs.timing">Override default timings</span></label>
-        <div id="csTimeRow" style="margin-top:10px;display:none">
-          <div class="grid3">
-            <div class="f"><label data-i18n="cs.jumpspeed">Jump speed mm/s</label><input id="cs_jumpspeed" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.minjump">Min jump delay us</label><input id="cs_minjump" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.maxjump">Max jump delay us</label><input id="cs_maxjump" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.laseron">Laser on TC us</label><input id="cs_laseron" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.laseroff">Laser off TC us</label><input id="cs_laseroff" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.endtc">End TC us</label><input id="cs_endtc" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.polytc">Polygon TC us</label><input id="cs_polytc" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.pausebefore">Pause before ms</label><input id="cs_pausebefore" type="number" style="width:100%"></div>
-            <div class="f"><label data-i18n="cs.pauseafter">Pause after ms</label><input id="cs_pauseafter" type="number" style="width:100%"></div>
+        <div class="collapsible collapsed">
+          <div class="collapsehead"><span class="chev">&#9662;</span> <span data-i18n="cs.sec.shape">Cut shaping</span></div>
+          <div class="collapse-body">
+            <div class="grid3">
+              <div class="f"><label data-i18n="lp.kerf">Kerf offset mm</label><input id="cs_kerf" type="number" step="0.01" style="width:100%"></div>
+              <div class="f"><label data-i18n="cs.overcut">Overcut mm</label><input id="cs_overcut" type="number" step="0.1" min="0" style="width:100%"></div>
+              <div></div>
+            </div>
+            <div class="grid3" style="margin-top:10px">
+              <div class="f"><label data-i18n="cs.leadin">Lead-in mm</label><input id="cs_leadin" type="number" step="0.1" min="0" style="width:100%"></div>
+              <div class="f"><label data-i18n="cs.leadout">Lead-out mm</label><input id="cs_leadout" type="number" step="0.1" min="0" style="width:100%"></div>
+              <div></div>
+            </div>
+            <label class="mccap" style="margin-top:10px"><input type="checkbox" id="cs_perf"> <span data-i18n="cs.perf">Perforation</span></label>
+            <div class="grid3" id="csPerfRow" style="margin-top:8px;display:none">
+              <div class="f"><label data-i18n="cs.perfcut">Perf cut mm</label><input id="cs_perfcut" type="number" step="0.05" style="width:100%"></div>
+              <div class="f"><label data-i18n="cs.perfskip">Perf skip mm</label><input id="cs_perfskip" type="number" step="0.05" style="width:100%"></div>
+              <div></div>
+            </div>
+            <label class="mccap" style="margin-top:10px"><input type="checkbox" id="cs_wobble"> <span data-i18n="cs.wobble">Wobble</span></label>
+            <div class="grid3" id="csWobRow" style="margin-top:8px;display:none">
+              <div class="f"><label data-i18n="cs.wobstep">Wobble step mm</label><input id="cs_wobstep" type="number" step="0.01" style="width:100%"></div>
+              <div class="f"><label data-i18n="cs.wobsize">Wobble size mm</label><input id="cs_wobsize" type="number" step="0.01" style="width:100%"></div>
+              <div></div>
+            </div>
+          </div>
+        </div>
+        <div class="collapsible collapsed">
+          <div class="collapsehead"><span class="chev">&#9662;</span> <span data-i18n="cs.sec.tabs">Tabs and bridges</span></div>
+          <div class="collapse-body">
+            <label class="mccap"><input type="checkbox" id="cs_tabs"> <span data-i18n="lp.tabs">Tabs / bridges</span></label>
+            <div id="csTabRow" style="margin-top:8px;display:none">
+              <div class="grid3">
+                <div class="f"><label data-i18n="cs.tabsize">Tab size mm</label><input id="cs_tabsize" type="number" step="0.1" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.tabspacing">Even spacing mm</label><input id="cs_tabspacing" type="number" step="1" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.tabspershape">Tabs per shape</label><input id="cs_tabspershape" type="number" min="1" style="width:100%"></div>
+              </div>
+              <div class="grid3" style="margin-top:10px">
+                <div class="f"><label data-i18n="cs.tabpower">Tab cut power %</label><input id="cs_tabpower" type="number" min="0" max="100" style="width:100%"></div>
+                <label class="mccap"><input type="checkbox" id="cs_tabskipinner"> <span data-i18n="cs.tabskipinner">Skip inner shapes</span></label>
+                <div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="collapsible collapsed">
+          <div class="collapsehead"><span class="chev">&#9662;</span> <span data-i18n="cs.sec.timing">Timings</span></div>
+          <div class="collapse-body">
+            <label class="mccap"><input type="checkbox" id="cs_timing"> <span data-i18n="cs.timing">Override default timings</span></label>
+            <div id="csTimeRow" style="margin-top:8px;display:none">
+              <div class="grid3">
+                <div class="f"><label data-i18n="cs.jumpspeed">Jump speed mm/s</label><input id="cs_jumpspeed" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.minjump">Min jump delay us</label><input id="cs_minjump" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.maxjump">Max jump delay us</label><input id="cs_maxjump" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.laseron">Laser on TC us</label><input id="cs_laseron" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.laseroff">Laser off TC us</label><input id="cs_laseroff" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.endtc">End TC us</label><input id="cs_endtc" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.polytc">Polygon TC us</label><input id="cs_polytc" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.pausebefore">Pause before ms</label><input id="cs_pausebefore" type="number" style="width:100%"></div>
+                <div class="f"><label data-i18n="cs.pauseafter">Pause after ms</label><input id="cs_pauseafter" type="number" style="width:100%"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -681,6 +834,45 @@
         <div class="grid3"><div class="f"><label data-i18n="ar.dist">Distance mm</label><input id="ar_dist" type="number" min="0" step="0.5" value="2" style="width:100%"></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_outset" style="width:100%" data-i18n="ar.outset">Outset</button></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_inset" style="width:100%" data-i18n="ar.inset">Inset</button></div></div>
       </div>
       <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="ar.note">Select a shape first. Array copies the selection.</span><button class="btn" id="arCancel" data-i18n="action.cancel">Close</button></div>
+    </div>
+  </div>
+
+  <!-- material test generator: a 2-axis parameter grid -->
+  <div class="modal-bg" id="mtBg">
+    <div class="modal" style="width:640px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="mt.title">Material Test Generator</h2><span class="spacer"></span><span class="btn" id="mtClose">&times;</span></div>
+      <div class="mbody">
+        <div class="f"><label data-i18n="mt.preset">Preset</label>
+          <div style="display:flex;gap:6px">
+            <input id="mt_title" style="flex:1" data-i18n-ph="mt.untitled" placeholder="Untitled test" />
+            <select id="mt_load" style="width:170px"><option value="" data-i18n="mt.loadph">Load preset&hellip;</option></select>
+            <button class="btn" id="mt_save" data-i18n="action.save">Save</button>
+            <button class="btn danger" id="mt_del" data-i18n="action.delete">Delete</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:18px;margin-top:14px">
+          <div style="flex:1">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px" data-i18n="mt.rows">Rows (vertical)</div>
+            <div class="f"><label data-i18n="mt.count">Count</label><input id="mt_rCount" type="number" min="1" max="12" value="5" style="width:100%"></div>
+            <div class="f" style="margin-top:6px"><label data-i18n="mt.param">Parameter</label><select id="mt_rParam" style="width:100%"></select></div>
+            <div class="grid3" style="margin-top:6px"><div class="f"><label data-i18n="mt.min">Min</label><input id="mt_rMin" type="number" value="100" style="width:100%"></div><div class="f"><label data-i18n="mt.max">Max</label><input id="mt_rMax" type="number" value="1000" style="width:100%"></div><div></div></div>
+            <div class="f" style="margin-top:6px"><label data-i18n="mt.cellh">Cell height mm</label><input id="mt_cellH" type="number" min="2" step="0.5" value="8" style="width:100%"></div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px" data-i18n="mt.cols">Columns (horizontal)</div>
+            <div class="f"><label data-i18n="mt.count">Count</label><input id="mt_cCount" type="number" min="1" max="12" value="5" style="width:100%"></div>
+            <div class="f" style="margin-top:6px"><label data-i18n="mt.param">Parameter</label><select id="mt_cParam" style="width:100%"></select></div>
+            <div class="grid3" style="margin-top:6px"><div class="f"><label data-i18n="mt.min">Min</label><input id="mt_cMin" type="number" value="10" style="width:100%"></div><div class="f"><label data-i18n="mt.max">Max</label><input id="mt_cMax" type="number" value="100" style="width:100%"></div><div></div></div>
+            <div class="f" style="margin-top:6px"><label data-i18n="mt.cellw">Cell width mm</label><input id="mt_cellW" type="number" min="2" step="0.5" value="8" style="width:100%"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:18px;margin-top:12px;flex-wrap:wrap">
+          <label class="mccap"><input type="checkbox" id="mt_fill" checked> <span data-i18n="mt.fillcells">Fill cells (engrave)</span></label>
+          <label class="mccap"><input type="checkbox" id="mt_text" checked> <span data-i18n="mt.labeltext">Label rows and columns</span></label>
+          <label class="mccap"><input type="checkbox" id="mt_border" checked> <span data-i18n="mt.drawborder">Draw border</span></label>
+        </div>
+      </div>
+      <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" id="mt_out">&mdash;</span><button class="btn" id="mtCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="mt_apply" data-i18n="mt.generate">Generate</button></div>
     </div>
   </div>
 
@@ -1004,7 +1196,7 @@
   }
   const toolsEl = $("tools");
   function setTool(name){
-    tool = name; measureA = null; if (name!=="pen") penAnchors = []; if (name!=="poly") polyAnchors = []; drawing = null;
+    tool = name; measureA = null; if (name!=="pen") penAnchors = []; if (name!=="poly") polyAnchors = []; if (name!=="p2p") p2p = null; drawing = null;
     document.querySelectorAll(".tool").forEach(t=>{ const on = t.dataset.tool===name; t.classList.toggle("active", on); t.style.background = on ? (t.dataset.gcolor||"") : ""; t.style.borderColor = on ? (t.dataset.gcolor||"") : ""; });
     $("canvas").classList.toggle("select", name==="select"); updateToolbar(); render();
   }
@@ -1087,6 +1279,13 @@
         else s += `<rect x="${d.x-4}" y="${d.y-4}" width="8" height="8" fill="${on?"#ff5a3c":"#3b82f6"}" stroke="#fff" stroke-width="1.2"/>`;
       });
     }
+    // Smart alignment guides drawn while dragging a selection.
+    if (snapGuides){ for (const g of snapGuides){
+      if (g.x!=null){ const a=mm2px(p(g.x,0)), b=mm2px(p(g.x,BED.h)); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#ff4fa3" stroke-width="1" stroke-dasharray="4 3"/>`; }
+      if (g.y!=null){ const a=mm2px(p(0,g.y)), b=mm2px(p(BED.w,g.y)); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#ff4fa3" stroke-width="1" stroke-dasharray="4 3"/>`; }
+    } }
+    // Point-to-point move: marker on the first picked point.
+    if (p2p && p2p.src){ const d=mm2px(p2p.src); s += `<circle cx="${d.x}" cy="${d.y}" r="5" fill="none" stroke="#ffb020" stroke-width="2"/><line x1="${d.x-8}" y1="${d.y}" x2="${d.x+8}" y2="${d.y}" stroke="#ffb020"/><line x1="${d.x}" y1="${d.y-8}" x2="${d.x}" y2="${d.y+8}" stroke="#ffb020"/>`; }
     if (drawing) s += drawing;
     canvas.innerHTML = s;
     if (typeof positionCam === "function") positionCam();
@@ -1373,6 +1572,9 @@
     $("propsEmpty").style.display = b ? "none" : "";
     $("propsBody").style.display = b ? "" : "none";
     if (!b) return;
+    // Aligning and distributing act across the selection, so the buttons only
+    // show when more than one shape is selected.
+    const pal = $("prAlign"); if (pal) pal.style.display = sel.size > 1 ? "" : "none";
     const dec = dispUnits==="in" ? 3 : 2;
     $("pr_xl").textContent = tr("props.x","X")+" "+dispUnits; $("pr_yl").textContent = tr("props.y","Y")+" "+dispUnits;
     $("pr_wl").textContent = tr("props.w","Width")+" "+dispUnits; $("pr_hl").textContent = tr("props.h","Height")+" "+dispUnits;
@@ -1440,6 +1642,7 @@
   // ---- interaction ----
   let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null, xform = null;
   let sel = new Set(), dragLast = null, marquee = null, activeNode = null;
+  let snapGuides = null, dragGrab = null, dragSize = null, p2p = null;
   // Delete the active node from the selected polyline, keeping a usable shape.
   function nodeDelete(){
     if (selected == null || activeNode == null) return;
@@ -1670,6 +1873,7 @@
       polyAnchors.push({ x:m.x, y:m.y }); drawing = polyPreview(m); render(); return;
     }
     if (tool === "text"){ placeText(m.x, m.y); return; }
+    if (tool === "p2p"){ p2pClick(e); return; }
     if (tool === "trim"){ trimAt(m); return; }
     if (tool === "extend"){ extendAt(m); return; }
     if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
@@ -1699,6 +1903,12 @@
       else { selected = hit; }
       dragShape = hit; dragLast = m;
       const bb=bbox(doc.shapes[hit]); dragOff = { x: m.x-bb.x0, y: m.y-bb.y0 };
+      // Smart-align drag reference: work from the whole selection's union box so
+      // the dragged group snaps by any of its edges or centre. dragGrab is the
+      // cursor's offset from that box origin, held fixed for the whole drag.
+      const ub = groupBBox() || bb;
+      dragSize = { w: ub.x1-ub.x0, h: ub.y1-ub.y0 };
+      dragGrab = { x: m.x-ub.x0, y: m.y-ub.y0 };
       render();
     }
   });
@@ -1708,6 +1918,10 @@
     $("readout").textContent = `x ${mm2u(m.x).toFixed(dispUnits==="in"?3:1)}  y ${mm2u(m.y).toFixed(dispUnits==="in"?3:1)} ${dispUnits}`;
     if (tool==="pen" && penDrag && penAnchors.length){ const a = penAnchors[penAnchors.length-1]; a.hOut={x:m.x,y:m.y}; a.hIn={x:2*a.p.x-m.x,y:2*a.p.y-m.y}; drawing=penPreview(); render(); return; }
     if (tool==="measure" && measureA){ drawing = measureOverlay(measureA, m); render(); return; }
+    if (tool==="p2p"){ const raw=px2mm(e.clientX,e.clientY); const v=nearestVertex(raw); const t=v?{x:v.x,y:v.y}:raw; const td=mm2px(t);
+      let d = v ? `<circle cx="${td.x}" cy="${td.y}" r="5" fill="none" stroke="#ffb020" stroke-width="1.5"/>` : "";
+      if (p2p && p2p.src){ const sd=mm2px(p2p.src); d += `<line x1="${sd.x}" y1="${sd.y}" x2="${td.x}" y2="${td.y}" stroke="#ffb020" stroke-dasharray="4 3"/>`; }
+      drawing = d; render(); return; }
     if (xform && selected!=null){
       const sh2 = JSON.parse(JSON.stringify(xform.orig)), h = xform.h;
       if (h.kind==="rotate"){ let ang = Math.atan2(m.y-xform.cy, m.x-xform.cx) - xform.startAng; if (MODS.shift){ const step = Math.PI/12; ang = Math.round(ang/step)*step; } rotateShapeAbout(sh2, xform.cx, xform.cy, ang); }
@@ -1727,8 +1941,15 @@
     if (!start) return;
     if (tool==="node" && dragNode!=null && doc.shapes[selected]){ const hs=nodeHandles(doc.shapes[selected]); const h=hs[dragNode]; if (h){ h.p.x=+m.x.toFixed(3); h.p.y=+m.y.toFixed(3); } render(); return; }
     if (tool==="select" && dragShape!=null){
-      if (sel.size > 1 && dragLast){ const dx=m.x-dragLast.x, dy=m.y-dragLast.y; for (const i of sel){ if (doc.shapes[i]) translateShape(doc.shapes[i], dx, dy); } dragLast=m; }
-      else moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y);
+      // Desired box origin from the fixed grab offset, recomputed from live
+      // geometry each frame so a snap never makes the shape drift from the cursor.
+      let refX = m.x - (dragGrab?dragGrab.x:0), refY = m.y - (dragGrab?dragGrab.y:0);
+      snapGuides = null;
+      // Alt (the grid-snap suppressor) also turns off smart alignment snapping.
+      if (!MODS.alt && dragSize){ const s = alignSnap(refX, refY, dragSize); refX = s.x; refY = s.y; snapGuides = s.guides.length ? s.guides : null; }
+      const cur = groupBBox() || bbox(doc.shapes[dragShape]);
+      const dx = refX - cur.x0, dy = refY - cur.y0;
+      if (dx || dy){ for (const i of sel){ if (doc.shapes[i]) translateShape(doc.shapes[i], dx, dy); } }
       render(); return;
     }
     if (DRAG_BOX_TOOLS[tool] && Math.abs(m.x-start.x)>0.2){ const col=layerColor(doc.layers[activeLayer]); const [bx0,by0,bx1,by1]=applyBoxMods(start.x,start.y,m.x,m.y); const sh=dragBoxShape(tool, bx0, by0, bx1, by1, 0); const d=sh?shapeD(sh):"";
@@ -1743,7 +1964,7 @@
     if (tool==="select" && marquee){ const m0=px2mm(e.clientX,e.clientY); const hits=marqueeHits(marquee.x0,marquee.y0,m0.x,m0.y);
       sel = new Set(marquee.base); for (const i of hits) sel.add(i); selected = sel.size===1 ? [...sel][0] : (sel.size?selected:null); if (selected!=null && !sel.has(selected)) selected = hits.length?hits[hits.length-1]:null;
       marquee=null; start=null; drawing=null; render(); refreshCounts(); return; }
-    if (tool==="select" && dragShape!=null){ dragShape=null; dragLast=null; start=null; snapshot(); render(); refreshCounts(); return; }
+    if (tool==="select" && dragShape!=null){ dragShape=null; dragLast=null; dragGrab=null; dragSize=null; snapGuides=null; start=null; snapshot(); render(); refreshCounts(); return; }
     if (tool==="measure"){ measureA=null; start=null; return; }
     if (tool==="pen"){ penDrag=false; start=null; return; }
     if (tool==="poly"){ start=null; return; }   // poly commits points on click, not on release
@@ -1784,7 +2005,20 @@
     const n = sel.size;
     const layerItems = doc.layers.map(L=>`<div class="mi" data-setlayer="${L.index}"><span class="swatch" style="background:${layerColor(L)}"></span>${L.name}</div>`).join("");
     const head = n > 1 ? `<div class="mi" style="color:var(--muted);pointer-events:none">${n} selected</div><div class="sep"></div>` : "";
-    ctx.innerHTML = head
+    // Aligning needs at least two shapes to align against each other, so the
+    // submenu only appears for a multi-selection.
+    const alignSub = n > 1 ? `<div class="mi has-sub"><span class="caret">&#9656;</span><span data-i18n="sub.align">Align</span><div class="sub">`
+      + `<div class="mi" data-ctx="al_left" data-i18n="al.left">Left edges</div>`
+      + `<div class="mi" data-ctx="al_cx" data-i18n="al.cx">Center horizontally</div>`
+      + `<div class="mi" data-ctx="al_right" data-i18n="al.right">Right edges</div>`
+      + `<div class="sep"></div>`
+      + `<div class="mi" data-ctx="al_top" data-i18n="al.top">Top edges</div>`
+      + `<div class="mi" data-ctx="al_cy" data-i18n="al.cy">Center vertically</div>`
+      + `<div class="mi" data-ctx="al_bottom" data-i18n="al.bottom">Bottom edges</div>`
+      + `<div class="sep"></div>`
+      + `<div class="mi" data-ctx="al_p2p" data-i18n="al.p2p">Point to point move&hellip;</div>`
+      + `</div></div><div class="sep"></div>` : "";
+    ctx.innerHTML = head + alignSub
       + `<div class="mi has-sub"><span class="caret">&#9656;</span><span data-i18n="ctx.changelayer">Change layer</span><div class="sub">${layerItems}</div></div>`
       + `<div class="mi" data-ctx="dupe" data-i18n="action.dupe">Duplicate</div>`
       + `<div class="mi" data-ctx="front" data-i18n="ctx.front">Bring to front</div>`
@@ -1795,6 +2029,8 @@
     ctx.querySelectorAll("[data-setlayer]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); setLayerForSelection(+el.dataset.setlayer); closeCtx(); });
     ctx.querySelectorAll("[data-ctx]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); const a=el.dataset.ctx;
       if(a==="dupe"){ duplicateSelection(); }
+      else if(a==="al_p2p"){ startP2P(); }
+      else if(a && a.startsWith("al_")){ alignSel(a.slice(3)); }
       else if(a==="delete"){ deleteSelection(); }
       else if(a==="front"){ const picked=[...sel].sort((x,y)=>x-y).map(i=>doc.shapes[i]); doc.shapes=doc.shapes.filter((_,i)=>!sel.has(i)).concat(picked); sel=new Set(picked.map((_,k)=>doc.shapes.length-picked.length+k)); selected=sel.size===1?[...sel][0]:selected; snapshot(); render(); refreshCounts(); }
       else if(a==="back"){ const picked=[...sel].sort((x,y)=>x-y).map(i=>doc.shapes[i]); doc.shapes=picked.concat(doc.shapes.filter((_,i)=>!sel.has(i))); sel=new Set(picked.map((_,k)=>k)); selected=sel.size===1?0:selected; snapshot(); render(); refreshCounts(); }
@@ -1953,8 +2189,11 @@
   function csUpdateVis(){
     $("csGalvoRow").style.display = isGalvo() ? "grid" : "none";
     $("csAirWrap").style.display = curAir ? "" : "none";   // air assist only when the machine has it
-    const m = csV("cs_mode");
-    $("csFillRow").style.display = (m==="Fill"||m==="Concentric") ? "" : "none";
+    const m = csV("cs_mode"), fillMode = (m==="Fill"||m==="Concentric");
+    $("csFillRow").style.display = fillMode ? "" : "none";
+    // The whole Fill-and-scan section only matters for fill modes: open it then,
+    // and collapse it out of the way for Line and Image layers.
+    const fillSec = $("csSecFill"); if (fillSec) fillSec.classList.toggle("collapsed", !fillMode);
     $("csPerfRow").style.display = csC("cs_perf") ? "grid" : "none";
     $("csWobRow").style.display = csC("cs_wobble") ? "grid" : "none";
     $("csTabRow").style.display = csC("cs_tabs") ? "" : "none";
@@ -2308,11 +2547,23 @@
   $("ar_inset").onclick = () => offsetSelected(-Math.abs(+$("ar_dist").value||0));
   document.querySelectorAll("#arBg [data-align]").forEach(b => b.onclick = () => alignBed(b.dataset.align));
 
+  // ---- material test modal ----
+  $("mtClose").onclick = $("mtCancel").onclick = () => $("mtBg").classList.remove("show");
+  ["mt_rCount","mt_rParam","mt_rMin","mt_rMax","mt_cellH","mt_cCount","mt_cParam","mt_cMin","mt_cMax","mt_cellW","mt_text","mt_border","mt_fill"].forEach(id => { const el=$(id); if (el) el.addEventListener("input", mtUpdateOut); });
+  $("mt_apply").onclick = () => { const cfg=mtReadCfg(); if (cfg.rCount*cfg.cCount>28){ mtUpdateOut(); return; } $("mtBg").classList.remove("show"); doMaterialTest(cfg); };
+  $("mt_save").onclick = () => { const cfg=mtReadCfg(); const name=cfg.title || tr("mt.untitled","Untitled test"); const ps=mtPresets(); ps[name]=cfg; try { localStorage.setItem(MT_KEY, JSON.stringify(ps)); } catch(e){} $("mt_title").value=name; mtRefreshPresets(); $("mt_load").value=name; };
+  $("mt_del").onclick = () => { const name=$("mt_load").value; if (!name) return; const ps=mtPresets(); delete ps[name]; try { localStorage.setItem(MT_KEY, JSON.stringify(ps)); } catch(e){} mtRefreshPresets(); };
+  $("mt_load").onchange = () => { const name=$("mt_load").value; if (!name) return; const cfg=mtPresets()[name]; if (!cfg) return;
+    $("mt_title").value=cfg.title||name; $("mt_rCount").value=cfg.rCount; $("mt_rParam").value=cfg.rParam; $("mt_rMin").value=cfg.rMin; $("mt_rMax").value=cfg.rMax; $("mt_cellH").value=cfg.cellH;
+    $("mt_cCount").value=cfg.cCount; $("mt_cParam").value=cfg.cParam; $("mt_cMin").value=cfg.cMin; $("mt_cMax").value=cfg.cMax; $("mt_cellW").value=cfg.cellW;
+    $("mt_fill").checked=cfg.fill!==false; $("mt_text").checked=cfg.text!==false; $("mt_border").checked=cfg.border!==false; mtUpdateOut(); };
+
   // ---- machine profiles (built-in + custom, saved locally) ----
   const BUILTIN_MACHINES = [
     { name:"Generic GRBL (200 mm)", ctrl:"grbl", w:200, h:200 },
-    { name:"ComMarker B6 (galvo)", ctrl:"galvo", w:110, h:110 },
-    { name:"EZCAD2 Fiber (galvo)", ctrl:"galvo", w:150, h:150 },
+    { name:"ComMarker B6 110 lens (galvo)", ctrl:"galvo", w:110, h:110, field:128 },
+    { name:"ComMarker B6 150 lens (galvo)", ctrl:"galvo", w:150, h:150, field:170 },
+    { name:"EZCAD2 Fiber (galvo)", ctrl:"galvo", w:150, h:150, field:170 },
     { name:"Diode 400", ctrl:"grbl-m3", w:400, h:400 },
     { name:"Snapmaker (Marlin)", ctrl:"marlin", w:320, h:350 },
     { name:"Ruida CO2 600", ctrl:"grbl", w:600, h:400 },
@@ -2340,7 +2591,11 @@
     // Galvo talks over WebUSB; every other controller streams G-code over serial.
     $("galvoRow").style.display = g ? "flex" : "none";
     $("serialRow").style.display = g ? "none" : "flex";
+    $("galvoActRow").style.display = g ? "flex" : "none";
+    $("serialActRow").style.display = g ? "none" : "flex";
     $("devstat").style.display = g ? "flex" : "none";
+    // On a galvo machine, honour the saved auto-connect preference.
+    if (g && !USB.dev && $("galvoAuto") && $("galvoAuto").checked && typeof autoConnectGalvo === "function") autoConnectGalvo();
     // Frame is a machine feature. Show the button only when the profile keeps it
     // (default on). Hide only the button, never its row-mate Generate.
     const fb = $("frameBtn"); if (fb) fb.style.display = (mc.frame === false) ? "none" : "";
@@ -2427,7 +2682,7 @@
       ["pendant","b","Enable pendant",false],["apiPort","b","Enable permanent API access port",false],["apiPortNum","n","Fixed port number",0],["dragonDrop","b","Enable DragonDrop",false],
     ],
   };
-  let gdCorName = "", gdMcIdx = -1;
+  let gdCorName = "", gdMcIdx = -1, galvoCorTable = null, galvoPushCor = false;
   // IO ports as a routing table: the user adds rows and maps a port number to a
   // purpose, instead of one fixed row per possible function. Each purpose carries
   // its own extra options.
@@ -2517,7 +2772,29 @@
     document.querySelectorAll(".gdtabs button").forEach(x=>x.classList.toggle("active", x===b));
     ["basic","ports","addl","ext"].forEach(tab=>$("gdpane_"+tab).style.display = (tab===b.dataset.gd)?"":"none");
   });
-  $("gdCorFile").onchange = (e) => { const f=e.target.files[0]; if(!f) return; gdCorName = f.name; const s=$("gd_corname"); if(s) s.textContent = f.name; e.target.value=""; };
+  $("gdCorFile").onchange = (e) => { const f=e.target.files[0]; if(!f) return; gdCorName = f.name; const s=$("gd_corname"); if(s) s.textContent = f.name; e.target.value="";
+    f.arrayBuffer().then(buf => { try { galvoCorTable = parseCorTable(new Uint8Array(buf)); galvoPushCor = !!galvoCorTable; if (USB) USB._corDone = false;
+      if (s) s.textContent = f.name + (galvoCorTable ? ` (${galvoCorTable.length} cells, will upload on next Cut)` : " (parse failed)"); } catch(err){ galvoCorTable = null; galvoPushCor = false; if (s) s.textContent = f.name + " (parse error)"; } }); };
+  // Parse an EZCAD .cor lens-correction file into the 65x65 grid of device-space
+  // (dx,dy) u16 pairs the board wants, matching how EZCAD and balor read it: a
+  // 22-byte label, then either the float format (label "LMC1COR_1.0", 0x1FA more
+  // header bytes, cells are two f64) or the legacy int format (0xE more header
+  // bytes, cells are two i32). Negative offsets encode as -v + 0x8000.
+  function parseCorTable(u8){
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let label = ""; for (let i=0;i<0x16;i++){ const c=u8[i]; if (c) label += String.fromCharCode(c); }
+    const isFloat = label.indexOf("LMC1COR_1.0") === 0;
+    let off = 0x16 + (isFloat ? 0x1FA : 0x0E);
+    const enc = v => { let n = Math.round(v); if (n < 0) n = -n + 0x8000; return n & 0xFFFF; };
+    const table = [];
+    for (let j=0;j<65;j++) for (let k=0;k<65;k++){
+      let dx, dy;
+      if (isFloat){ dx = dv.getFloat64(off, true); off += 8; dy = dv.getFloat64(off, true); off += 8; }
+      else { dx = dv.getInt32(off, true); off += 4; dy = dv.getInt32(off, true); off += 4; }
+      table.push([enc(dx), enc(dy)]);
+    }
+    return table;
+  }
   $("gdClose").onclick = $("gdCancel").onclick = () => $("gdBg").classList.remove("show");
   $("gdOk").onclick = () => { saveGalvoSettings(); $("gdBg").classList.remove("show"); };
 
@@ -2588,7 +2865,7 @@
       const pj = JSON.stringify(toProject());
       const secs = estimate_seconds(pj, MOTION); const mm=Math.floor(secs/60), ss=(secs-mm*60).toFixed(1);
       $("est").textContent = `${mm}m ${ss}s`;
-      const bytes = generate_galvo_lmc(pj, 110, 16, 30, 100, 2048);
+      const bytes = generate_galvo_lmc(pj, galvoFieldMM(), 16, 30, 100, 2048);
       $("galvo").innerHTML = `${tr("stat.galvo","Galvo")} <b>${bytes.length}</b> B`;
       if (isGalvo()) {
         $("gcode").textContent =
@@ -3002,37 +3279,69 @@
   // Material test generator: a grid of filled squares. Columns step power, rows step
   // speed. Each cell gets its own Fill layer carrying that cell's settings, so one
   // run dials in a new material. Row and column labels engrave the values.
-  function materialTest(){
-    const cols = Math.max(2, Math.min(7, parseInt(prompt(tr("mt.cols","Power steps (columns)"), "5"), 10) || 5));
-    const rows = Math.max(2, Math.min(7, parseInt(prompt(tr("mt.rows","Speed steps (rows)"), "5"), 10) || 5));
-    if (cols * rows > 28){ alert(tr("mt.toomany","Too many cells. The palette holds 28 test layers.")); return; }
-    const pMin = parseFloat(prompt(tr("mt.pmin","Min power %"), "10")) || 0;
-    const pMax = parseFloat(prompt(tr("mt.pmax","Max power %"), "100")) || 100;
-    const sMin = parseFloat(prompt(tr("mt.smin","Min speed mm/s"), "50")) || 50;
-    const sMax = parseFloat(prompt(tr("mt.smax","Max speed mm/s"), "400")) || 400;
-    const cell = parseFloat(prompt(tr("mt.cell","Cell size mm"), "10")) || 10;
-    doMaterialTest(cols, rows, pMin, pMax, sMin, sMax, cell);
+  // A material test sweeps two laser parameters across a grid: one per row, one
+  // per column. Each cell is its own layer carrying that cell's parameter pair, so
+  // running the job burns the whole matrix in one pass. This mirrors LightBurn's
+  // two-axis Material Test generator rather than a single-parameter strip.
+  const MT_PARAMS = [
+    { id:"speed",    label:"Speed",        unit:"mm/s", apply:(L,v)=>{ L.speed_mm_s=Math.round(v); }, fmt:v=>Math.round(v)+"" },
+    { id:"power",    label:"Max power",    unit:"%",    apply:(L,v)=>{ L.power_max=Math.round(v); },  fmt:v=>Math.round(v)+"" },
+    { id:"interval", label:"Line interval",unit:"mm",   apply:(L,v)=>{ L.interval=+v.toFixed(3); },    fmt:v=>(+v.toFixed(3))+"" },
+    { id:"passes",   label:"Passes",       unit:"",     apply:(L,v)=>{ L.num_passes=Math.max(1,Math.round(v)); }, fmt:v=>Math.max(1,Math.round(v))+"" },
+    { id:"freq",     label:"Frequency",    unit:"kHz",  apply:(L,v)=>{ L.freq=Math.round(v); },        fmt:v=>Math.round(v)+"" },
+  ];
+  const mtParam = id => MT_PARAMS.find(p => p.id === id) || MT_PARAMS[0];
+  function mtFillParamSelects(){
+    for (const sid of ["mt_rParam","mt_cParam"]){ const el=$(sid); if (!el || el.options.length) continue;
+      MT_PARAMS.forEach(p => { const o=document.createElement("option"); o.value=p.id; o.textContent=tr("mtp."+p.id, p.label); el.appendChild(o); }); }
+    $("mt_rParam").value = "speed"; $("mt_cParam").value = "power";
   }
-  function doMaterialTest(cols, rows, pMin, pMax, sMin, sMax, cell){
-    const gap = Math.max(2, cell * 0.35), x0 = 24, y0 = 24;
-    const powerAt = c => Math.round(pMin + (pMax - pMin) * (cols > 1 ? c / (cols - 1) : 0));
-    const speedAt = r => Math.round(sMin + (sMax - sMin) * (rows > 1 ? r / (rows - 1) : 0));
-    doc.layers.length = 0; doc.shapes.length = 0;
-    const labels = layer(0, tr("mt.labels","Labels"), 300, 25, "Line"); labels.color = PALETTE[0]; doc.layers.push(labels);
-    let idx = 1;
-    for (let r = 0; r < rows; r++){
-      const speed = speedAt(r);
-      for (let c = 0; c < cols; c++){
-        const power = powerAt(c);
-        const L = layer(idx, `S${speed} P${power}`, speed, power, "Fill"); L.color = PALETTE[idx % PALETTE.length]; L.interval = 0.2;
+  function mtReadCfg(){
+    return { title:($("mt_title").value||"").trim(),
+      rCount:Math.max(1,Math.min(12,parseInt($("mt_rCount").value,10)||5)), rParam:$("mt_rParam").value, rMin:parseFloat($("mt_rMin").value)||0, rMax:parseFloat($("mt_rMax").value)||0, cellH:Math.max(2,parseFloat($("mt_cellH").value)||8),
+      cCount:Math.max(1,Math.min(12,parseInt($("mt_cCount").value,10)||5)), cParam:$("mt_cParam").value, cMin:parseFloat($("mt_cMin").value)||0, cMax:parseFloat($("mt_cMax").value)||0, cellW:Math.max(2,parseFloat($("mt_cellW").value)||8),
+      fill:$("mt_fill").checked, text:$("mt_text").checked, border:$("mt_border").checked };
+  }
+  function mtOutSize(cfg){ const gap=Math.max(2,Math.min(cfg.cellW,cfg.cellH)*0.3), pad=cfg.text?10:3;
+    return { w:+(cfg.cCount*(cfg.cellW+gap)-gap+pad*2).toFixed(1), h:+(cfg.rCount*(cfg.cellH+gap)-gap+pad*2).toFixed(1) }; }
+  function mtUpdateOut(){ const cfg=mtReadCfg(), sz=mtOutSize(cfg), n=cfg.rCount*cfg.cCount;
+    const warn = n>28 ? "  "+tr("mt.toomany","Too many cells (max 28).") : "";
+    $("mt_out").textContent = `${tr("mt.cells","Cells")}: ${n}   ${tr("mt.outsize","Output")}: ${sz.w} x ${sz.h} mm${warn}`; }
+  const MT_KEY = "lc_mt_presets";
+  function mtPresets(){ try { return JSON.parse(localStorage.getItem(MT_KEY)||"{}"); } catch(e){ return {}; } }
+  function mtRefreshPresets(){ const el=$("mt_load"); if(!el) return; const sel=el.value; el.length=1; const ps=mtPresets();
+    Object.keys(ps).sort().forEach(k=>{ const o=document.createElement("option"); o.value=k; o.textContent=k; el.appendChild(o); }); el.value=sel; }
+  function materialTest(){ mtFillParamSelects(); mtRefreshPresets(); mtUpdateOut(); $("mtBg").classList.add("show"); }
+  function mtText(s, x, y, align){ return { kind:"Text", cut_index:0, geometry:{ Text:{ s, x, y, h:3.6, gap:3.6*0.28, align, font:"mark" } } }; }
+  function doMaterialTest(cfg){
+    const R=cfg.rCount, C=cfg.cCount;
+    if (R*C > 28){ alert(tr("mt.toomany","Too many cells (max 28).")); return; }
+    const rp=mtParam(cfg.rParam), cp=mtParam(cfg.cParam);
+    const cw=cfg.cellW, ch=cfg.cellH, gap=Math.max(2, Math.min(cw,ch)*0.3), x0=24, y0=24;
+    const lerp=(a,b,t)=>a+(b-a)*t;
+    const rAt=r=>lerp(cfg.rMin,cfg.rMax,R>1?r/(R-1):0), cAt=c=>lerp(cfg.cMin,cfg.cMax,C>1?c/(C-1):0);
+    doc.layers.length=0; doc.shapes.length=0;
+    const base = layer(0, tr("mt.labels","Labels/border"), 300, 20, "Line"); base.color=PALETTE[0]; doc.layers.push(base);
+    let idx=1;
+    for (let r=0;r<R;r++){ const rv=rAt(r);
+      for (let c=0;c<C;c++){ const cv=cAt(c);
+        const L = layer(idx, `${rp.fmt(rv)}/${cp.fmt(cv)}`, 300, 20, cfg.fill?"Fill":"Line");
+        L.color=PALETTE[idx%PALETTE.length]; L.interval=0.1; rp.apply(L,rv); cp.apply(L,cv);
         doc.layers.push(L);
-        doc.shapes.push(rect(x0 + c * (cell + gap), y0 + r * (cell + gap), cell, cell, idx));
+        doc.shapes.push(rect(x0+c*(cw+gap), y0+r*(ch+gap), cw, ch, idx));
         idx++;
       }
-      doc.shapes.push({ kind:"Text", cut_index:0, geometry:{ Text:{ s:String(speed), x:x0 - 4, y:y0 + r * (cell + gap) + cell / 2 - 2, h:4, gap:4*0.28, align:"right", font:"mark" } } });
     }
-    for (let c = 0; c < cols; c++) doc.shapes.push({ kind:"Text", cut_index:0, geometry:{ Text:{ s:String(powerAt(c)), x:x0 + c * (cell + gap) + cell / 2, y:y0 + rows * (cell + gap) + 1, h:4, gap:4*0.28, align:"center", font:"mark" } } });
-    activeLayer = 0; selectOnly(null); snapshot(); renderLayers(); fit(); render(); generate(); refreshCounts();
+    if (cfg.text){
+      for (let r=0;r<R;r++) doc.shapes.push(mtText(rp.fmt(rAt(r)), x0-2.5, y0+r*(ch+gap)+ch/2-1.8, "right"));
+      for (let c=0;c<C;c++) doc.shapes.push(mtText(cp.fmt(cAt(c)), x0+c*(cw+gap)+cw/2, y0+R*(ch+gap)+1, "center"));
+      // Axis titles name which parameter each direction sweeps.
+      doc.shapes.push(mtText(`${tr("mtp."+rp.id, rp.label)}${rp.unit?" ("+rp.unit+")":""}`, x0-2.5, y0+R*(ch+gap)+1, "right"));
+      doc.shapes.push(mtText(`${tr("mtp."+cp.id, cp.label)}${cp.unit?" ("+cp.unit+")":""}`, x0+C*(cw+gap)/2, y0+R*(ch+gap)+6, "center"));
+    }
+    if (cfg.border){ const bw=C*(cw+gap)-gap, bh=R*(ch+gap)-gap, m=gap*0.6;
+      doc.shapes.push(rect(x0-m, y0-m, bw+2*m, bh+2*m, 0)); }
+    activeLayer=0; selectOnly(null); snapshot(); renderLayers(); fit(); render(); generate(); refreshCounts();
   }
   // Insert the current date and time as a text object, using a small format
   // vocabulary (yyyy MM dd HH mm ss). The value is baked at insert time.
@@ -3202,6 +3511,13 @@
   $("pr_rot") && ($("pr_rot").onchange = propsRotate);
   $("pr_fliph") && ($("pr_fliph").onclick = () => propsFlip(true));
   $("pr_flipv") && ($("pr_flipv").onclick = () => propsFlip(false));
+  document.querySelectorAll("#prAlign [data-palign]").forEach(btn => btn.onclick = () => {
+    const a = btn.dataset.palign;
+    if (a==="p2p") startP2P();
+    else if (a==="disth") distribute(true);
+    else if (a==="distv") distribute(false);
+    else alignSel(a);
+  });
   // Grid-snap tool option.
   $("snapChk") && ($("snapChk").onchange = () => { snapOn = $("snapChk").checked; });
   $("gridMM") && ($("gridMM").onchange = () => { gridMM = +$("gridMM").value || 10; });
@@ -3213,20 +3529,38 @@
 
   // ---- galvo output + real WebUSB connection ----
   function isGalvo(){ return curFlavor==="galvo"; }
-  function galvoBytes(){ return generate_galvo_lmc(JSON.stringify(toProject()), 110, 16, 30, 100, 2048); }
+  // The galvo scan field in mm (the full mirror deflection range), from the
+  // machine profile. It is larger than the work area the design is drawn on: the
+  // 150 mm lens has a 170 mm field, per the ComMarker config (FIELDSIZE=170).
+  function galvoFieldMM(){ const m = (typeof currentMachine === "function") ? currentMachine() : null; return (m && m.field) || BED.w; }
+  function galvoBytes(){ return generate_galvo_lmc(JSON.stringify(toProject()), galvoFieldMM(), 16, 30, 100, 2048); }
   function hex(a){ return Array.from(a).map(b=>b.toString(16).padStart(2,"0")).join(" "); }
 
   // BJJCZ control opcodes (galvoplotter consts.py).
-  const OP = { EnableLaser:0x0004, ExecuteList:0x0005, SetPwmPulseWidth:0x0006, GetVersion:0x0007,
-    GetSerialNo:0x0009, ResetList:0x0012, SetFirstPulseKiller:0x001A, SetLaserMode:0x001B,
-    SetControlMode:0x0016, SetDelayMode:0x0017, SetTiming:0x001C, SetStandby:0x001D,
-    SetPwmHalfPeriod:0x001E, WriteAnalogPort1:0x0022, SetFpkParam2:0x002E, SetFlyRes:0x0032,
-    Fiber_SetMo:0x0033, EnableZ:0x003A, Reset:0x0040 };
+  // Control opcodes recovered clean-room from LMCMIO.dll exports (the real EZCAD
+  // marking library for this USBLMCV4 board). Each MIO_ wrapper pushes its opcode
+  // into the shared 12-byte command sender. See docs/rea-evidence/galvo-lmc-protocol.md.
+  const OP = { WriteCorLine:0x0010, DisableLaser:0x0002, EnableLaser:0x0004, ExecuteList:0x0005, SetPwmPulseWidth:0x0006, GetVersion:0x0007,
+    GetSerialNo:0x0009, GetListStatus:0x000A, GotoXY:0x000D, LaserSignalOff:0x000E, LaserSignalOn:0x000F,
+    ResetList:0x0012, RestartList:0x0013, WriteCorTable:0x0015, SetControlMode:0x0016, SetDelayMode:0x0017,
+    SetMaxPolyDelay:0x0018, SetFirstPulseKiller:0x001A, SetLaserMode:0x001B, SetTiming:0x001C, SetStandby:0x001D,
+    SetPwmHalfPeriod:0x001E, StopExecute:0x001F, StopList:0x0020, WritePort:0x0021, WriteAnalogPort1:0x0022,
+    ReadPort:0x0025, SetFpkParam2:0x002E, SetFlyRes:0x0032, IPG_OpenMO:0x0033, EnableZ:0x003A, GetMarkTime:0x0041, Reset:0x0040 };
 
   const USB = { dev:null, ep:2, epIn:8 };
-  function setDev(msg){ $("devstat").textContent = msg; }
+  // The galvo log keeps the last lines of the handshake so the actual command
+  // flow and the board's replies are visible, not just a one-line summary.
+  let galvoLogLines = [];
+  function galvoLog(msg){ galvoLogLines.push(msg); if (galvoLogLines.length > 40) galvoLogLines = galvoLogLines.slice(-40); const el=$("devstat"); if (el){ el.textContent = galvoLogLines.join("\n"); el.scrollTop = el.scrollHeight; } console.log("[galvo]", msg); }
+  function setDev(msg){ galvoLog(msg); }
   function cmd12(op, v1=0,v2=0,v3=0,v4=0,v5=0){ const b=new Uint8Array(12); const dv=new DataView(b.buffer); dv.setUint16(0,op,true); dv.setUint16(2,v1&0xFFFF,true); dv.setUint16(4,v2&0xFFFF,true); dv.setUint16(6,v3&0xFFFF,true); dv.setUint16(8,v4&0xFFFF,true); dv.setUint16(10,v5&0xFFFF,true); return b; }
-  async function ctl(op, ...p){ await USB.dev.transferOut(USB.ep, cmd12(op, ...p)); try { await USB.dev.transferIn(USB.epIn, 8); } catch(e){} }
+  // Send a 12-byte control command and return the board's 8-byte reply, or null.
+  async function ctlR(op, ...p){ await USB.dev.transferOut(USB.ep, cmd12(op, ...p)); try { const r = await USB.dev.transferIn(USB.epIn, 8); return new Uint8Array(r.data.buffer.slice(0, r.data.byteLength)); } catch(e){ return null; } }
+  async function ctl(op, ...p){ await ctlR(op, ...p); }
+  // Write-only: send a 12-byte command without reading a reply. The board does
+  // not ACK the correction-table stream (0x15 / 0x10) on the IN endpoint, and a
+  // WebUSB transferIn has no timeout, so reading one would hang forever.
+  async function ctlW(op, ...p){ await USB.dev.transferOut(USB.ep, cmd12(op, ...p)); }
 
   async function connectGalvo(){
     if (!("usb" in navigator)) { setDev("WebUSB is not available. Use Chrome or Edge over HTTPS."); return; }
@@ -3242,46 +3576,164 @@
         if (e.type === "bulk" && e.direction === "in") epIn = e.endpointNumber;
       }
       USB.dev = dev; USB.ep = epOut; USB.epIn = epIn;
-      $("sendBtn").disabled = false;
-      $("connectBtn").textContent = "Connected";
+      galvoConnected();
       setDev(`Connected: ${dev.productName || "BJJCZ galvo"} (vendor 0x9588, bulk OUT EP ${epOut}, IN EP ${epIn}).`);
     } catch (e) { setDev("Connect failed: " + e.message + ". On Windows the board usually needs the WinUSB driver (Zadig). EZCAD or LightBurn cannot be using it at the same time."); }
   }
+  // Shared steps once a galvo device handle is open, from either the manual
+  // Connect button or auto-connect on load.
+  function galvoConnected(){
+    USB._corDone = false;   // a fresh connection must re-upload the correction table
+    const cut = $("galvoCutBtn"); if (cut) cut.disabled = false;
+    const cb = $("connectBtn"); if (cb) cb.textContent = tr("galvo.connected","Connected");
+  }
+  // Auto-connect reuses a board the browser already granted this origin, with no
+  // picker. It needs a prior manual Connect once per browser to grant permission.
+  async function autoConnectGalvo(){
+    if (!("usb" in navigator) || USB.dev) return;
+    try {
+      const devs = await navigator.usb.getDevices();
+      const dev = devs.find(d => d.vendorId === 0x9588);
+      if (!dev) { setDev(tr("galvo.autonone","Auto-connect: no previously paired galvo. Click Connect once to grant access.")); return; }
+      await dev.open();
+      if (dev.configuration === null) await dev.selectConfiguration(1);
+      const itf = dev.configuration.interfaces[0];
+      await dev.claimInterface(itf.interfaceNumber);
+      let epOut = 2, epIn = 8;
+      for (const alt of itf.alternates) for (const e of alt.endpoints) {
+        if (e.type === "bulk" && e.direction === "out") epOut = e.endpointNumber;
+        if (e.type === "bulk" && e.direction === "in") epIn = e.endpointNumber;
+      }
+      USB.dev = dev; USB.ep = epOut; USB.epIn = epIn;
+      galvoConnected();
+      setDev(`Auto-connected: ${dev.productName || "BJJCZ galvo"}.`);
+    } catch (e) { setDev("Auto-connect failed: " + e.message); }
+  }
 
-  // The init_laser control sequence (galvoplotter defaults), then reset -> write
-  // the list in 0xC00 chunks -> ExecuteList. EXPERIMENTAL: not hardware-verified,
-  // no correction file uploaded yet, and the fiber MO handling is a best guess.
+  // Upload the lens correction table: WriteCorTable to start, then one WriteCorLine
+  // per 65x65 cell (first cell flag 0, the rest 1). EZCAD does this first on every
+  // init. Cached per connection so repeated Cuts do not re-stream 4225 commands.
+  async function uploadCorTable(){
+    if (!galvoCorTable){ galvoLog("No correction file loaded; skipping WriteCorTable (load jcz15.cor in galvo settings)."); return; }
+    if (USB._corDone){ return; }
+    galvoLog(`Uploading correction table (${galvoCorTable.length} cells, write-only stream)…`);
+    const t0 = performance.now();
+    await ctlW(OP.WriteCorTable, 1);
+    for (let i=0;i<galvoCorTable.length;i++){ const [dx,dy]=galvoCorTable[i]; await ctlW(OP.WriteCorLine, dx, dy, i===0?0:1);
+      if (i && i % 1000 === 0) galvoLog(`  …${i}/${galvoCorTable.length} cells (${Math.round((performance.now()-t0)/1000)}s)`); }
+    USB._corDone = true;
+    galvoLog(`Correction table streamed in ${Math.round((performance.now()-t0)/1000)}s.`);
+  }
+  // The init_laser control sequence recovered from the EZCAD library: Reset,
+  // upload the correction table, EnableLaser, then the control/laser/timing set.
   async function initLaser(){
     await ctl(OP.GetSerialNo); await ctl(OP.GetVersion); await ctl(OP.Reset);
+    // The board keeps the correction table its last host software uploaded (your
+    // LightBurn sessions), so we do not re-stream it on every Cut. Only push one
+    // when the user has loaded a .cor and asked for it (galvoPushCor).
+    if (galvoPushCor && galvoCorTable) await uploadCorTable();
     await ctl(OP.EnableLaser);
     await ctl(OP.SetControlMode, 0); await ctl(OP.SetLaserMode, 1);
     await ctl(OP.SetDelayMode, 1); await ctl(OP.SetTiming, 1);
     await ctl(OP.SetStandby, 2000, 20); await ctl(OP.SetFirstPulseKiller, 200);
     await ctl(OP.SetPwmHalfPeriod, 125); await ctl(OP.SetPwmPulseWidth, 125);
-    await ctl(OP.Fiber_SetMo, 0);
+    await ctl(OP.IPG_OpenMO, 0);
     await ctl(OP.SetFpkParam2, 0xFFB, 1, 409, 100);
     await ctl(OP.SetFlyRes, 0, 99, 1000, 25);
     await ctl(OP.EnableZ); await ctl(OP.WriteAnalogPort1, 0x7FF); await ctl(OP.EnableZ);
   }
   async function sendGalvo(){
     if (!USB.dev) { setDev("Connect the galvo first."); return; }
+    if (!confirm(tr("galvo.cutconfirm","Cut now? The fiber laser will fire. Make sure the enclosure is closed and the area is clear."))) return;
     try {
-      setDev("Running init sequence…");
+      galvoLogLines = [];
+      galvoLog("Cut: querying board…");
+      galvoLog("GetVersion -> " + hex(await ctlR(OP.GetVersion) || []));
+      galvoLog("GetSerialNo -> " + hex(await ctlR(OP.GetSerialNo) || []));
+      galvoLog("init sequence…");
       await initLaser();
       await ctl(OP.ResetList);
       const bytes = galvoBytes();
+      // Diagnostic: is there real motion in this list, or is it all padding? Count
+      // the jump/mark commands and print the first dozen with their coordinates.
+      let nJump=0,nMark=0,nEnd=0,nOther=0; const head=[];
+      for (let i=0;i+1<bytes.length;i+=12){ const op=bytes[i]|bytes[i+1]<<8; if(op===0x8001)nJump++; else if(op===0x8005)nMark++; else if(op===0x8002)nEnd++; else nOther++;
+        if (head.length<14){ const a=bytes[i+2]|bytes[i+3]<<8, b=bytes[i+4]|bytes[i+5]<<8; head.push(`${op.toString(16)}(${a},${b})`); } }
+      galvoLog(`list field=${galvoFieldMM()}mm: ${nJump} jumps, ${nMark} marks, ${nEnd} end/pad, ${nOther} other`);
+      galvoLog("head: "+head.join(" "));
       let written = 0;
       for (let i = 0; i < bytes.length; i += 3072) {
         const r = await USB.dev.transferOut(USB.ep, bytes.slice(i, i + 3072));
         written += r.bytesWritten;
       }
-      await ctl(OP.Fiber_SetMo, 1);       // open MO so the fiber can emit (best guess)
+      galvoLog(`list written: ${written} bytes`);
+      // Execute order recovered from Lmc1.dll: the list self-terminates with its
+      // in-list 0x8002, so no SetEndOfList control command is sent (the earlier
+      // guess at 0x0019 was wrong). Open the fiber master oscillator, execute,
+      // then poll GetListStatus until the busy bit clears.
+      await ctl(OP.IPG_OpenMO, 1);
       await ctl(OP.ExecuteList);
-      setDev(`Sent full session: init, list (${written} bytes), ExecuteList. EXPERIMENTAL and unverified on hardware. If it does not mark, tell me where it stalled and I will adjust the sequence.`);
-    } catch (e) { setDev("Send failed at the USB layer: " + e.message); }
+      // Busy is read from GetVersion, status word is reply word b3 (bytes 6..7),
+      // busy bit 0x04, ready 0x20 (balor-confirmed). The MO stays open the whole
+      // wait so the fiber is not shut mid-mark. All four reply words are logged
+      // for the first polls so we can see which one actually toggles on this board.
+      const words = u => (u && u.length >= 8) ? [u[0]|u[1]<<8, u[2]|u[3]<<8, u[4]|u[5]<<8, u[6]|u[7]<<8] : [0,0,0,0];
+      const fmt = w => `b0=0x${w[0].toString(16)} b1=0x${w[1].toString(16)} b2=0x${w[2].toString(16)} b3=0x${w[3].toString(16)}`;
+      // The MO is held open for a fixed ~5s so a real mark has time to run, while
+      // we sample the dedicated GetListStatus command to see which word tracks the
+      // list state on this board (b3 is a constant signature, so it is not it).
+      galvoLog("ExecuteList sent; holding MO open ~5s and sampling GetListStatus…");
+      for (let i = 0; i < 40; i++) {
+        const ls = words(await ctlR(OP.GetListStatus));
+        if (i < 8 || i % 5 === 0) galvoLog(`list[${i}] ${fmt(ls)}`);
+        await new Promise(r => setTimeout(r, 125));
+      }
+      galvoLog(`after mark: GetListStatus ${fmt(words(await ctlR(OP.GetListStatus)))}, GetVersion ${fmt(words(await ctlR(OP.GetVersion)))}`);
+      await ctl(OP.IPG_OpenMO, 0);          // close MO
+      galvoLog(`List ${written}B executed, MO held ~5s. DID THE MACHINE PHYSICALLY DO ANYTHING (mirror move, red dot sweep, sound, a mark)? Report what you saw along with this log.`);
+    } catch (e) { galvoLog("Cut failed at the USB layer: " + e.message); }
+  }
+  // Trace the job's bounding box with the guide beam so the operator can line up
+  // the workpiece. The fiber source (MO) stays closed, so this cannot mark. The
+  // guide-beam port control is not yet confirmed on hardware, so this is flagged
+  // experimental until the red dot is seen to move.
+  let galvoFraming = false, frameStop = false;
+  // Trace the job's bounding box by driving the mirrors directly with GotoXY
+  // (control opcode 0x000D, recovered from the EZCAD library), the laser source
+  // closed the whole time so nothing marks. The red guide beam follows the
+  // mirrors, showing where the job sits. Click Frame again to stop.
+  async function galvoFrame(){
+    if (galvoFraming){ frameStop = true; return; }
+    if (typeof ready !== "undefined" && !ready) return;
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+    for (const sh of doc.shapes){ if (!sh) continue; const b=bbox(sh); if(b.x0<x0)x0=b.x0; if(b.y0<y0)y0=b.y0; if(b.x1>x1)x1=b.x1; if(b.y1>y1)y1=b.y1; }
+    if (!isFinite(x0)){ setDev(tr("galvo.framenothing","Nothing to frame. Draw something first.")); return; }
+    $("gcode").textContent = `Frame bbox (mm): (${x0.toFixed(1)}, ${y0.toFixed(1)}) to (${x1.toFixed(1)}, ${y1.toFixed(1)})`;
+    if (!USB.dev){ setDev(tr("galvo.connectfirst","Connect the galvo first.")); return; }
+    const FIELD = galvoFieldMM(), MAX = 0xFFFF;
+    const dev = mm => Math.max(0, Math.min(MAX, Math.round(((mm + FIELD/2)/FIELD)*MAX)));
+    const corners = [[x0,y0],[x1,y0],[x1,y1],[x0,y1]];
+    galvoFraming = true; frameStop = false;
+    const fb = $("galvoFrameBtn"); if (fb) fb.textContent = tr("dev.stop","Stop");
+    try {
+      galvoLogLines = [];
+      galvoLog("Framing with GotoXY (laser source closed, guide beam only). Click Stop to end.");
+      await initLaser();
+      await ctl(OP.IPG_OpenMO, 0);
+      for (let l=0; l<120 && !frameStop; l++){
+        for (const [mx,my] of corners){ if (frameStop) break; await ctl(OP.GotoXY, dev(mx), dev(my)); await new Promise(r=>setTimeout(r,130)); }
+      }
+      galvoLog("Frame stopped.");
+    } catch(e){ galvoLog("Frame failed at the USB layer: " + e.message); }
+    finally { galvoFraming = false; frameStop = false; const b=$("galvoFrameBtn"); if (b) b.textContent = tr("action.frame","Frame"); }
   }
   $("connectBtn") && ($("connectBtn").onclick = connectGalvo);
-  $("sendBtn") && ($("sendBtn").onclick = sendGalvo);
+  $("galvoCutBtn") && ($("galvoCutBtn").onclick = sendGalvo);
+  $("galvoFrameBtn") && ($("galvoFrameBtn").onclick = galvoFrame);
+  (function(){ const chk = $("galvoAuto"); if (!chk) return;
+    chk.checked = localStorage.getItem("lc_galvo_auto") === "1";
+    chk.onchange = () => { localStorage.setItem("lc_galvo_auto", chk.checked ? "1" : "0"); if (chk.checked && isGalvo()) autoConnectGalvo(); };
+  })();
 
   // ---- GRBL / G-code controller over WebSerial ----
   // A line-based streamer: send one line, wait for GRBL's "ok" or "error" before
@@ -3468,8 +3920,20 @@
   $("consoleClear") && ($("consoleClear").onclick = () => { const el = $("consoleLog"); if (el) el.textContent = ""; });
 
   // menus
-  document.querySelectorAll(".menubar .m").forEach(m => m.onclick = e => { if (e.target.dataset.act) return; document.querySelectorAll(".menubar .m").forEach(x=>x.classList.toggle("open", x===m && !m.classList.contains("open"))); e.stopPropagation(); });
-  document.addEventListener("click", ()=>document.querySelectorAll(".menubar .m").forEach(x=>x.classList.remove("open")));
+  document.querySelectorAll(".menubar .m").forEach(m => m.onclick = e => { if (e.target.dataset.act) return; closeAllSub(); document.querySelectorAll(".menubar .m").forEach(x=>x.classList.toggle("open", x===m && !m.classList.contains("open"))); e.stopPropagation(); });
+  document.addEventListener("click", ()=>{ document.querySelectorAll(".menubar .m").forEach(x=>x.classList.remove("open")); closeAllSub(); });
+  // Submenu hover intent: open on enter, and on leave wait a short delay before
+  // closing so the cursor can cross the gap into the submenu. Entering the row or
+  // its submenu cancels the pending close. A sibling opening closes the others.
+  function closeAllSub(){ document.querySelectorAll(".menubar .sub.subopen").forEach(s=>{ clearTimeout(s._subt); s.classList.remove("subopen"); }); }
+  document.querySelectorAll(".menubar .sub").forEach(sub => {
+    sub.addEventListener("mouseenter", () => {
+      clearTimeout(sub._subt);
+      sub.parentElement.querySelectorAll(":scope > .sub.subopen").forEach(s=>{ if (s!==sub){ clearTimeout(s._subt); s.classList.remove("subopen"); } });
+      sub.classList.add("subopen");
+    });
+    sub.addEventListener("mouseleave", () => { clearTimeout(sub._subt); sub._subt = setTimeout(() => sub.classList.remove("subopen"), 240); });
+  });
   document.querySelectorAll(".dropdown div").forEach(d => d.onclick = () => {
     const a=d.dataset.act;
     if (a==="new"){ doc.shapes=[]; selectOnly(null); }
@@ -3480,6 +3944,13 @@
     else if (a==="preview"){ openPreview(); return; }
     else if (a==="disth"){ distribute(true); return; }
     else if (a==="distv"){ distribute(false); return; }
+    else if (a==="al_left"){ alignSel("left"); return; }
+    else if (a==="al_cx"){ alignSel("cx"); return; }
+    else if (a==="al_right"){ alignSel("right"); return; }
+    else if (a==="al_top"){ alignSel("top"); return; }
+    else if (a==="al_cy"){ alignSel("cy"); return; }
+    else if (a==="al_bottom"){ alignSel("bottom"); return; }
+    else if (a==="p2p"){ startP2P(); return; }
     else if (a==="fillet"){ applyCornerMod(true); return; }
     else if (a==="chamfer"){ applyCornerMod(false); return; }
     else if (a==="reverse"){ reversePathDir(); return; }
@@ -3555,7 +4026,62 @@
     if (mode==="right")  dx = BED.w - bb.x1;
     if (mode==="bottom") dy = -bb.y0;
     if (mode==="top")    dy = BED.h - bb.y1;
-    translateShape(sh, dx, dy); render(); refreshCounts();
+    translateShape(sh, dx, dy); snapshot(); render(); refreshCounts();
+  }
+  // Align the selected shapes to each other. With two or more selected, every
+  // shape moves to the matching edge or centre of the selection's union box. With
+  // a single shape there is nothing to align against, so it aligns to the bed.
+  function alignSel(mode){
+    if (!sel.size) return;
+    if (sel.size === 1){ alignBed(mode); return; }
+    const U = groupBBox(); if (!U) return;
+    const ucx = (U.x0+U.x1)/2, ucy = (U.y0+U.y1)/2;
+    for (const i of sel){ const sh = doc.shapes[i]; if (!sh || sh.locked) continue; const b = bbox(sh); let dx=0, dy=0;
+      if (mode==="left")   dx = U.x0 - b.x0;
+      else if (mode==="right")  dx = U.x1 - b.x1;
+      else if (mode==="cx") dx = ucx - (b.x0+b.x1)/2;
+      else if (mode==="top")    dy = U.y1 - b.y1;
+      else if (mode==="bottom") dy = U.y0 - b.y0;
+      else if (mode==="cy") dy = ucy - (b.y0+b.y1)/2;
+      if (dx||dy) translateShape(sh, dx, dy);
+    }
+    snapshot(); render(); refreshCounts();
+  }
+  // Snap a dragged box origin (refX,refY) so one of its edges or its centre lines
+  // up with another shape's edge or centre, or a bed edge or centre. Returns the
+  // adjusted origin and the guide lines to draw. Threshold is a fixed screen gap.
+  function alignSnap(refX, refY, size){
+    const W = size.w, H = size.h, thr = 6 / view.s;
+    const ax = [refX, refX + W/2, refX + W];
+    const ay = [refY, refY + H/2, refY + H];
+    const cxs = [0, BED.w/2, BED.w], cys = [0, BED.h/2, BED.h];
+    for (let i=0;i<doc.shapes.length;i++){ const s=doc.shapes[i]; if (!s || sel.has(i)) continue; const b=bbox(s); cxs.push(b.x0,(b.x0+b.x1)/2,b.x1); cys.push(b.y0,(b.y0+b.y1)/2,b.y1); }
+    let bestXd=thr, adjX=0, gX=null;
+    for (const a of ax) for (const c of cxs){ const d=Math.abs(a-c); if (d<bestXd){ bestXd=d; adjX=c-a; gX=c; } }
+    let bestYd=thr, adjY=0, gY=null;
+    for (const a of ay) for (const c of cys){ const d=Math.abs(a-c); if (d<bestYd){ bestYd=d; adjY=c-a; gY=c; } }
+    const guides = [];
+    if (gX!=null) guides.push({ x:gX });
+    if (gY!=null) guides.push({ y:gY });
+    return { x: refX + (gX!=null?adjX:0), y: refY + (gY!=null?adjY:0), guides };
+  }
+  // Point-to-point move: click a source point, then a target point; the selection
+  // (or the shape under the first click) shifts so the two points coincide. Both
+  // clicks snap to the nearest shape vertex when one is within reach.
+  function startP2P(){ p2p = { stage:0, src:null, pick:null }; setTool("p2p"); }
+  function nearestVertex(m){
+    const thr = 9 / view.s; let best=null, bd=thr;
+    for (let i=0;i<doc.shapes.length;i++){ const s=doc.shapes[i]; if(!s) continue; for (const q of shapeFlatPts(s)){ const d=Math.hypot(q.x-m.x, q.y-m.y); if (d<bd){ bd=d; best={x:q.x,y:q.y,shape:i}; } } }
+    return best;
+  }
+  function p2pClick(e){
+    const raw = px2mm(e.clientX, e.clientY);
+    const v = nearestVertex(raw), pt = v ? {x:v.x,y:v.y} : raw;
+    if (!p2p || p2p.stage===0){ p2p = { stage:1, src:pt, pick:(v?v.shape:null) }; render(); return; }
+    let dx = pt.x - p2p.src.x, dy = pt.y - p2p.src.y;
+    if (sel.size){ for (const i of sel){ if (doc.shapes[i] && !doc.shapes[i].locked) translateShape(doc.shapes[i], dx, dy); } }
+    else if (p2p.pick!=null && doc.shapes[p2p.pick]){ translateShape(doc.shapes[p2p.pick], dx, dy); }
+    p2p = null; setTool("select"); snapshot(); render(); refreshCounts();
   }
   function openArrange(){ $("arBg").classList.add("show"); }
 
@@ -4253,6 +4779,26 @@
   Object.assign(I18N.de, { "tab.design":"Entwurf","tab.move":"Bewegen" });
   Object.assign(I18N.fr, { "tab.design":"Conception","tab.move":"Déplacer" });
   Object.assign(I18N["pt-BR"], { "tab.design":"Design","tab.move":"Mover" });
+  // New top-level menus and the Align/Tools submenus.
+  Object.assign(I18N.es, { "menu.arrange":"Organizar","menu.tools":"Herramientas","menu.laser":"Láser","sub.align":"Alinear","sub.distribute":"Distribuir","sub.boolean":"Booleano","sub.barcode":"Códigos","sub.text":"Texto","al.left":"Bordes izquierdos","al.cx":"Centrar horizontal","al.right":"Bordes derechos","al.top":"Bordes superiores","al.cy":"Centrar vertical","al.bottom":"Bordes inferiores","al.p2p":"Mover punto a punto…" });
+  Object.assign(I18N.de, { "menu.arrange":"Anordnen","menu.tools":"Werkzeuge","menu.laser":"Laser","sub.align":"Ausrichten","sub.distribute":"Verteilen","sub.boolean":"Boolesch","sub.barcode":"Barcodes","sub.text":"Text","al.left":"Linke Kanten","al.cx":"Horizontal zentrieren","al.right":"Rechte Kanten","al.top":"Obere Kanten","al.cy":"Vertikal zentrieren","al.bottom":"Untere Kanten","al.p2p":"Punkt-zu-Punkt verschieben…" });
+  Object.assign(I18N.fr, { "menu.arrange":"Disposer","menu.tools":"Outils","menu.laser":"Laser","sub.align":"Aligner","sub.distribute":"Distribuer","sub.boolean":"Booléen","sub.barcode":"Codes-barres","sub.text":"Texte","al.left":"Bords gauches","al.cx":"Centrer horizontalement","al.right":"Bords droits","al.top":"Bords hauts","al.cy":"Centrer verticalement","al.bottom":"Bords bas","al.p2p":"Déplacer point à point…" });
+  Object.assign(I18N["pt-BR"], { "menu.arrange":"Organizar","menu.tools":"Ferramentas","menu.laser":"Laser","sub.align":"Alinhar","sub.distribute":"Distribuir","sub.boolean":"Booleano","sub.barcode":"Códigos","sub.text":"Texto","al.left":"Bordas esquerdas","al.cx":"Centralizar horizontal","al.right":"Bordas direitas","al.top":"Bordas superiores","al.cy":"Centralizar vertical","al.bottom":"Bordas inferiores","al.p2p":"Mover ponto a ponto…" });
+  // Galvo control labels (Connect is now a small button; Cut replaces Send).
+  Object.assign(I18N.es, { "galvo.connect":"Conectar","galvo.auto":"Autoconexión","dev.cut":"Cortar" });
+  Object.assign(I18N.de, { "galvo.connect":"Verbinden","galvo.auto":"Auto-Verbinden","dev.cut":"Schneiden" });
+  Object.assign(I18N.fr, { "galvo.connect":"Connecter","galvo.auto":"Connexion auto","dev.cut":"Découper" });
+  Object.assign(I18N["pt-BR"], { "galvo.connect":"Conectar","galvo.auto":"Autoconexão","dev.cut":"Cortar" });
+  // Short align labels for the Properties button grid.
+  Object.assign(I18N.es, { "al.s.left":"Izq.","al.s.cx":"Centro","al.s.right":"Der.","al.s.top":"Arriba","al.s.cy":"Medio","al.s.bottom":"Abajo","al.s.disth":"Distribuir H","al.s.distv":"Distribuir V" });
+  Object.assign(I18N.de, { "al.s.left":"Links","al.s.cx":"Mitte","al.s.right":"Rechts","al.s.top":"Oben","al.s.cy":"Mitte V","al.s.bottom":"Unten","al.s.disth":"Verteilen H","al.s.distv":"Verteilen V" });
+  Object.assign(I18N.fr, { "al.s.left":"Gauche","al.s.cx":"Centre","al.s.right":"Droite","al.s.top":"Haut","al.s.cy":"Milieu","al.s.bottom":"Bas","al.s.disth":"Distribuer H","al.s.distv":"Distribuer V" });
+  Object.assign(I18N["pt-BR"], { "al.s.left":"Esq.","al.s.cx":"Centro","al.s.right":"Dir.","al.s.top":"Topo","al.s.cy":"Meio","al.s.bottom":"Base","al.s.disth":"Distribuir H","al.s.distv":"Distribuir V" });
+  // Cut Settings sections and Material Test labels.
+  Object.assign(I18N.es, { "cs.sec.basic":"Ajustes básicos","cs.sec.fill":"Relleno y barrido","cs.sec.shape":"Forma de corte","cs.sec.tabs":"Pestañas y puentes","cs.sec.timing":"Tiempos","mt.title":"Generador de prueba de material","mt.rows":"Filas (vertical)","mt.cols":"Columnas (horizontal)","mt.count":"Cantidad","mt.param":"Parámetro","mt.min":"Mín","mt.max":"Máx","mt.cellh":"Alto de celda mm","mt.cellw":"Ancho de celda mm","mt.fillcells":"Rellenar celdas (grabar)","mt.labeltext":"Etiquetar filas y columnas","mt.drawborder":"Dibujar borde","mt.generate":"Generar","mtp.speed":"Velocidad","mtp.power":"Potencia máx","mtp.interval":"Intervalo de línea","mtp.passes":"Pasadas","mtp.freq":"Frecuencia" });
+  Object.assign(I18N.de, { "cs.sec.basic":"Grundeinstellungen","cs.sec.fill":"Füllung und Scan","cs.sec.shape":"Schnittform","cs.sec.tabs":"Stege und Brücken","cs.sec.timing":"Timings","mt.title":"Materialtest-Generator","mt.rows":"Zeilen (vertikal)","mt.cols":"Spalten (horizontal)","mt.count":"Anzahl","mt.param":"Parameter","mt.min":"Min","mt.max":"Max","mt.cellh":"Zellenhöhe mm","mt.cellw":"Zellenbreite mm","mt.fillcells":"Zellen füllen (gravieren)","mt.labeltext":"Zeilen und Spalten beschriften","mt.drawborder":"Rahmen zeichnen","mt.generate":"Erzeugen","mtp.speed":"Geschwindigkeit","mtp.power":"Max. Leistung","mtp.interval":"Linienabstand","mtp.passes":"Durchgänge","mtp.freq":"Frequenz" });
+  Object.assign(I18N.fr, { "cs.sec.basic":"Réglages de base","cs.sec.fill":"Remplissage et balayage","cs.sec.shape":"Forme de coupe","cs.sec.tabs":"Languettes et ponts","cs.sec.timing":"Temporisations","mt.title":"Générateur de test de matériau","mt.rows":"Lignes (vertical)","mt.cols":"Colonnes (horizontal)","mt.count":"Nombre","mt.param":"Paramètre","mt.min":"Min","mt.max":"Max","mt.cellh":"Hauteur de cellule mm","mt.cellw":"Largeur de cellule mm","mt.fillcells":"Remplir les cellules (graver)","mt.labeltext":"Étiqueter lignes et colonnes","mt.drawborder":"Dessiner la bordure","mt.generate":"Générer","mtp.speed":"Vitesse","mtp.power":"Puissance max","mtp.interval":"Intervalle de ligne","mtp.passes":"Passes","mtp.freq":"Fréquence" });
+  Object.assign(I18N["pt-BR"], { "cs.sec.basic":"Ajustes básicos","cs.sec.fill":"Preenchimento e varredura","cs.sec.shape":"Forma de corte","cs.sec.tabs":"Abas e pontes","cs.sec.timing":"Tempos","mt.title":"Gerador de teste de material","mt.rows":"Linhas (vertical)","mt.cols":"Colunas (horizontal)","mt.count":"Quantidade","mt.param":"Parâmetro","mt.min":"Mín","mt.max":"Máx","mt.cellh":"Altura da célula mm","mt.cellw":"Largura da célula mm","mt.fillcells":"Preencher células (gravar)","mt.labeltext":"Rotular linhas e colunas","mt.drawborder":"Desenhar borda","mt.generate":"Gerar","mtp.speed":"Velocidade","mtp.power":"Potência máx","mtp.interval":"Intervalo de linha","mtp.passes":"Passagens","mtp.freq":"Frequência" });
   Object.assign(I18N.es, { "mode.line":"Línea","mode.fill":"Relleno","mode.concentric":"Concéntrico","mode.image":"Imagen" });
   Object.assign(I18N.de, { "mode.line":"Linie","mode.fill":"Füllung","mode.concentric":"Konzentrisch","mode.image":"Bild" });
   Object.assign(I18N.fr, { "mode.line":"Ligne","mode.fill":"Remplissage","mode.concentric":"Concentrique","mode.image":"Image" });
@@ -4508,6 +5054,7 @@
     else if (act==="preview"){ generate(); openPreview(); }
     else if (act==="cutsettings"){ openCutSettings(0); }
     else if (act==="galvosettings"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); }
+    else if (act==="galvoui"){ populateMachines("2"); applyMachine(allMachines()[2]); }
     else if (act==="rotary"){ openRotary(); }
     else if (act==="lbrn"){ const xml=`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/><speed Value="15"/><maxPower Value="80"/></CutSetting><CutSetting type="Scan"><index Value="1"/><name Value="Engrave"/><speed Value="200"/><maxPower Value="40"/></CutSetting><Shape Type="Rect" CutIndex="0" W="60" H="40"><XForm>1 0 0 1 80 60</XForm></Shape><Shape Type="Ellipse" CutIndex="1" Rx="20" Ry="15"><XForm>1 0 0 1 45 100</XForm></Shape><Shape Type="Path" CutIndex="0"><XForm>1 0 0 1 0 0</XForm><VertList>V10 20V40 20V40 55V10 55</VertList><PrimList>LineClosed</PrimList></Shape><Shape Type="Group"><XForm>1 0 0 1 120 30</XForm><Children><Shape Type="Rect" CutIndex="1" W="22" H="22"><XForm>1 0 0 1 0 0</XForm></Shape></Children></Shape></LightBurnProject>`; doc.shapes=[]; importLbrn(xml); }
     else if (act==="serial"){ doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"SN-%N", x:20, y:95, h:9, gap:9*0.28, align:"left", font:"mark" } } }]; selectOnly(0); doSerialize(1,10,1,4); }
@@ -4525,7 +5072,16 @@
     else if (act==="code39"){ console.log("C39 entries", Object.keys(C39).length); doc.shapes=barcode39("LC-39", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
     else if (act==="datamatrix"){ const d=DMX.encode("HELLO"); console.log("DM size", d&&d.size); doc.shapes=dmShapes("LC-0001 Data Matrix", 45, 35, 2, 0)||[]; selectOnly(null); render(); refreshCounts(); }
     else if (act==="qr"){ const q=QR.encode("https://quasarke.net"); console.log("QR version", q&&q.version, "size", q&&q.size); doc.shapes=qrShapes("https://quasarke.net", 45, 30, 2.2, 0)||[]; selectOnly(null); render(); refreshCounts(); }
-    else if (act==="mattest"){ doMaterialTest(5,5,10,100,50,400,10); }
+    else if (act==="mattest"){ doMaterialTest({ rCount:5, rParam:"speed", rMin:100, rMax:1000, cellH:8, cCount:5, cParam:"power", cMin:10, cMax:100, cellW:8, fill:true, text:true, border:true }); }
+    else if (act==="mattestui"){ materialTest(); }
+    else if (act==="align"){ doc.shapes=[rect(20,30,24,16,0), rect(60,55,34,10,1), rect(110,80,18,30,2)]; sel=new Set([0,1,2]); selected=0; alignSel("left"); render(); refreshCounts(); }
+    else if (act==="aligncx"){ doc.shapes=[rect(20,30,24,16,0), rect(60,55,34,10,1), rect(110,80,18,30,2)]; sel=new Set([0,1,2]); selected=0; alignSel("cx"); render(); refreshCounts(); }
+    else if (act==="snapguide"){ doc.shapes=[rect(40,40,30,24,0), rect(44,80,22,18,1)]; sel=new Set([1]); selected=1; snapGuides=[{x:40},{y:40}]; render(); }
+    else if (act==="arrangemenu"){ const el=document.querySelector('.m[data-menu="arrange"]'); if(el) el.classList.add("open"); }
+    else if (act==="alignsub"){ const el=document.querySelector('.m[data-menu="arrange"]'); if(el){ el.classList.add("open"); const sub=el.querySelector('.sub'); if(sub) sub.classList.add("subopen"); } }
+    else if (act==="propsalign"){ doc.shapes=[rect(20,30,24,16,0), rect(60,55,34,10,1), rect(110,80,18,30,2)]; sel=new Set([0,1,2]); selected=0; const tb=document.querySelector('.docktabs button[data-dock="props"]'); if(tb) tb.click(); render(); refreshCounts(); }
+    else if (act==="ctxalign"){ doc.shapes=[rect(20,30,24,16,0), rect(60,55,34,10,1)]; sel=new Set([0,1]); selected=0; render(); const r=canvas.getBoundingClientRect(); const px=mm2px(p(30,38)); canvas.dispatchEvent(new MouseEvent("contextmenu",{clientX:r.left+px.x,clientY:r.top+px.y,bubbles:true})); }
+    else if (act==="toolsmenu"){ const el=document.querySelector('.m[data-menu="tools"]'); if(el) el.classList.add("open"); }
     else if (act==="crosshatch"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=true; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="hatchonly"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=false; L.angle=45; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="overscan"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=false; L.angle=0; L.interval=4; L.fillOverscan=12; doc.shapes=[rect(70,45,50,40,L.index)]; curFlavor="grbl"; selectOnly(null); generate(); openPreview(); }

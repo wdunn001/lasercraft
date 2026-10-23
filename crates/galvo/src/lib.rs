@@ -32,20 +32,21 @@ impl GalvoParam {
         (1u32 << bits) - 1
     }
 
-    /// Map a logical point in millimetres to device coordinates.
+    /// Map a point in millimetres to device coordinates.
     ///
-    /// The logical range `[-field/2, +field/2]` maps linearly onto
-    /// `[0, device_max]`. Points outside the field are clamped. This is the
-    /// `logicPtToDevPt` behaviour recovered from `executor.dll`.
+    /// The editor uses a corner-origin work area, so the millimetre range
+    /// `[0, field]` maps linearly onto `[0, device_max]`: a point at the field
+    /// centre lands at the device centre and the field corner at device zero.
+    /// Points outside the field are clamped. The field size must equal the work
+    /// area the design is drawn on, or the design collapses toward one corner.
     pub fn logic_to_device(&self, x_mm: f64, y_mm: f64) -> (i32, i32) {
         (self.axis_to_device(x_mm), self.axis_to_device(y_mm))
     }
 
     fn axis_to_device(&self, mm: f64) -> i32 {
-        let half = self.field_size_mm / 2.0;
         let span = self.field_size_mm.max(f64::MIN_POSITIVE);
         let max = f64::from(self.device_max());
-        let normalized = ((mm + half) / span).clamp(0.0, 1.0);
+        let normalized = (mm / span).clamp(0.0, 1.0);
         (normalized * max).round() as i32
     }
 }
@@ -362,6 +363,10 @@ pub mod lmc {
     pub const LIST_POLYGON_DELAY: u16 = 0x800F;
     /// Set the Q-switch period, the fiber laser's inverse frequency.
     pub const LIST_QSWITCH_PERIOD: u16 = 0x801B;
+    /// Start-of-list marker. EZCAD opens every mark list with this before any
+    /// speed or geometry command, and the board needs it to arm the list for
+    /// execution. Recovered from the EZCAD marking library (balor cross-check).
+    pub const LIST_READY_MARK: u16 = 0x8051;
 
     /// Bytes in one command packet.
     pub const PACKET_LEN: usize = 12;
@@ -445,6 +450,11 @@ pub mod lmc {
             self.push(LIST_MARK_TO, [x, y, 0, 0, 0]);
         }
 
+        /// Open the list with the start-of-list marker the board arms on.
+        pub fn list_ready(&mut self) {
+            self.push(LIST_READY_MARK, [0, 0, 0, 0, 0]);
+        }
+
         /// Set the marking speed.
         pub fn mark_speed(&mut self, speed: u16) {
             self.push(LIST_MARK_SPEED, [speed, 0, 0, 0, 0]);
@@ -514,6 +524,7 @@ pub mod lmc {
     /// ready for the bulk write to [`WRITE_ENDPOINT`].
     pub fn compile(commands: &[GalvoCommand], mark_speed: u16, power_ratio: u16) -> Vec<u8> {
         let mut list = ListBuffer::new();
+        list.list_ready();
         list.mark_speed(mark_speed);
         list.mark_power_ratio(power_ratio);
         for command in commands {
@@ -591,11 +602,13 @@ pub mod lmc {
                 },
             ];
             let bytes = compile(&commands, 100, 0x0800);
-            // First command is the marking speed.
-            assert_eq!(&bytes[0..2], &0x800Cu16.to_le_bytes());
-            assert_eq!(&bytes[2..4], &100u16.to_le_bytes());
-            // Second command is the power ratio.
-            assert_eq!(&bytes[12..14], &0x800Bu16.to_le_bytes());
+            // First command is the start-of-list marker.
+            assert_eq!(&bytes[0..2], &0x8051u16.to_le_bytes());
+            // Then the marking speed.
+            assert_eq!(&bytes[12..14], &0x800Cu16.to_le_bytes());
+            assert_eq!(&bytes[14..16], &100u16.to_le_bytes());
+            // Then the power ratio.
+            assert_eq!(&bytes[24..26], &0x800Bu16.to_le_bytes());
             assert!(bytes.len().is_multiple_of(LIST_CHUNK_LEN));
         }
     }
@@ -685,7 +698,9 @@ mod tests {
             resolution_bits: 16,
         };
         assert_eq!(param.device_max(), 65535);
-        let (x, y) = param.logic_to_device(0.0, 0.0);
+        // Corner origin: 0 mm is device zero, the field centre (half) is mid scale.
+        assert_eq!(param.logic_to_device(0.0, 0.0), (0, 0));
+        let (x, y) = param.logic_to_device(50.0, 50.0);
         assert_eq!(x, 32768);
         assert_eq!(y, 32768);
     }
@@ -716,7 +731,7 @@ mod tests {
             field_size_mm: 100.0,
             resolution_bits: 16,
         };
-        assert_eq!(param.logic_to_device(-50.0, 50.0), (0, 65535));
+        assert_eq!(param.logic_to_device(0.0, 100.0), (0, 65535));
         assert_eq!(param.logic_to_device(-999.0, 999.0), (0, 65535));
     }
 }

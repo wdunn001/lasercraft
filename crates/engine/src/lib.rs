@@ -1155,8 +1155,9 @@ mod tests {
         assert!(!bytes.is_empty());
         // The buffer is whole 0xC00 list chunks.
         assert_eq!(bytes.len() % 0xC00, 0);
-        // It opens with the marking-speed command 0x800C.
-        assert_eq!(&bytes[0..2], &0x800Cu16.to_le_bytes());
+        // It opens with the start-of-list marker 0x8051, then the marking speed.
+        assert_eq!(&bytes[0..2], &0x8051u16.to_le_bytes());
+        assert_eq!(&bytes[12..14], &0x800Cu16.to_le_bytes());
     }
 
     #[test]

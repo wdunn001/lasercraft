@@ -21,7 +21,7 @@ Ruida .rd import and HPGL are implemented here as extras beyond LightBurn.
 | 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled); text-on-path warps glyphs along a selected curve. |
 | 6 | Variable text (serial, date/time, CSV merge) | Done | Serial numbers (%N token), date/time insert, and CSV merge (%col% / {col} tokens, one copy per row) all done. |
 | 7 | Group / Ungroup | Done | Group id on shapes, group-aware selection, Ctrl+G / Ctrl+Shift+G. |
-| 8 | Align and distribute | Done | Align to bed; distribute horizontally/vertically by even spacing. |
+| 8 | Align and distribute | Done | Align selection left/right/centre/top/bottom/middle to the group box (bed when one shape), point-to-point move, smart drag guides that snap edges and centres (Alt suppresses), align to bed, distribute by even spacing. |
 | 9 | Boolean union / subtract / intersect + weld | Done | |
 | 10 | Offset shapes | Done | |
 | 11 | Grid array and circular array | Done | Arrange dialog. |
@@ -48,11 +48,11 @@ Ruida .rd import and HPGL are implemented here as extras beyond LightBurn.
 - Node editing: insert/delete/move, trim, extend, break-at-node, convert-to-curve, convert-to-line Done; optimize/warp/deform: Gap.
 - Text: core + alignment + fonts + variable text (serial, date/time, CSV merge) + text-on-path Done; bending: Gap; bar code Partial (Code 128).
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs/bridges, perforation, lead-in/out, overcut, kerf offset (all applied in the G-code path) Done; sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
-- Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
+- Material library: Done (editable, per-machine, multi-finish, 3-format import). Two-axis material test generator Done (per-axis parameter choice from speed, max power, line interval, passes, frequency; configurable counts, cell size, labels, border; saved presets; one cut layer per cell). Focus/interval test generators: Gap.
 - Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI), overscan, bidirectional/unidirectional scanning, flood fill, dot mode (grid of dwell pulses, beam off between) Done. The full fill-control set is covered.
 - Image/art: trace + dither import, every documented image format including TIFF (.tif/.tiff decoded in-app, since browsers cannot), dither-mode picker, adjust image (brightness/contrast/gamma), 3D depth map Done; mask, convert-to-bitmap: Gap.
 - Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position, GRBL console Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); macros, file list, bridge: Gap.
-- Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
+- Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch, smart alignment guides with edge and centre snapping (Alt suppresses) Done; guidelines, snap distances: Gap.
 
 - Tool modifier keys (SolidCraft PR #5217-style shared resolver): Shift constrains (square/circle/regular, 45° lines, keep-aspect corners) and adds to a selection, Alt suppresses grid snap and draws from the centre, the primary key (Ctrl/Cmd) toggles a selection, Shift while rotating snaps to 15°. Per-tool hints in the sub-header, translated across five locales.
 
