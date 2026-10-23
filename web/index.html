@@ -122,6 +122,18 @@
   .pvctl { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
   .csrule { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
   .csgroup { margin-top: 12px; }
+  .gdtabs { display: flex; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+  .gdtabs button { background: none; border: none; color: var(--muted); font: inherit; padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .gdtabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .gdpane { padding: 14px 18px; }
+  .gdhead { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); margin: 16px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+  .gdhead:first-child { margin-top: 0; }
+  .gdrow { display: grid; grid-template-columns: 1fr 180px; align-items: center; gap: 10px; padding: 5px 0; }
+  .gdrow label { color: var(--ink); font-size: 13px; }
+  .gdrow input[type=number], .gdrow select { width: 100%; }
+  .gdrow input[type=checkbox] { width: auto; justify-self: start; }
+  .gdfile { display: flex; align-items: center; gap: 10px; }
+  .gdcorname { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gcode pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; line-height: 1.5; color: #cdd3e0; white-space: pre; }
   .stat { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); }
   .stat b { color: var(--ink); }
@@ -503,6 +515,27 @@
     </div>
   </div>
 
+  <!-- galvo device settings -->
+  <div class="modal-bg" id="gdBg">
+    <div class="modal" style="width:880px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 id="gdTitle" data-i18n="gd.title">Galvo device settings</h2><span class="spacer"></span><span class="btn" id="gdClose">&times;</span></div>
+      <div class="gdtabs">
+        <button class="active" data-gd="basic" data-i18n="gd.basic">Galvo and Basic</button>
+        <button data-gd="ports" data-i18n="gd.ports">Ports and Laser</button>
+        <button data-gd="addl" data-i18n="gd.addl">Additional</button>
+        <button data-gd="ext" data-i18n="gd.ext">Extensions</button>
+      </div>
+      <div class="mbody" style="max-height:62vh;overflow:auto">
+        <div id="gdpane_basic" class="gdpane"></div>
+        <div id="gdpane_ports" class="gdpane" style="display:none"></div>
+        <div id="gdpane_addl" class="gdpane" style="display:none"></div>
+        <div id="gdpane_ext" class="gdpane" style="display:none"></div>
+      </div>
+      <input type="file" id="gdCorFile" accept=".cor,.bin" class="hidden" />
+      <div class="mfoot"><span class="stat" id="gdNote" style="color:var(--muted);flex:1"></span><button class="btn" id="gdCancel" data-i18n="action.cancel">Cancel</button><button class="btn primary" id="gdOk" data-i18n="action.ok">OK</button></div>
+    </div>
+  </div>
+
   <!-- add machine -->
   <div class="modal-bg" id="mcBg">
     <div class="modal" style="width:440px">
@@ -522,6 +555,7 @@
             <label class="mccap"><input type="checkbox" id="mc_air" checked> <span data-i18n="mc.cap.air">Air assist</span></label>
           </div>
         </div>
+        <button class="btn" id="mcGalvoBtn" style="width:100%;margin-top:14px;display:none" data-i18n="gd.open">Galvo device settings&hellip;</button>
       </div>
       <div class="mfoot"><button class="btn danger" id="mcDelete" style="display:none" data-i18n="mc.delete">Delete</button><span class="spacer"></span><button class="btn" id="mcCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="mcOk" data-i18n="mc.save">Add</button></div>
     </div>
@@ -1764,8 +1798,12 @@
     $("mcOk").textContent = editing ? tr("mc.update", "Save") : tr("mc.save", "Add");
     // Delete is offered for custom machines only; built-ins are read-only presets.
     $("mcDelete").style.display = (editing && mcEditIdx >= BUILTIN_COUNT) ? "" : "none";
+    // The galvo device-settings button appears only for an existing galvo machine.
+    $("mcGalvoBtn").style.display = (editing && mc.ctrl === "galvo") ? "" : "none";
     $("mcBg").classList.add("show");
   }
+  $("mc_ctrl") && ($("mc_ctrl").onchange = () => { $("mcGalvoBtn").style.display = (mcEditIdx != null && $("mc_ctrl").value === "galvo") ? "" : "none"; });
+  $("mcGalvoBtn") && ($("mcGalvoBtn").onclick = () => { if (mcEditIdx == null) return; $("mcBg").classList.remove("show"); openGalvoSettings(mcEditIdx); });
   $("machine").onchange = () => {
     if ($("machine").value === "add"){ openMachineDialog(null); return; }
     const mc = allMachines()[+$("machine").value]; if (mc) applyMachine(mc);
@@ -1788,6 +1826,107 @@
   };
   $("mcClose").onclick = $("mcCancel").onclick = () => { $("mcBg").classList.remove("show"); populateMachines(String(+$("machine").value || 0)); };
   populateMachines("0");
+
+  // ---- galvo device settings (IO ports, laser source, field, correction) ----
+  // Schema-driven so the sixty-odd fields stay declarative. Each field is
+  // [key, type, label, default, options?]; type: n number, b bool, s/p/L select,
+  // h sub-header, f COR file. Values live on mc.galvo.
+  const GD_PORTS = ["None","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16"];
+  const GD_LEVELS = ["High","Low"];
+  const GD_SCHEMA = {
+    basic: [
+      ["","h","Field"],
+      ["fw","n","Field width mm",150],["fh","n","Field height mm",150],["fangle","n","Field angle°",0],["foffx","n","Offset X mm",0],["foffy","n","Offset Y mm",0],
+      ["","h","Control units"],
+      ["units","s","Control units",0,["mm/sec","mm/min","inch/sec"]],["link","b","Link control and design units",true],
+      ["","h","Red dot pointer"],
+      ["rd_offx","n","Red dot offset X mm",0],["rd_offy","n","Red dot offset Y mm",0],["rd_sx","n","Red dot scale X",1],["rd_sy","n","Red dot scale Y",1],["rd_rx","n","Red dot rest X mm",0],["rd_ry","n","Red dot rest Y mm",0],
+      ["","h","Galvo correction"],
+      ["cor","f","Correction (COR) file",""],
+      ["g1_isx","b","Galvo 1 is X axis",false],["g1_rev","b","Galvo 1 reverse direction",false],["g1_scale","n","Galvo 1 scale %",100],["g1_bulge","n","Galvo 1 bulge",1],["g1_skew","n","Galvo 1 skew",1],["g1_trap","n","Galvo 1 trapezoid",1],
+      ["g2_isx","b","Galvo 2 is X axis",true],["g2_rev","b","Galvo 2 reverse direction",false],["g2_scale","n","Galvo 2 scale %",100],["g2_bulge","n","Galvo 2 bulge",1],["g2_skew","n","Galvo 2 skew",1],["g2_trap","n","Galvo 2 trapezoid",1],
+      ["","h","Speeds and delays"],
+      ["frameSpeed","n","Frame speed mm/s",3000],["maxSpeed","n","Max speed mm/s",7000],["jumpSpeed","n","Jump speed mm/s",4000],["minJump","n","Min jump delay us",500],["maxJump","n","Max jump delay us",500],["jumpLimit","n","Jump distance limit mm",0],["onTc","n","Laser on TC us",-300],["offTc","n","Laser off TC us",100],["endTc","n","End TC us",300],["polyTc","n","Polygon TC us",100],
+      ["","h","Other options"],
+      ["soundFinish","b","Play sound on job finished",false],["requireFrame","b","Require framing before start",true],["jobChecklist","b","Enable job checklist",false],["saveRotary","b","Save rotary settings with project",false],
+    ],
+    ports: [
+      ["","h","IO ports"],
+      ["io_ready_p","p","Ready light port","None"],["io_ready_a","L","Ready light active","High"],
+      ["io_busy_p","p","Busy light port","None"],["io_busy_a","L","Busy light active","High"],
+      ["io_reddot_p","p","Red dot port","None"],["io_reddot_a","L","Red dot active","High"],["redDotAlways","b","Red dot always on",false],["enableBlanking","b","Enable blanking",false],["blankingDelay","n","Blanking delay us",100],
+      ["io_framing_p","p","Start framing port","None"],["io_framing_a","L","Start framing active","High"],
+      ["io_marking_p","p","Start marking port","None"],["io_marking_a","L","Start marking active","High"],["requireFullPulse","b","Require full pulse to start",true],
+      ["io_stop_p","p","Stop marking port","None"],["io_stop_a","L","Stop marking active","High"],
+      ["io_done_p","p","Done marking port","None"],["io_done_a","L","Done marking active","High"],["doneDuration","n","Done marking duration ms",10],
+      ["io_door_p","p","Door protect port","None"],["io_door_a","L","Door protect active","Low"],
+      ["io_laser2_p","p","2nd laser source port","None"],["io_laser2_a","L","2nd laser source active","High"],
+      ["","h","Laser source"],
+      ["laserType","s","Laser type",0,["Fiber","CO2","UV","SPI"]],["fiberType","s","Fiber type",0,["JPT","Raycus","MAX","IPG","Other"]],["qpulseEnable","b","Enable Q-pulse width setting",true],["moOnlyRun","b","MO enabled only when running",true],["openMoDelay","n","Open MO delay ms",8],["pwmEnable","b","Enable PWM",false],["maxFreq","n","Max frequency kHz",4000],["minFreq","n","Min frequency kHz",1],["tickleEnable","b","Enable tickle",false],["ticklePulse","n","Tickle pulse us",1],["tickleFreq","n","Tickle frequency kHz",5],["fpkEnable","b","Enable first pulse killer",false],["fpkStart","n","FPK start power",10],["fpkInc","n","FPK increment",10],["uvMin","n","UV min pulse ns",1],["uvMax","n","UV max pulse ns",20],["spiSimmer","n","SPI simmer current",80],
+    ],
+    addl: [
+      ["","h","Simulation settings (preview only)"],
+      ["simMaxX","n","Max speed X mm/s",7000],["simMaxY","n","Max speed Y mm/s",7000],["cutAccX","n","Cut accel X mm/s²",1500000],["cutAccY","n","Cut accel Y mm/s²",1500000],["engAccX","n","Engrave accel X mm/s²",1500000],["engAccY","n","Engrave accel Y mm/s²",1500000],["rapidSpeed","n","Rapid speed mm/s",7000],["cornerAcc","n","Corner accuracy mm",0.01],["minCornerSpeed","n","Minimum corner speed mm/s",1],["cutSpeedScale","n","Cut speed scale %",100],["globalSpeedScale","n","Global speed scale %",100],
+    ],
+    ext: [
+      ["pendant","b","Enable pendant",false],["apiPort","b","Enable permanent API access port",false],["apiPortNum","n","Fixed port number",0],["dragonDrop","b","Enable DragonDrop",false],
+    ],
+  };
+  let gdCorName = "", gdMcIdx = -1;
+  function gdBuildPane(tab){
+    const host = $("gdpane_"+tab); host.innerHTML = "";
+    for (const f of GD_SCHEMA[tab]){
+      const [k, t, label, def, opts] = f;
+      if (t === "h"){ const h=document.createElement("div"); h.className="gdhead"; h.textContent=label; host.appendChild(h); continue; }
+      const row = document.createElement("div"); row.className = "gdrow";
+      const lab = document.createElement("label"); lab.textContent = label; row.appendChild(lab);
+      let el;
+      if (t === "b"){ el = document.createElement("input"); el.type = "checkbox"; }
+      else if (t === "s" || t === "p" || t === "L"){ el = document.createElement("select"); const list = t==="p"?GD_PORTS:(t==="L"?GD_LEVELS:opts); list.forEach(o=>{ const op=document.createElement("option"); op.value=o; op.textContent=o; el.appendChild(op); }); }
+      else if (t === "f"){ el = document.createElement("div"); el.className="gdfile"; const b=document.createElement("button"); b.className="btn sm"; b.textContent=tr("gd.loadcor","Load COR file…"); b.onclick=()=>$("gdCorFile").click(); const s=document.createElement("span"); s.id="gd_corname"; s.className="gdcorname"; el.append(b,s); row.appendChild(el); host.appendChild(row); continue; }
+      else { el = document.createElement("input"); el.type = "number"; el.step = "any"; }
+      el.id = "gd_"+k; row.appendChild(el); host.appendChild(row);
+    }
+  }
+  function openGalvoSettings(mcIdx){
+    gdMcIdx = mcIdx; const mc = allMachines()[mcIdx]; if (!mc) return;
+    const g = mc.galvo || {};
+    ["basic","ports","addl","ext"].forEach(tab => { gdBuildPane(tab);
+      for (const f of GD_SCHEMA[tab]){ const [k,t,,def] = f; if (t==="h") continue;
+        if (t==="f"){ gdCorName = g.corName || ""; $("gd_corname").textContent = gdCorName; continue; }
+        const el = $("gd_"+k); if (!el) continue; const v = (g[k]!==undefined) ? g[k] : def;
+        if (t==="b") el.checked = !!v; else el.value = v;
+      }
+    });
+    $("gdTitle").textContent = tr("gd.title","Galvo device settings") + " — " + mc.name;
+    $("gdNote").textContent = mcIdx < BUILTIN_COUNT ? tr("gd.builtinnote","Saving a built-in machine keeps a custom copy.") : "";
+    document.querySelectorAll(".gdtabs button").forEach((b,i)=>b.classList.toggle("active", i===0));
+    ["basic","ports","addl","ext"].forEach((tab,i)=>$("gdpane_"+tab).style.display = i===0?"":"none");
+    localizeIn($("gdBg")); $("gdBg").classList.add("show");
+  }
+  function saveGalvoSettings(){
+    const g = {};
+    ["basic","ports","addl","ext"].forEach(tab => { for (const f of GD_SCHEMA[tab]){ const [k,t] = f; if (t==="h") continue;
+      if (t==="f"){ g.corName = gdCorName; continue; }
+      const el = $("gd_"+k); if (!el) continue;
+      g[k] = (t==="b") ? el.checked : ((t==="n") ? (+el.value||0) : el.value);
+    }});
+    // Built-in machines are read-only presets, so persist the galvo config on a
+    // custom copy and select it.
+    const base = allMachines()[gdMcIdx]; const custom = customMachines();
+    // The galvo field size is the bed, so mirror it onto the machine dimensions.
+    if (gdMcIdx >= BUILTIN_COUNT){ const t = custom[gdMcIdx - BUILTIN_COUNT]; t.galvo = g; t.w = g.fw || t.w; t.h = g.fh || t.h; }
+    else { const copy = JSON.parse(JSON.stringify(base)); copy.galvo = g; copy.w = g.fw || copy.w; copy.h = g.fh || copy.h; custom.push(copy); gdMcIdx = BUILTIN_COUNT + custom.length - 1; }
+    try { localStorage.setItem("lc_machines", JSON.stringify(custom)); } catch(e){}
+    populateMachines(String(gdMcIdx)); applyMachine(allMachines()[gdMcIdx]);
+  }
+  document.querySelectorAll(".gdtabs button").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".gdtabs button").forEach(x=>x.classList.toggle("active", x===b));
+    ["basic","ports","addl","ext"].forEach(tab=>$("gdpane_"+tab).style.display = (tab===b.dataset.gd)?"":"none");
+  });
+  $("gdCorFile").onchange = (e) => { const f=e.target.files[0]; if(!f) return; gdCorName = f.name; const s=$("gd_corname"); if(s) s.textContent = f.name; e.target.value=""; };
+  $("gdClose").onclick = $("gdCancel").onclick = () => $("gdBg").classList.remove("show");
+  $("gdOk").onclick = () => { saveGalvoSettings(); $("gdBg").classList.remove("show"); };
 
   // ---- export to engine project JSON ----
   // Expand a Text object into polyline shapes the engine understands. Every other
@@ -2629,6 +2768,10 @@
   Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","layer.output2":"Ausgabe","lp.mode":"Modus","cs.editcut":"Schnitteinstellungen bearbeiten…","cs.makedefault":"Als Standard","cs.angleinc":"Winkelinkrement°","cs.autorotate":"Auto-Drehen","cs.ramp":"Rampenlänge mm","cs.dotadjust":"Punktbreiten-Anpassung","cs.perf":"Perforation","cs.wobble":"Wobbeln","cs.perfcut":"Perf. Schnitt mm","cs.perfskip":"Perf. Sprung mm","cs.wobstep":"Wobbel-Schritt mm","cs.wobsize":"Wobbel-Größe mm","cs.tabsize":"Steggröße mm","cs.tabspacing":"Gleichmäßiger Abstand mm","cs.tabspershape":"Stege pro Form","cs.tabpower":"Stegleistung %","cs.tabskipinner":"Innere Formen überspringen","cs.timing":"Standardzeiten überschreiben","cs.jumpspeed":"Sprunggeschwindigkeit mm/s","cs.minjump":"Min. Sprungverzögerung us","cs.maxjump":"Max. Sprungverzögerung us","cs.laseron":"Laser-Ein TC us","cs.laseroff":"Laser-Aus TC us","cs.endtc":"End-TC us","cs.polytc":"Polygon-TC us","cs.pausebefore":"Pause davor ms","cs.pauseafter":"Pause danach ms" });
   Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","layer.output2":"Sortie","lp.mode":"Mode","cs.editcut":"Modifier les réglages de coupe…","cs.makedefault":"Par défaut","cs.angleinc":"Incrément d'angle°","cs.autorotate":"Rotation auto","cs.ramp":"Longueur de rampe mm","cs.dotadjust":"Ajustement largeur de point","cs.perf":"Perforation","cs.wobble":"Oscillation","cs.perfcut":"Coupe perf. mm","cs.perfskip":"Saut perf. mm","cs.wobstep":"Pas d'oscillation mm","cs.wobsize":"Taille d'oscillation mm","cs.tabsize":"Taille de patte mm","cs.tabspacing":"Espacement régulier mm","cs.tabspershape":"Pattes par forme","cs.tabpower":"Puissance de patte %","cs.tabskipinner":"Ignorer formes intérieures","cs.timing":"Remplacer les délais par défaut","cs.jumpspeed":"Vitesse de saut mm/s","cs.minjump":"Délai min. de saut us","cs.maxjump":"Délai max. de saut us","cs.laseron":"Laser activé TC us","cs.laseroff":"Laser désactivé TC us","cs.endtc":"TC de fin us","cs.polytc":"TC de polygone us","cs.pausebefore":"Pause avant ms","cs.pauseafter":"Pause après ms" });
   Object.assign(I18N["pt-BR"], { "cs.title":"Ajustes de corte","layer.output2":"Saída","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Tornar padrão","cs.angleinc":"Incremento de ângulo°","cs.autorotate":"Auto-rotação","cs.ramp":"Comprimento da rampa mm","cs.dotadjust":"Ajuste largura do ponto","cs.perf":"Perfuração","cs.wobble":"Oscilação","cs.perfcut":"Corte perf. mm","cs.perfskip":"Salto perf. mm","cs.wobstep":"Passo de oscilação mm","cs.wobsize":"Tamanho de oscilação mm","cs.tabsize":"Tamanho da aba mm","cs.tabspacing":"Espaçamento uniforme mm","cs.tabspershape":"Abas por forma","cs.tabpower":"Potência da aba %","cs.tabskipinner":"Pular formas internas","cs.timing":"Substituir tempos padrão","cs.jumpspeed":"Velocidade de salto mm/s","cs.minjump":"Atraso mín. de salto us","cs.maxjump":"Atraso máx. de salto us","cs.laseron":"Laser ligado TC us","cs.laseroff":"Laser desligado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa depois ms" });
+  Object.assign(I18N.es, { "gd.title":"Config. del dispositivo galvo","gd.basic":"Galvo y básico","gd.ports":"Puertos y láser","gd.addl":"Adicional","gd.ext":"Extensiones","gd.open":"Config. del dispositivo galvo…","gd.loadcor":"Cargar archivo COR…","gd.builtinnote":"Guardar una máquina integrada crea una copia personalizada." });
+  Object.assign(I18N.de, { "gd.title":"Galvo-Geräteeinstellungen","gd.basic":"Galvo und Allgemein","gd.ports":"Ports und Laser","gd.addl":"Zusätzlich","gd.ext":"Erweiterungen","gd.open":"Galvo-Geräteeinstellungen…","gd.loadcor":"COR-Datei laden…","gd.builtinnote":"Beim Speichern einer integrierten Maschine entsteht eine benutzerdefinierte Kopie." });
+  Object.assign(I18N.fr, { "gd.title":"Réglages du périphérique galvo","gd.basic":"Galvo et base","gd.ports":"Ports et laser","gd.addl":"Supplémentaire","gd.ext":"Extensions","gd.open":"Réglages du périphérique galvo…","gd.loadcor":"Charger le fichier COR…","gd.builtinnote":"Enregistrer une machine intégrée crée une copie personnalisée." });
+  Object.assign(I18N["pt-BR"], { "gd.title":"Configurações do dispositivo galvo","gd.basic":"Galvo e básico","gd.ports":"Portas e laser","gd.addl":"Adicional","gd.ext":"Extensões","gd.open":"Configurações do dispositivo galvo…","gd.loadcor":"Carregar arquivo COR…","gd.builtinnote":"Salvar uma máquina integrada cria uma cópia personalizada." });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -2703,6 +2846,7 @@
     else if (act==="materials"){ openMaterials(); }
     else if (act==="preview"){ generate(); openPreview(); }
     else if (act==="cutsettings"){ openCutSettings(0); }
+    else if (act==="galvosettings"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); }
     else if (act==="star"){ doc.shapes.push(star(75,55,40,40,5,0)); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="cs"){ openCutSettings(2); }
     else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
