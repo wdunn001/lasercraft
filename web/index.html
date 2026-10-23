@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="mirrorline" data-i18n="action.mirrorline">Mirror across line</div><div data-act="nest" data-i18n="action.nest">Nest shapes</div><div data-act="cylinder" data-i18n="action.cylinder">Cylinder correction&hellip;</div><div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div><div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div><div data-act="toline" data-i18n="action.toline">Convert to line</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="mirrorline" data-i18n="action.mirrorline">Mirror across line</div><div data-act="nest" data-i18n="action.nest">Nest shapes</div><div data-act="cylinder" data-i18n="action.cylinder">Cylinder correction&hellip;</div><div data-act="centerfind" data-i18n="action.centerfind">Find circle center</div><div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div><div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div><div data-act="toline" data-i18n="action.toline">Convert to line</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -1180,6 +1180,25 @@
     const ax = (prompt(tr("cyl.axis","Curved axis: x (around) or y"), "x") || "x").trim().toLowerCase();
     cylinderCorrect(dia, ax === "y" ? "y" : "x");
   }
+  // Center finder: the circumcentre of three points on a circular feature marks its
+  // centre, for lining up a round workpiece. Returns null for collinear points.
+  function circumcenter(a, b, c){
+    const d = 2 * (a.x*(b.y-c.y) + b.x*(c.y-a.y) + c.x*(a.y-b.y));
+    if (Math.abs(d) < 1e-9) return null;
+    const a2 = a.x*a.x + a.y*a.y, b2 = b.x*b.x + b.y*b.y, c2 = c.x*c.x + c.y*c.y;
+    return { x: (a2*(b.y-c.y) + b2*(c.y-a.y) + c2*(a.y-b.y)) / d, y: (a2*(c.x-b.x) + b2*(a.x-c.x) + c2*(b.x-a.x)) / d };
+  }
+  // Drop a small crosshair marker at (cx,cy) on its own layer.
+  function placeCenterMarker(cx, cy){
+    const cut = layerIndexForName("Center");
+    const r = 3;
+    doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points:[p(cx-r,cy),p(cx+r,cy)], closed:false } } });
+    doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points:[p(cx,cy-r),p(cx,cy+r)], closed:false } } });
+    doc.shapes.push(ellipse(cx, cy, r*0.6, r*0.6, cut));
+    renderLayers(); selectOnly(null); snapshot(); render(); refreshCounts();
+  }
+  let centerPts = null;                                    // collected points while finding a centre
+  function startCenterFinder(){ centerPts = []; const h = $("toolHint"); if (h) h.textContent = tr("ctr.hint","Click three points on a circular edge to mark its centre. Escape cancels."); }
   // Nest shapes into rows so they pack onto the bed with little waste (LightBurn
   // "Nest"). A shelf pack: tallest first, filling each row left to right and
   // wrapping up when the bed width is reached.
@@ -1601,6 +1620,14 @@
     if (lensCalibrating){ handleLensClick(e); return; }
     if (camCalibrating){ handleCalibClick(e); return; }
     readMods(e);
+    if (centerPts){
+      const m0 = px2mm(e.clientX, e.clientY); centerPts.push({ x:m0.x, y:m0.y });
+      if (centerPts.length < 3){ const h = $("toolHint"); if (h) h.textContent = tr("ctr.prog","Center point ") + centerPts.length + " / 3"; return; }
+      const c = circumcenter(centerPts[0], centerPts[1], centerPts[2]); centerPts = null; updateToolbar();
+      if (!c){ alert(tr("ctr.collinear","Those three points are in a line; no circle centre exists.")); return; }
+      placeCenterMarker(c.x, c.y);
+      return;
+    }
     const m = snapForTool(px2mm(e.clientX, e.clientY)); start = m;
     if (mirrorAxis){
       if (!mirrorAxis.a){ mirrorAxis.a = { x:m.x, y:m.y }; }
@@ -3414,6 +3441,7 @@
     else if (a==="mirrorline"){ startMirror(); return; }
     else if (a==="nest"){ nestSelection(); return; }
     else if (a==="cylinder"){ startCylinder(); return; }
+    else if (a==="centerfind"){ startCenterFinder(); return; }
     else if (a==="nodebreak"){ nodeBreak(); return; }
     else if (a==="tocurve"){ nodeToCurve(); return; }
     else if (a==="toline"){ nodeToLine(); return; }
@@ -3511,8 +3539,9 @@
       snapshot(); render(); generate(); refreshCounts(); return;
     }
     if (e.key==="Escape"){
-      // Escape backs out: cancel a pending mirror, drop any selection, then the tool.
+      // Escape backs out: cancel a pending mirror or centre-find, drop any selection, then the tool.
       if (mirrorAxis){ mirrorAxis = null; updateToolbar(); return; }
+      if (centerPts){ centerPts = null; updateToolbar(); return; }
       if (sel.size){ selectOnly(null); render(); }
       if (tool!=="select"){ setTool("select"); }
       return;
@@ -4195,7 +4224,11 @@
       fr:{b:"Calibration d'objectif (cliquer la grille 5×5)",s:"Cliquez la grille 5×5 imprimée, ligne par ligne, en haut à gauche. Point 1 / 25",p:"Point de grille ",f:"Échec de la calibration d'objectif. Réessayez.",o:"Objectif corrigé : k1=",e:"Activez d'abord la caméra."},
       "pt-BR":{b:"Calibração de lente (clicar grade 5×5)",s:"Clique na grade 5×5 impressa, linha por linha, começando no canto superior esquerdo. Ponto 1 / 25",p:"Ponto da grade ",f:"Falha na calibração de lente. Tente de novo.",o:"Lente corrigida: k1=",e:"Ative a câmera primeiro."} };
     for (const loc in L){ const t=L[loc]; Object.assign(I18N[loc], { "cam.lens":t.b,"cam.lensstart":t.s,"cam.lensprog":t.p,"cam.lensfail":t.f,"cam.lensok":t.o,"cam.enablefirst":t.e }); } }
-  Object.assign(I18N.es, { "action.nest":"Anidar formas","action.cylinder":"Corrección de cilindro…","cyl.dia":"Diámetro del cilindro mm","cyl.axis":"Eje curvo: x (alrededor) o y" }); Object.assign(I18N.de, { "action.nest":"Formen verschachteln","action.cylinder":"Zylinderkorrektur…","cyl.dia":"Zylinderdurchmesser mm","cyl.axis":"Gekrümmte Achse: x (herum) oder y" }); Object.assign(I18N.fr, { "action.nest":"Imbriquer les formes","action.cylinder":"Correction de cylindre…","cyl.dia":"Diamètre du cylindre mm","cyl.axis":"Axe courbe : x (autour) ou y" }); Object.assign(I18N["pt-BR"], { "action.nest":"Aninhar formas","action.cylinder":"Correção de cilindro…","cyl.dia":"Diâmetro do cilindro mm","cyl.axis":"Eixo curvo: x (ao redor) ou y" });
+  Object.assign(I18N.es, { "action.nest":"Anidar formas","action.cylinder":"Corrección de cilindro…","cyl.dia":"Diámetro del cilindro mm","cyl.axis":"Eje curvo: x (alrededor) o y" });
+  Object.assign(I18N.es, { "action.centerfind":"Encontrar centro de círculo","ctr.hint":"Haga clic en tres puntos del borde circular para marcar el centro. Escape cancela.","ctr.prog":"Punto central ","ctr.collinear":"Esos tres puntos están en línea; no hay centro de círculo." });
+  Object.assign(I18N.de, { "action.centerfind":"Kreismittelpunkt finden","ctr.hint":"Klicken Sie drei Punkte auf einem Kreisrand, um den Mittelpunkt zu markieren. Escape bricht ab.","ctr.prog":"Mittelpunktspunkt ","ctr.collinear":"Diese drei Punkte liegen auf einer Linie; kein Kreismittelpunkt." });
+  Object.assign(I18N.fr, { "action.centerfind":"Trouver le centre du cercle","ctr.hint":"Cliquez trois points sur un bord circulaire pour marquer le centre. Échap annule.","ctr.prog":"Point central ","ctr.collinear":"Ces trois points sont alignés ; aucun centre de cercle." });
+  Object.assign(I18N["pt-BR"], { "action.centerfind":"Encontrar centro do círculo","ctr.hint":"Clique três pontos na borda circular para marcar o centro. Esc cancela.","ctr.prog":"Ponto central ","ctr.collinear":"Esses três pontos estão em linha; não há centro de círculo." }); Object.assign(I18N.de, { "action.nest":"Formen verschachteln","action.cylinder":"Zylinderkorrektur…","cyl.dia":"Zylinderdurchmesser mm","cyl.axis":"Gekrümmte Achse: x (herum) oder y" }); Object.assign(I18N.fr, { "action.nest":"Imbriquer les formes","action.cylinder":"Correction de cylindre…","cyl.dia":"Diamètre du cylindre mm","cyl.axis":"Axe courbe : x (autour) ou y" }); Object.assign(I18N["pt-BR"], { "action.nest":"Aninhar formas","action.cylinder":"Correção de cilindro…","cyl.dia":"Diâmetro do cilindro mm","cyl.axis":"Eixo curvo: x (ao redor) ou y" });
   Object.assign(I18N.es, { "action.nodebreak":"Romper en el nodo","action.tocurve":"Convertir en curva","action.toline":"Convertir en línea","action.mirrorline":"Reflejar sobre línea","mir.need":"Seleccione formas y luego haga clic en dos puntos para la línea.","mir.hint":"Haga clic en dos puntos para la línea de reflejo. Escape cancela." });
   Object.assign(I18N.de, { "action.nodebreak":"Am Knoten trennen","action.tocurve":"In Kurve umwandeln","action.toline":"In Linie umwandeln","action.mirrorline":"An Linie spiegeln","mir.need":"Formen auswählen, dann zwei Punkte für die Linie anklicken.","mir.hint":"Zwei Punkte für die Spiegelachse anklicken. Escape bricht ab." });
   Object.assign(I18N.fr, { "action.nodebreak":"Rompre au nœud","action.tocurve":"Convertir en courbe","action.toline":"Convertir en ligne","action.mirrorline":"Miroir sur une ligne","mir.need":"Sélectionnez des formes puis cliquez deux points pour la ligne.","mir.hint":"Cliquez deux points pour l'axe du miroir. Échap annule." });
@@ -4411,6 +4444,7 @@
     else if (act==="mirrorline"){ const base={ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(30,40),p(70,50),p(35,85),p(55,60)], closed:true } } }; doc.shapes=[base, JSON.parse(JSON.stringify(base))]; sel=new Set([1]); selected=1; mirrorSelAcross(80,20,80,100); render(); refreshCounts(); }
     else if (act==="nest"){ doc.shapes=[rect(10,10,45,30,0), rect(10,10,20,50,0), rect(10,10,35,18,0), rect(10,10,25,40,0), rect(10,10,30,22,0), rect(10,10,15,35,0)]; sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; nestSelection(); selectOnly(null); render(); refreshCounts(); }
     else if (act==="cylinder"){ doc.shapes=[]; for (let i=0;i<=16;i++){ const x=30+i*5; doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(x,40),p(x,90)], closed:false } } }); } sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; cylinderCorrect(60,"x"); selectOnly(null); render(); refreshCounts(); }
+    else if (act==="centerfind"){ doc.shapes=[ellipse(80,55,35,35,0)]; const a=p(80+35,55), b=p(80,55+35), c=p(80-35,55); const ctr=circumcenter(a,b,c); console.log("center", ctr); placeCenterMarker(ctr.x, ctr.y); selectOnly(null); render(); refreshCounts(); }
     else if (act==="dual"){ curDual={on:true,dx:25,dy:0}; doc.layers[1].laser=2; doc.shapes=[rect(40,40,30,30,doc.layers[0].index), rect(40,40,30,30,doc.layers[1].index)]; curFlavor="grbl"; selectOnly(null); generate(); openPreview(); }
     else if (act==="lens"){ const cx=320,cy=240,scale=320,K1=-0.28,K2=0.09; const pairs=[]; for (let gy=0;gy<5;gy++) for (let gx=0;gx<5;gx++){ const ix=cx+(gx-2)*110, iy=cy+(gy-2)*90; const [dnx,dny]=lensDistortPt((ix-cx)/scale,(iy-cy)/scale,K1,K2); pairs.push([[ix,iy],[cx+dnx*scale,cy+dny*scale]]); } const got=lensSolve(pairs,cx,cy,scale); let maxres=0; for (const [ideal,obs] of pairs){ const [rnx,rny]=lensDistortPt((ideal[0]-cx)/scale,(ideal[1]-cy)/scale,got.k1,got.k2); const res=Math.hypot(cx+rnx*scale-obs[0],cy+rny*scale-obs[1]); maxres=Math.max(maxres,res); } $("gcode").textContent=`lens solve: planted k1=${K1} k2=${K2}; recovered k1=${got.k1.toFixed(4)} k2=${got.k2.toFixed(4)}; max residual=${maxres.toExponential(2)} px`; console.log($("gcode").textContent); }
     else if (act==="mods"){ doc.shapes=[];
