@@ -32,7 +32,7 @@ because every item ships at once.
 | 20 | Jog + position readout | Done | Move tab jog; GRBL position readout. |
 | 21 | Device setup and connection | Done | Machine add/edit/delete; serial and galvo USB. |
 | 22 | Bed size, origin corner, grid/snapping | Done | Bed size, origin corner stored, grid snap. |
-| 23 | Material library (save, assign, link presets) | Done | Per-machine materials with finishes; JSON/XML/CSV import, JSON export. |
+| 23 | Material library (save, assign, link presets) | Done | Per-machine materials with finishes; JSON/XML/CSV import, JSON export; material test grid generator. |
 | 24 | Preview / simulation before running | Done | Cut preview modal plays back the toolpath. |
 | 25 | Camera overlay, calibration, alignment | Done | Camera tab with 4-corner alignment, registration marks. |
 
