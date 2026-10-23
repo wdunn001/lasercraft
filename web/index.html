@@ -2485,11 +2485,37 @@
     for (const v of seq){ const pat = C128[v]; for (let i = 0; i < pat.length; i++){ const w = (+pat[i]) * moduleW; if (i % 2 === 0) bars.push(rect(cx, y, w, height, cut)); cx += w; } }
     return bars;
   }
+  // Code 39: each character is nine elements (five bars, four spaces) of which
+  // three are wide. The pattern bit is 1 for a wide element, read bar-space from
+  // the left. A narrow space separates characters. Start and stop are the "*".
+  const C39 = {
+    "0":"000110100","1":"100100001","2":"001100001","3":"101100000","4":"000110001","5":"100110000",
+    "6":"001110000","7":"000100101","8":"100100100","9":"001100100","A":"100001001","B":"001001001",
+    "C":"101001000","D":"000011001","E":"100011000","F":"001011000","G":"000001101","H":"100001100",
+    "I":"001001100","J":"000011100","K":"100000011","L":"001000011","M":"101000010","N":"000010011",
+    "O":"100010010","P":"001010010","Q":"000000111","R":"100000110","S":"001000110","T":"000010110",
+    "U":"110000001","V":"011000001","W":"111000000","X":"010010001","Y":"110010000","Z":"011010000",
+    "-":"010000101",".":"110000100"," ":"011000100","$":"010101000","/":"010100010","+":"010001010",
+    "%":"000101010","*":"010010100"
+  };
+  function barcode39(text, x, y, height, narrow, cut){
+    const seq = "*" + text.toUpperCase().split("").filter(c => C39[c] && c !== "*").join("") + "*";
+    if (seq.length <= 2) return [];
+    const bars = []; let cx = x;
+    for (const ch of seq){
+      const pat = C39[ch];
+      for (let i = 0; i < 9; i++){ const w = (pat[i] === "1" ? 3 : 1) * narrow; if (i % 2 === 0) bars.push(rect(cx, y, w, height, cut)); cx += w; }
+      cx += narrow;                                        // inter-character gap
+    }
+    return bars;
+  }
   function createBarcode(){
+    const sym = (prompt(tr("bc.sym","Symbology: 128 or 39"), "128") || "128").trim();
     const txt = prompt(tr("bc.text","Barcode text (Code 128)"), "LC-0001"); if (txt == null || !txt) return;
     const h = parseFloat(prompt(tr("bc.height","Bar height mm"), "15")) || 15;
     const mw = parseFloat(prompt(tr("bc.module","Narrow bar mm"), "0.5")) || 0.5;
-    const bars = barcode128(txt, 20, 60, h, mw, doc.layers[activeLayer].index);
+    const cut = doc.layers[activeLayer].index;
+    const bars = sym === "39" ? barcode39(txt, 20, 60, h, mw, cut) : barcode128(txt, 20, 60, h, mw, cut);
     if (!bars.length){ alert(tr("bc.none","No encodable characters.")); return; }
     doc.shapes.push(...bars); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
   }
@@ -3686,10 +3712,10 @@
   Object.assign(I18N.de, { "action.qr":"QR-Code erstellen…","qr.text":"QR-Text oder URL","qr.module":"Modulgröße mm","qr.toolong":"Dieser Text ist für diesen Encoder zu lang (max. etwa 213 Byte)." });
   Object.assign(I18N.fr, { "action.qr":"Créer un code QR…","qr.text":"Texte ou URL du QR","qr.module":"Taille de module mm","qr.toolong":"Ce texte est trop long pour cet encodeur (max. environ 213 octets)." });
   Object.assign(I18N["pt-BR"], { "action.qr":"Criar código QR…","qr.text":"Texto ou URL do QR","qr.module":"Tamanho do módulo mm","qr.toolong":"Esse texto é longo demais para este codificador (máx. cerca de 213 bytes)." });
-  Object.assign(I18N.es, { "action.barcode":"Crear código de barras…","bc.text":"Texto del código (Code 128)","bc.height":"Altura de barra mm","bc.module":"Barra estrecha mm","bc.none":"Sin caracteres codificables." });
-  Object.assign(I18N.de, { "action.barcode":"Barcode erstellen…","bc.text":"Barcode-Text (Code 128)","bc.height":"Balkenhöhe mm","bc.module":"Schmaler Balken mm","bc.none":"Keine kodierbaren Zeichen." });
-  Object.assign(I18N.fr, { "action.barcode":"Créer un code-barres…","bc.text":"Texte du code (Code 128)","bc.height":"Hauteur de barre mm","bc.module":"Barre étroite mm","bc.none":"Aucun caractère encodable." });
-  Object.assign(I18N["pt-BR"], { "action.barcode":"Criar código de barras…","bc.text":"Texto do código (Code 128)","bc.height":"Altura da barra mm","bc.module":"Barra estreita mm","bc.none":"Nenhum caractere codificável." });
+  Object.assign(I18N.es, { "action.barcode":"Crear código de barras…","bc.sym":"Simbología: 128 o 39","bc.text":"Texto del código (Code 128)","bc.height":"Altura de barra mm","bc.module":"Barra estrecha mm","bc.none":"Sin caracteres codificables." });
+  Object.assign(I18N.de, { "action.barcode":"Barcode erstellen…","bc.sym":"Symbologie: 128 oder 39","bc.text":"Barcode-Text (Code 128)","bc.height":"Balkenhöhe mm","bc.module":"Schmaler Balken mm","bc.none":"Keine kodierbaren Zeichen." });
+  Object.assign(I18N.fr, { "action.barcode":"Créer un code-barres…","bc.sym":"Symbologie : 128 ou 39","bc.text":"Texte du code (Code 128)","bc.height":"Hauteur de barre mm","bc.module":"Barre étroite mm","bc.none":"Aucun caractère encodable." });
+  Object.assign(I18N["pt-BR"], { "action.barcode":"Criar código de barras…","bc.sym":"Simbologia: 128 ou 39","bc.text":"Texto do código (Code 128)","bc.height":"Altura da barra mm","bc.module":"Barra estreita mm","bc.none":"Nenhum caractere codificável." });
   Object.assign(I18N.es, { "action.serialize":"Serializar texto…","ser.need":"Seleccione primero un objeto de texto.","ser.start":"Número inicial","ser.count":"Cuántas copias","ser.step":"Paso entre números","ser.digits":"Dígitos mínimos (0 = ninguno)" });
   Object.assign(I18N.de, { "action.serialize":"Text serialisieren…","ser.need":"Zuerst ein Textobjekt auswählen.","ser.start":"Startnummer","ser.count":"Wie viele Kopien","ser.step":"Schritt zwischen Nummern","ser.digits":"Mindestziffern (0 = keine)" });
   Object.assign(I18N.fr, { "action.serialize":"Sérialiser le texte…","ser.need":"Sélectionnez d'abord un objet texte.","ser.start":"Numéro de départ","ser.count":"Combien de copies","ser.step":"Pas entre les numéros","ser.digits":"Chiffres minimum (0 = aucun)" });
@@ -3826,6 +3852,7 @@
     else if (act==="hpgl"){ importHpgl("IN;SP1;PU1000,1000;PD3000,1000,3000,2800,1000,2800,1000,1000;SP2;PU3600,1000;PD5600,1000,4600,3200,3600,1000;"); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
+    else if (act==="code39"){ console.log("C39 entries", Object.keys(C39).length); doc.shapes=barcode39("LC-39", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
     else if (act==="qr"){ const q=QR.encode("https://quasarke.net"); console.log("QR version", q&&q.version, "size", q&&q.size); doc.shapes=qrShapes("https://quasarke.net", 45, 30, 2.2, 0)||[]; selectOnly(null); render(); refreshCounts(); }
     else if (act==="mattest"){ doMaterialTest(5,5,10,100,50,400,10); }
     else if (act==="crosshatch"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=true; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
