@@ -136,6 +136,14 @@
   .gdrow input[type=checkbox] { width: auto; justify-self: start; }
   .gdfile { display: flex; align-items: center; gap: 10px; }
   .gdcorname { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gdio-empty { color: var(--muted); padding: 8px 0; font-size: 13px; }
+  .gdio-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .gdio-row .gdio-port { width: 64px; } .gdio-row .gdio-purpose { width: 150px; } .gdio-row .gdio-level { width: 78px; }
+  .gdio-rm { padding: 3px 9px; }
+  .gdio-opts { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; padding: 4px 0 2px 72px; }
+  .gdio-numopt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .gdio-numopt input { width: 72px; }
+  #gd_io_add { margin-top: 10px; }
   .gcode pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; line-height: 1.5; color: #cdd3e0; white-space: pre; }
   .stat { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); }
   .stat b { color: var(--ink); }
@@ -1860,7 +1868,7 @@
       ["","h","Field"],
       ["fw","n","Field width mm",150],["fh","n","Field height mm",150],["fangle","n","Field angle°",0],["foffx","n","Offset X mm",0],["foffy","n","Offset Y mm",0],
       ["","h","Control units"],
-      ["units","s","Control units",0,["mm/sec","mm/min","inch/sec"]],["link","b","Link control and design units",true],
+      ["units","s","Control units","mm/sec",["mm/sec","mm/min","inch/sec"]],["link","b","Link control and design units",true],
       ["","h","Red dot pointer"],
       ["rd_offx","n","Red dot offset X mm",0],["rd_offy","n","Red dot offset Y mm",0],["rd_sx","n","Red dot scale X",1],["rd_sy","n","Red dot scale Y",1],["rd_rx","n","Red dot rest X mm",0],["rd_ry","n","Red dot rest Y mm",0],
       ["","h","Galvo correction"],
@@ -1873,18 +1881,9 @@
       ["soundFinish","b","Play sound on job finished",false],["requireFrame","b","Require framing before start",true],["jobChecklist","b","Enable job checklist",false],["saveRotary","b","Save rotary settings with project",false],
     ],
     ports: [
-      ["","h","IO ports"],
-      ["io_ready_p","p","Ready light port","None"],["io_ready_a","L","Ready light active","High"],
-      ["io_busy_p","p","Busy light port","None"],["io_busy_a","L","Busy light active","High"],
-      ["io_reddot_p","p","Red dot port","None"],["io_reddot_a","L","Red dot active","High"],["redDotAlways","b","Red dot always on",false],["enableBlanking","b","Enable blanking",false],["blankingDelay","n","Blanking delay us",100],
-      ["io_framing_p","p","Start framing port","None"],["io_framing_a","L","Start framing active","High"],
-      ["io_marking_p","p","Start marking port","None"],["io_marking_a","L","Start marking active","High"],["requireFullPulse","b","Require full pulse to start",true],
-      ["io_stop_p","p","Stop marking port","None"],["io_stop_a","L","Stop marking active","High"],
-      ["io_done_p","p","Done marking port","None"],["io_done_a","L","Done marking active","High"],["doneDuration","n","Done marking duration ms",10],
-      ["io_door_p","p","Door protect port","None"],["io_door_a","L","Door protect active","Low"],
-      ["io_laser2_p","p","2nd laser source port","None"],["io_laser2_a","L","2nd laser source active","High"],
+      ["ioports","iotable","IO ports"],
       ["","h","Laser source"],
-      ["laserType","s","Laser type",0,["Fiber","CO2","UV","SPI"]],["fiberType","s","Fiber type",0,["JPT","Raycus","MAX","IPG","Other"]],["qpulseEnable","b","Enable Q-pulse width setting",true],["moOnlyRun","b","MO enabled only when running",true],["openMoDelay","n","Open MO delay ms",8],["pwmEnable","b","Enable PWM",false],["maxFreq","n","Max frequency kHz",4000],["minFreq","n","Min frequency kHz",1],["tickleEnable","b","Enable tickle",false],["ticklePulse","n","Tickle pulse us",1],["tickleFreq","n","Tickle frequency kHz",5],["fpkEnable","b","Enable first pulse killer",false],["fpkStart","n","FPK start power",10],["fpkInc","n","FPK increment",10],["uvMin","n","UV min pulse ns",1],["uvMax","n","UV max pulse ns",20],["spiSimmer","n","SPI simmer current",80],
+      ["laserType","s","Laser type","Fiber",["Fiber","CO2","UV","SPI"]],["fiberType","s","Fiber type","JPT",["JPT","Raycus","MAX","IPG","Other"]],["qpulseEnable","b","Enable Q-pulse width setting",true],["moOnlyRun","b","MO enabled only when running",true],["openMoDelay","n","Open MO delay ms",8],["pwmEnable","b","Enable PWM",false],["maxFreq","n","Max frequency kHz",4000],["minFreq","n","Min frequency kHz",1],["tickleEnable","b","Enable tickle",false],["ticklePulse","n","Tickle pulse us",1],["tickleFreq","n","Tickle frequency kHz",5],["fpkEnable","b","Enable first pulse killer",false],["fpkStart","n","FPK start power",10],["fpkInc","n","FPK increment",10],["uvMin","n","UV min pulse ns",1],["uvMax","n","UV max pulse ns",20],["spiSimmer","n","SPI simmer current",80],
     ],
     addl: [
       ["","h","Simulation settings (preview only)"],
@@ -1895,11 +1894,47 @@
     ],
   };
   let gdCorName = "", gdMcIdx = -1;
+  // IO ports as a routing table: the user adds rows and maps a port number to a
+  // purpose, instead of one fixed row per possible function. Each purpose carries
+  // its own extra options.
+  const IO_PURPOSES = [["ready","Ready light"],["busy","Busy light"],["reddot","Red dot"],["framing","Start framing"],["marking","Start marking"],["stop","Stop marking"],["done","Done marking"],["door","Door protect"],["laser2","2nd laser source"]];
+  const IO_OPTS = { reddot:[["alwaysOn","b","Always on"],["blanking","b","Blanking"],["blankingDelay","n","Blanking delay us"]], marking:[["requireFullPulse","b","Require full pulse"]], done:[["duration","n","Duration ms"]] };
+  let gdIoPorts = [];
+  function renderIoTable(){
+    const host = $("gd_io_rows"); if (!host) return; host.innerHTML = "";
+    if (!gdIoPorts.length){ const e=document.createElement("div"); e.className="gdio-empty"; e.textContent=tr("gd.noports","No ports mapped. Add one."); host.appendChild(e); }
+    gdIoPorts.forEach((r, i) => {
+      const row = document.createElement("div"); row.className = "gdio-row";
+      // port number
+      const ps = document.createElement("select"); ps.className="gdio-port"; for (let n=1;n<=16;n++){ const o=document.createElement("option"); o.value=String(n); o.textContent=String(n); ps.appendChild(o); } ps.value=String(r.port||1); ps.onchange=()=>{ r.port=+ps.value; };
+      // purpose
+      const pu = document.createElement("select"); pu.className="gdio-purpose"; IO_PURPOSES.forEach(([k,l])=>{ const o=document.createElement("option"); o.value=k; o.textContent=l; pu.appendChild(o); }); pu.value=r.purpose||"marking"; pu.onchange=()=>{ r.purpose=pu.value; renderIoTable(); };
+      // active level
+      const lv = document.createElement("select"); lv.className="gdio-level"; ["High","Low"].forEach(l=>{ const o=document.createElement("option"); o.value=l; o.textContent=l; lv.appendChild(o); }); lv.value=r.level||"High"; lv.onchange=()=>{ r.level=lv.value; };
+      // remove
+      const rm = document.createElement("button"); rm.className="btn sm danger gdio-rm"; rm.textContent="✕"; rm.title=tr("gd.removeport","Remove"); rm.onclick=()=>{ gdIoPorts.splice(i,1); renderIoTable(); };
+      row.append(ps, pu, lv, rm);
+      // purpose-specific options
+      const opts = IO_OPTS[r.purpose];
+      if (opts){ const ob=document.createElement("div"); ob.className="gdio-opts"; opts.forEach(([ok,ot,ol])=>{
+        if (ot==="b"){ const lab=document.createElement("label"); lab.className="mccap"; const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!r[ok]; cb.onchange=()=>{ r[ok]=cb.checked; }; const sp=document.createElement("span"); sp.textContent=ol; lab.append(cb,sp); ob.appendChild(lab); }
+        else { const w=document.createElement("label"); w.className="gdio-numopt"; const sp=document.createElement("span"); sp.textContent=ol; const inp=document.createElement("input"); inp.type="number"; inp.value=r[ok]!=null?r[ok]:0; inp.oninput=()=>{ r[ok]=+inp.value||0; }; w.append(sp,inp); ob.appendChild(w); }
+      }); row.appendChild(ob); }
+      host.appendChild(row);
+    });
+  }
+  function addIoPort(){ gdIoPorts.push({ port: gdIoPorts.length+1 <= 16 ? gdIoPorts.length+1 : 1, purpose:"marking", level:"High" }); renderIoTable(); }
   function gdBuildPane(tab){
     const host = $("gdpane_"+tab); host.innerHTML = "";
     for (const f of GD_SCHEMA[tab]){
       const [k, t, label, def, opts] = f;
       if (t === "h"){ const h=document.createElement("div"); h.className="gdhead"; h.textContent=label; host.appendChild(h); continue; }
+      if (t === "iotable"){
+        const h=document.createElement("div"); h.className="gdhead"; h.textContent=tr("gd.ioports","IO ports"); host.appendChild(h);
+        const rows=document.createElement("div"); rows.id="gd_io_rows"; host.appendChild(rows);
+        const add=document.createElement("button"); add.className="btn sm"; add.id="gd_io_add"; add.textContent=tr("gd.addport","+ Add port"); add.onclick=addIoPort; host.appendChild(add);
+        continue;
+      }
       const row = document.createElement("div"); row.className = "gdrow";
       const lab = document.createElement("label"); lab.textContent = label; row.appendChild(lab);
       let el;
@@ -1920,6 +1955,7 @@
         if (t==="b") el.checked = !!v; else el.value = v;
       }
     });
+    gdIoPorts = JSON.parse(JSON.stringify(g.ioPorts || [])); renderIoTable();
     $("gdTitle").textContent = tr("gd.title","Galvo device settings") + " — " + mc.name;
     $("gdNote").textContent = mcIdx < BUILTIN_COUNT ? tr("gd.builtinnote","Saving a built-in machine keeps a custom copy.") : "";
     document.querySelectorAll(".gdtabs button").forEach((b,i)=>b.classList.toggle("active", i===0));
@@ -1930,6 +1966,7 @@
     const g = {};
     ["basic","ports","addl","ext"].forEach(tab => { for (const f of GD_SCHEMA[tab]){ const [k,t] = f; if (t==="h") continue;
       if (t==="f"){ g.corName = gdCorName; continue; }
+      if (t==="iotable"){ g.ioPorts = gdIoPorts; continue; }
       const el = $("gd_"+k); if (!el) continue;
       g[k] = (t==="b") ? el.checked : ((t==="n") ? (+el.value||0) : el.value);
     }});
@@ -2833,6 +2870,10 @@
   Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","layer.output2":"Ausgabe","lp.mode":"Modus","cs.editcut":"Schnitteinstellungen bearbeiten…","cs.makedefault":"Als Standard","cs.angleinc":"Winkelinkrement°","cs.autorotate":"Auto-Drehen","cs.ramp":"Rampenlänge mm","cs.dotadjust":"Punktbreiten-Anpassung","cs.perf":"Perforation","cs.wobble":"Wobbeln","cs.perfcut":"Perf. Schnitt mm","cs.perfskip":"Perf. Sprung mm","cs.wobstep":"Wobbel-Schritt mm","cs.wobsize":"Wobbel-Größe mm","cs.tabsize":"Steggröße mm","cs.tabspacing":"Gleichmäßiger Abstand mm","cs.tabspershape":"Stege pro Form","cs.tabpower":"Stegleistung %","cs.tabskipinner":"Innere Formen überspringen","cs.timing":"Standardzeiten überschreiben","cs.jumpspeed":"Sprunggeschwindigkeit mm/s","cs.minjump":"Min. Sprungverzögerung us","cs.maxjump":"Max. Sprungverzögerung us","cs.laseron":"Laser-Ein TC us","cs.laseroff":"Laser-Aus TC us","cs.endtc":"End-TC us","cs.polytc":"Polygon-TC us","cs.pausebefore":"Pause davor ms","cs.pauseafter":"Pause danach ms" });
   Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","layer.output2":"Sortie","lp.mode":"Mode","cs.editcut":"Modifier les réglages de coupe…","cs.makedefault":"Par défaut","cs.angleinc":"Incrément d'angle°","cs.autorotate":"Rotation auto","cs.ramp":"Longueur de rampe mm","cs.dotadjust":"Ajustement largeur de point","cs.perf":"Perforation","cs.wobble":"Oscillation","cs.perfcut":"Coupe perf. mm","cs.perfskip":"Saut perf. mm","cs.wobstep":"Pas d'oscillation mm","cs.wobsize":"Taille d'oscillation mm","cs.tabsize":"Taille de patte mm","cs.tabspacing":"Espacement régulier mm","cs.tabspershape":"Pattes par forme","cs.tabpower":"Puissance de patte %","cs.tabskipinner":"Ignorer formes intérieures","cs.timing":"Remplacer les délais par défaut","cs.jumpspeed":"Vitesse de saut mm/s","cs.minjump":"Délai min. de saut us","cs.maxjump":"Délai max. de saut us","cs.laseron":"Laser activé TC us","cs.laseroff":"Laser désactivé TC us","cs.endtc":"TC de fin us","cs.polytc":"TC de polygone us","cs.pausebefore":"Pause avant ms","cs.pauseafter":"Pause après ms" });
   Object.assign(I18N["pt-BR"], { "cs.title":"Ajustes de corte","layer.output2":"Saída","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Tornar padrão","cs.angleinc":"Incremento de ângulo°","cs.autorotate":"Auto-rotação","cs.ramp":"Comprimento da rampa mm","cs.dotadjust":"Ajuste largura do ponto","cs.perf":"Perfuração","cs.wobble":"Oscilação","cs.perfcut":"Corte perf. mm","cs.perfskip":"Salto perf. mm","cs.wobstep":"Passo de oscilação mm","cs.wobsize":"Tamanho de oscilação mm","cs.tabsize":"Tamanho da aba mm","cs.tabspacing":"Espaçamento uniforme mm","cs.tabspershape":"Abas por forma","cs.tabpower":"Potência da aba %","cs.tabskipinner":"Pular formas internas","cs.timing":"Substituir tempos padrão","cs.jumpspeed":"Velocidade de salto mm/s","cs.minjump":"Atraso mín. de salto us","cs.maxjump":"Atraso máx. de salto us","cs.laseron":"Laser ligado TC us","cs.laseroff":"Laser desligado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa depois ms" });
+  Object.assign(I18N.es, { "gd.ioports":"Puertos IO","gd.addport":"+ Añadir puerto","gd.noports":"Ningún puerto asignado. Añada uno.","gd.removeport":"Quitar" });
+  Object.assign(I18N.de, { "gd.ioports":"IO-Ports","gd.addport":"+ Port hinzufügen","gd.noports":"Keine Ports zugeordnet. Fügen Sie einen hinzu.","gd.removeport":"Entfernen" });
+  Object.assign(I18N.fr, { "gd.ioports":"Ports IO","gd.addport":"+ Ajouter un port","gd.noports":"Aucun port mappé. Ajoutez-en un.","gd.removeport":"Retirer" });
+  Object.assign(I18N["pt-BR"], { "gd.ioports":"Portas IO","gd.addport":"+ Adicionar porta","gd.noports":"Nenhuma porta mapeada. Adicione uma.","gd.removeport":"Remover" });
   Object.assign(I18N.es, { "gd.title":"Config. del dispositivo galvo","gd.basic":"Galvo y básico","gd.ports":"Puertos y láser","gd.addl":"Adicional","gd.ext":"Extensiones","gd.open":"Config. del dispositivo galvo…","gd.loadcor":"Cargar archivo COR…","gd.builtinnote":"Guardar una máquina integrada crea una copia personalizada." });
   Object.assign(I18N.de, { "gd.title":"Galvo-Geräteeinstellungen","gd.basic":"Galvo und Allgemein","gd.ports":"Ports und Laser","gd.addl":"Zusätzlich","gd.ext":"Erweiterungen","gd.open":"Galvo-Geräteeinstellungen…","gd.loadcor":"COR-Datei laden…","gd.builtinnote":"Beim Speichern einer integrierten Maschine entsteht eine benutzerdefinierte Kopie." });
   Object.assign(I18N.fr, { "gd.title":"Réglages du périphérique galvo","gd.basic":"Galvo et base","gd.ports":"Ports et laser","gd.addl":"Supplémentaire","gd.ext":"Extensions","gd.open":"Réglages du périphérique galvo…","gd.loadcor":"Charger le fichier COR…","gd.builtinnote":"Enregistrer une machine intégrée crée une copie personnalisée." });
@@ -2921,6 +2962,7 @@
     else if (act==="preview"){ generate(); openPreview(); }
     else if (act==="cutsettings"){ openCutSettings(0); }
     else if (act==="galvosettings"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); }
+    else if (act==="galvoports"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); const pb=document.querySelector('.gdtabs button[data-gd="ports"]'); if(pb) pb.click(); addIoPort(); addIoPort(); gdIoPorts[0].purpose="reddot"; gdIoPorts[1].purpose="marking"; renderIoTable(); }
     else if (act==="star"){ doc.shapes.push(star(75,55,40,40,5,0)); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="cs"){ openCutSettings(2); }
     else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
