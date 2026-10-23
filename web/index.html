@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -2441,6 +2441,41 @@
     if (!bars.length){ alert(tr("bc.none","No encodable characters.")); return; }
     doc.shapes.push(...bars); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
   }
+  // Material test generator: a grid of filled squares. Columns step power, rows step
+  // speed. Each cell gets its own Fill layer carrying that cell's settings, so one
+  // run dials in a new material. Row and column labels engrave the values.
+  function materialTest(){
+    const cols = Math.max(2, Math.min(7, parseInt(prompt(tr("mt.cols","Power steps (columns)"), "5"), 10) || 5));
+    const rows = Math.max(2, Math.min(7, parseInt(prompt(tr("mt.rows","Speed steps (rows)"), "5"), 10) || 5));
+    if (cols * rows > 28){ alert(tr("mt.toomany","Too many cells. The palette holds 28 test layers.")); return; }
+    const pMin = parseFloat(prompt(tr("mt.pmin","Min power %"), "10")) || 0;
+    const pMax = parseFloat(prompt(tr("mt.pmax","Max power %"), "100")) || 100;
+    const sMin = parseFloat(prompt(tr("mt.smin","Min speed mm/s"), "50")) || 50;
+    const sMax = parseFloat(prompt(tr("mt.smax","Max speed mm/s"), "400")) || 400;
+    const cell = parseFloat(prompt(tr("mt.cell","Cell size mm"), "10")) || 10;
+    doMaterialTest(cols, rows, pMin, pMax, sMin, sMax, cell);
+  }
+  function doMaterialTest(cols, rows, pMin, pMax, sMin, sMax, cell){
+    const gap = Math.max(2, cell * 0.35), x0 = 24, y0 = 24;
+    const powerAt = c => Math.round(pMin + (pMax - pMin) * (cols > 1 ? c / (cols - 1) : 0));
+    const speedAt = r => Math.round(sMin + (sMax - sMin) * (rows > 1 ? r / (rows - 1) : 0));
+    doc.layers.length = 0; doc.shapes.length = 0;
+    const labels = layer(0, tr("mt.labels","Labels"), 300, 25, "Line"); labels.color = PALETTE[0]; doc.layers.push(labels);
+    let idx = 1;
+    for (let r = 0; r < rows; r++){
+      const speed = speedAt(r);
+      for (let c = 0; c < cols; c++){
+        const power = powerAt(c);
+        const L = layer(idx, `S${speed} P${power}`, speed, power, "Fill"); L.color = PALETTE[idx % PALETTE.length]; L.interval = 0.2;
+        doc.layers.push(L);
+        doc.shapes.push(rect(x0 + c * (cell + gap), y0 + r * (cell + gap), cell, cell, idx));
+        idx++;
+      }
+      doc.shapes.push({ kind:"Text", cut_index:0, geometry:{ Text:{ s:String(speed), x:x0 - 4, y:y0 + r * (cell + gap) + cell / 2 - 2, h:4, gap:4*0.28, align:"right", font:"mark" } } });
+    }
+    for (let c = 0; c < cols; c++) doc.shapes.push({ kind:"Text", cut_index:0, geometry:{ Text:{ s:String(powerAt(c)), x:x0 + c * (cell + gap) + cell / 2, y:y0 + rows * (cell + gap) + 1, h:4, gap:4*0.28, align:"center", font:"mark" } } });
+    activeLayer = 0; selectOnly(null); snapshot(); renderLayers(); fit(); render(); generate(); refreshCounts();
+  }
   // Variable text: turn one text object into a numbered series. A %N token (or the
   // first run of digits) in the text is replaced by each incrementing number; a
   // plain label becomes the number itself. Copies lay out in a grid.
@@ -2735,6 +2770,7 @@
     else if (a==="rotary"){ openRotary(); return; }
     else if (a==="serialize"){ serializeText(); return; }
     else if (a==="barcode"){ createBarcode(); return; }
+    else if (a==="mattest"){ materialTest(); return; }
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
     else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
@@ -3238,6 +3274,10 @@
   Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","layer.output2":"Ausgabe","lp.mode":"Modus","cs.editcut":"Schnitteinstellungen bearbeiten…","cs.makedefault":"Als Standard","cs.angleinc":"Winkelinkrement°","cs.autorotate":"Auto-Drehen","cs.ramp":"Rampenlänge mm","cs.dotadjust":"Punktbreiten-Anpassung","cs.perf":"Perforation","cs.wobble":"Wobbeln","cs.perfcut":"Perf. Schnitt mm","cs.perfskip":"Perf. Sprung mm","cs.wobstep":"Wobbel-Schritt mm","cs.wobsize":"Wobbel-Größe mm","cs.tabsize":"Steggröße mm","cs.tabspacing":"Gleichmäßiger Abstand mm","cs.tabspershape":"Stege pro Form","cs.tabpower":"Stegleistung %","cs.tabskipinner":"Innere Formen überspringen","cs.timing":"Standardzeiten überschreiben","cs.jumpspeed":"Sprunggeschwindigkeit mm/s","cs.minjump":"Min. Sprungverzögerung us","cs.maxjump":"Max. Sprungverzögerung us","cs.laseron":"Laser-Ein TC us","cs.laseroff":"Laser-Aus TC us","cs.endtc":"End-TC us","cs.polytc":"Polygon-TC us","cs.pausebefore":"Pause davor ms","cs.pauseafter":"Pause danach ms" });
   Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","layer.output2":"Sortie","lp.mode":"Mode","cs.editcut":"Modifier les réglages de coupe…","cs.makedefault":"Par défaut","cs.angleinc":"Incrément d'angle°","cs.autorotate":"Rotation auto","cs.ramp":"Longueur de rampe mm","cs.dotadjust":"Ajustement largeur de point","cs.perf":"Perforation","cs.wobble":"Oscillation","cs.perfcut":"Coupe perf. mm","cs.perfskip":"Saut perf. mm","cs.wobstep":"Pas d'oscillation mm","cs.wobsize":"Taille d'oscillation mm","cs.tabsize":"Taille de patte mm","cs.tabspacing":"Espacement régulier mm","cs.tabspershape":"Pattes par forme","cs.tabpower":"Puissance de patte %","cs.tabskipinner":"Ignorer formes intérieures","cs.timing":"Remplacer les délais par défaut","cs.jumpspeed":"Vitesse de saut mm/s","cs.minjump":"Délai min. de saut us","cs.maxjump":"Délai max. de saut us","cs.laseron":"Laser activé TC us","cs.laseroff":"Laser désactivé TC us","cs.endtc":"TC de fin us","cs.polytc":"TC de polygone us","cs.pausebefore":"Pause avant ms","cs.pauseafter":"Pause après ms" });
   Object.assign(I18N["pt-BR"], { "cs.title":"Ajustes de corte","layer.output2":"Saída","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Tornar padrão","cs.angleinc":"Incremento de ângulo°","cs.autorotate":"Auto-rotação","cs.ramp":"Comprimento da rampa mm","cs.dotadjust":"Ajuste largura do ponto","cs.perf":"Perfuração","cs.wobble":"Oscilação","cs.perfcut":"Corte perf. mm","cs.perfskip":"Salto perf. mm","cs.wobstep":"Passo de oscilação mm","cs.wobsize":"Tamanho de oscilação mm","cs.tabsize":"Tamanho da aba mm","cs.tabspacing":"Espaçamento uniforme mm","cs.tabspershape":"Abas por forma","cs.tabpower":"Potência da aba %","cs.tabskipinner":"Pular formas internas","cs.timing":"Substituir tempos padrão","cs.jumpspeed":"Velocidade de salto mm/s","cs.minjump":"Atraso mín. de salto us","cs.maxjump":"Atraso máx. de salto us","cs.laseron":"Laser ligado TC us","cs.laseroff":"Laser desligado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa depois ms" });
+  Object.assign(I18N.es, { "action.mattest":"Prueba de material…","mt.cols":"Pasos de potencia (columnas)","mt.rows":"Pasos de velocidad (filas)","mt.toomany":"Demasiadas celdas. La paleta admite 28 capas de prueba.","mt.pmin":"Potencia mín %","mt.pmax":"Potencia máx %","mt.smin":"Velocidad mín mm/s","mt.smax":"Velocidad máx mm/s","mt.cell":"Tamaño de celda mm","mt.labels":"Etiquetas" });
+  Object.assign(I18N.de, { "action.mattest":"Materialtest…","mt.cols":"Leistungsstufen (Spalten)","mt.rows":"Geschwindigkeitsstufen (Zeilen)","mt.toomany":"Zu viele Zellen. Die Palette fasst 28 Testebenen.","mt.pmin":"Min. Leistung %","mt.pmax":"Max. Leistung %","mt.smin":"Min. Geschwindigkeit mm/s","mt.smax":"Max. Geschwindigkeit mm/s","mt.cell":"Zellengröße mm","mt.labels":"Beschriftungen" });
+  Object.assign(I18N.fr, { "action.mattest":"Test de matériau…","mt.cols":"Pas de puissance (colonnes)","mt.rows":"Pas de vitesse (lignes)","mt.toomany":"Trop de cellules. La palette contient 28 calques de test.","mt.pmin":"Puissance min %","mt.pmax":"Puissance max %","mt.smin":"Vitesse min mm/s","mt.smax":"Vitesse max mm/s","mt.cell":"Taille de cellule mm","mt.labels":"Étiquettes" });
+  Object.assign(I18N["pt-BR"], { "action.mattest":"Teste de material…","mt.cols":"Passos de potência (colunas)","mt.rows":"Passos de velocidade (linhas)","mt.toomany":"Células demais. A paleta comporta 28 camadas de teste.","mt.pmin":"Potência mín %","mt.pmax":"Potência máx %","mt.smin":"Velocidade mín mm/s","mt.smax":"Velocidade máx mm/s","mt.cell":"Tamanho da célula mm","mt.labels":"Etiquetas" });
   Object.assign(I18N.es, { "action.barcode":"Crear código de barras…","bc.text":"Texto del código (Code 128)","bc.height":"Altura de barra mm","bc.module":"Barra estrecha mm","bc.none":"Sin caracteres codificables." });
   Object.assign(I18N.de, { "action.barcode":"Barcode erstellen…","bc.text":"Barcode-Text (Code 128)","bc.height":"Balkenhöhe mm","bc.module":"Schmaler Balken mm","bc.none":"Keine kodierbaren Zeichen." });
   Object.assign(I18N.fr, { "action.barcode":"Créer un code-barres…","bc.text":"Texte du code (Code 128)","bc.height":"Hauteur de barre mm","bc.module":"Barre étroite mm","bc.none":"Aucun caractère encodable." });
@@ -3371,6 +3411,7 @@
     else if (act==="lbrn"){ const xml=`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/><speed Value="15"/><maxPower Value="80"/></CutSetting><CutSetting type="Scan"><index Value="1"/><name Value="Engrave"/><speed Value="200"/><maxPower Value="40"/></CutSetting><Shape Type="Rect" CutIndex="0" W="60" H="40"><XForm>1 0 0 1 80 60</XForm></Shape><Shape Type="Ellipse" CutIndex="1" Rx="20" Ry="15"><XForm>1 0 0 1 45 100</XForm></Shape><Shape Type="Path" CutIndex="0"><XForm>1 0 0 1 0 0</XForm><VertList>V10 20V40 20V40 55V10 55</VertList><PrimList>LineClosed</PrimList></Shape></LightBurnProject>`; doc.shapes=[]; importLbrn(xml); }
     else if (act==="serial"){ doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"SN-%N", x:20, y:95, h:9, gap:9*0.28, align:"left", font:"mark" } } }]; selectOnly(0); doSerialize(1,10,1,4); }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
+    else if (act==="mattest"){ doMaterialTest(5,5,10,100,50,400,10); }
     else if (act==="crosshatch"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=true; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="hatchonly"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=false; L.angle=45; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="inch"){ dispUnits="in"; sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; const tb=document.querySelector('.docktabs button[data-dock="props"]'); if(tb) tb.click(); render(); }
