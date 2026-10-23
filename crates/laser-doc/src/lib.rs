@@ -230,6 +230,10 @@ pub struct FillParams {
     /// only, with a rapid return. LightBurn "Bi-directional scanning".
     #[serde(default = "default_true")]
     pub bidirectional: bool,
+    /// Fill every shape on the layer as one field, so a scan line crosses several
+    /// shapes at once. LightBurn "flood fill" / "fill all shapes at once".
+    #[serde(default)]
+    pub flood_fill: bool,
 }
 
 /// Serde default for a flag that should load as `true` on older projects.
@@ -251,6 +255,7 @@ impl Default for FillParams {
             cross_hatch: false,
             overscan_mm: 0.0,
             bidirectional: true,
+            flood_fill: false,
         }
     }
 }

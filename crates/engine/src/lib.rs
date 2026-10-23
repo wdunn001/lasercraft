@@ -20,8 +20,8 @@ use lasercraft_laser_doc::{CutSetting, FillMode, Geometry, Point2, Project, Shap
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
 use lasercraft_toolpath::{
-    BBox, Point, apply_tabs, follow_polyline, hatch_fill_angled, lead_in_segment, lead_out_segment,
-    line_fill, overcut_segments, perforate_path, wobble_path,
+    BBox, Point, apply_tabs, follow_polyline, hatch_fill_angled, hatch_fill_multi, lead_in_segment,
+    lead_out_segment, line_fill, overcut_segments, perforate_path, wobble_path,
 };
 
 /// Errors the engine can return while executing a command.
@@ -138,6 +138,9 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         overscan: f64,
     }
     let mut runs: Vec<Run> = Vec::new();
+    // Flood-fill shapes are gathered by layer and hatched together after the loop.
+    let mut flood: std::collections::BTreeMap<u32, Vec<Vec<Point>>> =
+        std::collections::BTreeMap::new();
     for shape in &project.shapes {
         let (points, closed) = match &shape.geometry {
             Geometry::Polyline { points, closed } => (points.clone(), *closed),
@@ -148,6 +151,14 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
             continue;
         };
         let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+        let flood_on = matches!(
+            setting.galvo.as_ref(),
+            Some(g) if g.mode == FillMode::Fill && g.fill.flood_fill
+        );
+        if closed && flood_on {
+            flood.entry(shape.cut_index).or_default().push(path);
+            continue;
+        }
         let is_fill =
             closed && matches!(setting.galvo.as_ref(), Some(g) if g.mode == FillMode::Fill);
         let overscan = setting
@@ -232,6 +243,36 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
             passes: setting.num_passes,
             fill: is_fill,
             overscan,
+        });
+    }
+    // Flood fill: hatch every shape on a layer as one field, one run per layer.
+    for (ci, polys) in flood {
+        let Some(setting) = project.cut_settings.iter().find(|s| s.index == ci) else {
+            continue;
+        };
+        let Some(g) = setting.galvo.as_ref() else {
+            continue;
+        };
+        let segments = hatch_fill_multi(
+            &polys,
+            g.fill.line_interval_mm,
+            g.fill.hatch_angle_deg,
+            g.fill.cross_hatch,
+            g.fill.bidirectional,
+        );
+        if segments.is_empty() {
+            continue;
+        }
+        let points = polys.into_iter().next().unwrap_or_default();
+        runs.push(Run {
+            segments,
+            points,
+            closed: true,
+            feed: motion.clamp_feed(setting.speed_mm_s),
+            power: setting.power_max,
+            passes: setting.num_passes,
+            fill: true,
+            overscan: g.fill.overscan_mm,
         });
     }
     // Order the runs so an enclosed shape cuts before its container, and travel

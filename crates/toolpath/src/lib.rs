@@ -337,6 +337,109 @@ pub fn hatch_fill_angled(
     out
 }
 
+/// Hatch several polygons as one continuous scan field (LightBurn "flood fill",
+/// also called "fill all shapes at once").
+///
+/// Each scan line gathers its crossings from every polygon at once, so one line
+/// crosses several shapes with gaps between them. That cuts the number of
+/// direction changes compared with filling each shape on its own. The polygons
+/// are rotated by `-angle` about their shared centroid so the horizontal scan
+/// applies, then the segments are rotated back. `cross_hatch` adds a second pass
+/// turned ninety degrees.
+pub fn hatch_fill_multi(
+    polygons: &[Vec<Point>],
+    interval_mm: f64,
+    angle_deg: f64,
+    cross_hatch: bool,
+    bidirectional: bool,
+) -> Vec<Segment> {
+    let usable: Vec<&Vec<Point>> = polygons.iter().filter(|p| p.len() >= 3).collect();
+    if usable.is_empty() || interval_mm <= 0.0 {
+        return Vec::new();
+    }
+    let (mut sx, mut sy, mut k) = (0.0, 0.0, 0.0);
+    for poly in &usable {
+        for p in poly.iter() {
+            sx += p.x;
+            sy += p.y;
+            k += 1.0;
+        }
+    }
+    let (cx, cy) = (sx / k, sy / k);
+    let rot = |p: &Point, th: f64| {
+        let (s, c) = th.sin_cos();
+        let (dx, dy) = (p.x - cx, p.y - cy);
+        Point {
+            x: cx + dx * c - dy * s,
+            y: cy + dx * s + dy * c,
+        }
+    };
+    let one = |deg: f64| -> Vec<Segment> {
+        let th = deg.to_radians();
+        let turned: Vec<Vec<Point>> = usable
+            .iter()
+            .map(|poly| poly.iter().map(|p| rot(p, -th)).collect())
+            .collect();
+        let (min_y, max_y) = turned
+            .iter()
+            .flatten()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+                (lo.min(p.y), hi.max(p.y))
+            });
+        let mut segs = Vec::new();
+        let max_lines = 1_000_000usize;
+        let mut y = min_y + interval_mm / 2.0;
+        let mut leftward = false;
+        while y <= max_y && segs.len() < max_lines {
+            let mut crossings: Vec<f64> = Vec::new();
+            for poly in &turned {
+                let n = poly.len();
+                for i in 0..n {
+                    let (Some(&a), Some(&b)) = (poly.get(i), poly.get((i + 1) % n)) else {
+                        continue;
+                    };
+                    let crosses = (a.y <= y && b.y > y) || (b.y <= y && a.y > y);
+                    if crosses {
+                        let t = (y - a.y) / (b.y - a.y);
+                        crossings.push(a.x + t * (b.x - a.x));
+                    }
+                }
+            }
+            crossings.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let mut spans: Vec<(f64, f64)> = crossings
+                .chunks(2)
+                .filter_map(|pair| {
+                    if let [x0, x1] = pair {
+                        Some((*x0, *x1))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if leftward {
+                spans.reverse();
+            }
+            for (x0, x1) in spans {
+                let (start_x, end_x) = if leftward { (x1, x0) } else { (x0, x1) };
+                segs.push(Segment {
+                    start: rot(&Point { x: start_x, y }, th),
+                    end: rot(&Point { x: end_x, y }, th),
+                });
+            }
+            if bidirectional {
+                leftward = !leftward;
+            }
+            y += interval_mm;
+        }
+        segs
+    };
+    let mut out = one(angle_deg);
+    if cross_hatch {
+        out.extend(one(angle_deg + 90.0));
+    }
+    out
+}
+
 /// Dash a traced outline for perforation (LightBurn "Perforation Mode").
 ///
 /// The outline is walked as one continuous path and broken into `cut_mm` dashes
@@ -676,6 +779,38 @@ mod tests {
             "a line ran backwards"
         );
         assert_eq!(bi.len(), uni.len());
+    }
+
+    #[test]
+    fn flood_fill_spans_separate_shapes_on_one_line() {
+        let a = vec![
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        let b = vec![
+            Point { x: 20.0, y: 0.0 },
+            Point { x: 30.0, y: 0.0 },
+            Point { x: 30.0, y: 10.0 },
+            Point { x: 20.0, y: 10.0 },
+        ];
+        let segs = hatch_fill_multi(&[a, b], 1.0, 0.0, false, true);
+        // One square alone at 1 mm is ten lines; two squares flooded keep ten
+        // scan lines but each line now has a span in both shapes, so twenty spans.
+        assert_eq!(segs.len(), 20);
+        let in_left = segs
+            .iter()
+            .filter(|s| s.start.x.min(s.end.x) >= -1e-9 && s.start.x.max(s.end.x) <= 10.0 + 1e-9)
+            .count();
+        let in_right = segs
+            .iter()
+            .filter(|s| {
+                s.start.x.min(s.end.x) >= 20.0 - 1e-9 && s.start.x.max(s.end.x) <= 30.0 + 1e-9
+            })
+            .count();
+        assert_eq!(in_left, 10, "left spans");
+        assert_eq!(in_right, 10, "right spans");
     }
 
     #[test]
