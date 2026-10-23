@@ -167,6 +167,9 @@
     <span class="m" data-menu="file"><span data-i18n="menu.file">File</span>
       <div class="dropdown">
         <div data-act="new" data-i18n="action.new">New</div>
+        <div data-act="open" data-i18n="action.open">Open Project&hellip;</div>
+        <div data-act="save" data-i18n="action.save">Save Project&hellip;</div>
+        <div class="sep"></div>
         <div data-act="import" data-i18n="action.import">Import SVG / DXF&hellip;</div>
         <div data-act="image" data-i18n="action.image">Import Image (dither)&hellip;</div>
         <div data-act="trace" data-i18n="action.trace">Trace Image (vector)&hellip;</div>
@@ -181,6 +184,7 @@
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
     <input type="file" id="file" accept=".svg,.dxf" class="hidden" />
     <input type="file" id="imgFile" accept="image/*" class="hidden" />
+    <input type="file" id="projFile" accept=".lcproj,.json" class="hidden" />
   </div>
 
   <!-- tool properties bar: context controls for the active tool -->
@@ -1148,6 +1152,33 @@
   let pages = [], pageIdx = 0;
   function blankDoc(){ return { shapes: [], layers: [ layer(0,"Cut",20,80,"Line"), layer(1,"Score",60,20,"Line"), layer(2,"Engrave",100,40,"Fill") ] }; }
   function stashPage(){ const pg = pages[pageIdx]; if (pg){ pg.doc=doc; pg.activeLayer=activeLayer; pg.view=view; pg.history=history; pg.hptr=hptr; } }
+  // Save the whole project (every page, its layers and shapes) to a .lcproj file.
+  // The replacer drops cached fields on text objects, which the glyph cache rebuilds.
+  function saveProject(){
+    stashPage();
+    const out = { format:"lasercraft-project", version:1, pageIdx, pages: pages.map(pg => ({ name:pg.name, activeLayer:pg.activeLayer, view:pg.view, doc:pg.doc })) };
+    const json = JSON.stringify(out, (k,v) => (typeof k==="string" && k.startsWith("_")) ? undefined : v);
+    const b = new Blob([json], { type:"application/json" }); const u = URL.createObjectURL(b);
+    const x = document.createElement("a"); x.href = u; x.download = "lasercraft.lcproj"; x.click(); URL.revokeObjectURL(u);
+  }
+  // Load a project, replacing all pages. Bad input is reported and ignored.
+  function openProject(text){
+    let proj; try { proj = JSON.parse(text); } catch(e){ console.error(e); return; }
+    if (!proj || !Array.isArray(proj.pages) || !proj.pages.length) return;
+    pages = proj.pages.map(pg => ({
+      name: pg.name || "Page", activeLayer: pg.activeLayer || 0,
+      view: pg.view || { s:3.2, x:40, y:40 },
+      doc: (pg.doc && Array.isArray(pg.doc.shapes) && Array.isArray(pg.doc.layers)) ? pg.doc : blankDoc(),
+      history: [], hptr: -1,
+    }));
+    pageIdx = Math.min(proj.pageIdx || 0, pages.length - 1);
+    adoptPage(pageIdx);
+  }
+  $("projFile").onchange = ev => {
+    const f = ev.target.files[0]; if (!f) return; const rd = new FileReader();
+    rd.onload = () => { try { openProject(rd.result); } catch(e){ console.error(e); } };
+    rd.readAsText(f); ev.target.value = "";
+  };
   function adoptPage(i){ const pg=pages[i]; doc=pg.doc; activeLayer=pg.activeLayer; view=pg.view; history=pg.history; hptr=pg.hptr; selectOnly(null); renderPageTabs(); renderLayers(); renderPalette(); render(); generate(); }
   function loadPage(i){ if (i<0 || i>=pages.length || i===pageIdx) return; stashPage(); pageIdx=i; adoptPage(i); }
   function addPage(){ stashPage(); pages.push({ name:"Page "+(pages.length+1), doc:blankDoc(), activeLayer:0, view:{s:3.2,x:40,y:40}, history:[], hptr:-1 }); pageIdx=pages.length-1; adoptPage(pageIdx); }
@@ -1327,6 +1358,8 @@
     else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
     else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
     else if (a==="exportdxf"){ exportDxf(); }
+    else if (a==="save"){ saveProject(); return; }
+    else if (a==="open"){ $("projFile").click(); return; }
     else if (a==="weld"){ weldActive(); }
     else if (a==="subtract"){ booleanWith("difference"); }
     else if (a==="intersect"){ booleanWith("intersect"); }
@@ -1731,6 +1764,11 @@
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
     else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
     else if (act==="pages"){ doc.shapes=[rect(30,30,80,50,0)]; addPage(); doc.shapes=[ellipse(90,90,40,30,1)]; addPage(); doc.shapes=[rect(20,20,40,40,2), ellipse(100,100,30,30,0)]; renderPageTabs(); render(); refreshCounts(); }
+    else if (act==="projround"){ doc.shapes=[rect(30,30,65,45,0), ellipse(110,95,25,20,1)]; stashPage();
+      const out={ format:"lasercraft-project", version:1, pageIdx, pages: pages.map(pg=>({ name:pg.name, activeLayer:pg.activeLayer, view:pg.view, doc:pg.doc })) };
+      const json=JSON.stringify(out,(k,v)=>(typeof k==="string"&&k.startsWith("_"))?undefined:v);
+      pages=[{name:"wiped",doc:blankDoc(),activeLayer:0,view:{s:3.2,x:40,y:40},history:[],hptr:-1}]; pageIdx=0; adoptPage(0);
+      openProject(json); }
     else if (act==="tracepic"){ const c=document.createElement("canvas"); c.width=240; c.height=160; const cx=c.getContext("2d");
       cx.fillStyle="#fff"; cx.fillRect(0,0,240,160); cx.fillStyle="#000"; cx.beginPath(); cx.arc(70,80,48,0,7); cx.fill(); cx.fillStyle="#fff"; cx.beginPath(); cx.arc(70,80,22,0,7); cx.fill(); cx.fillStyle="#000"; cx.fillRect(140,42,74,74);
       const im=new Image(); im.onload=()=>{ imgMode="trace"; traceImage(im); }; im.src=c.toDataURL(); }
