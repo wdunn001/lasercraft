@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div><div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div><div data-act="toline" data-i18n="action.toline">Convert to line</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="mirrorline" data-i18n="action.mirrorline">Mirror across line</div><div data-act="nodebreak" data-i18n="action.nodebreak">Break at node</div><div data-act="tocurve" data-i18n="action.tocurve">Convert to curve</div><div data-act="toline" data-i18n="action.toline">Convert to line</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -1092,6 +1092,26 @@
   function translateShape(sh, dx, dy){ eachPoint(sh, q => { q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); }); }
   function rotateShapeAbout(sh, cx, cy, th){ const cs=Math.cos(th), sn=Math.sin(th); eachPoint(sh, q => { const x=q.x-cx, y=q.y-cy; q.x=+(cx+x*cs-y*sn).toFixed(3); q.y=+(cy+x*sn+y*cs).toFixed(3); }); }
   function scaleShapeAbout(sh, ox, oy, sx, sy){ eachPoint(sh, q => { q.x=+(ox+(q.x-ox)*sx).toFixed(3); q.y=+(oy+(q.y-oy)*sy).toFixed(3); }); }
+  // Reflect a shape across the line through (ax,ay) and (bx,by).
+  function mirrorShapeAcross(sh, ax, ay, bx, by){
+    const dx = bx-ax, dy = by-ay, L2 = dx*dx + dy*dy; if (!L2) return;
+    eachPoint(sh, q => {
+      const t = ((q.x-ax)*dx + (q.y-ay)*dy) / L2;
+      const px = ax + dx*t, py = ay + dy*t;              // foot of the perpendicular
+      q.x = +(2*px - q.x).toFixed(3); q.y = +(2*py - q.y).toFixed(3);
+    });
+  }
+  // Mirror the whole selection across a line (LightBurn "Mirror across line").
+  function mirrorSelAcross(ax, ay, bx, by){
+    if (!sel.size) return;
+    for (const i of sel){ if (doc.shapes[i]) mirrorShapeAcross(doc.shapes[i], ax, ay, bx, by); }
+    snapshot(); render(); generate();
+  }
+  let mirrorAxis = null;                                  // {a} while awaiting the second click
+  function startMirror(){
+    if (!sel.size){ alert(tr("mir.need","Select shapes first, then click two points for the mirror line.")); return; }
+    mirrorAxis = { a:null }; const h = $("toolHint"); if (h) h.textContent = tr("mir.hint","Click two points to set the mirror line. Escape cancels.");
+  }
   // Modify tools (ported from SolidCraft's sketch-modify set, polyline form).
   // Round or bevel every corner of a polyline. `arc` true = fillet, false = chamfer.
   // Segment intersection: returns {x,y,t,u} with params along each segment, or null.
@@ -1465,6 +1485,11 @@
   canvas.addEventListener("mousedown", e => {
     if (camCalibrating){ handleCalibClick(e); return; }
     const m = snapForTool(px2mm(e.clientX, e.clientY)); start = m;
+    if (mirrorAxis){
+      if (!mirrorAxis.a){ mirrorAxis.a = { x:m.x, y:m.y }; }
+      else { mirrorSelAcross(mirrorAxis.a.x, mirrorAxis.a.y, m.x, m.y); mirrorAxis = null; updateToolbar(); refreshCounts(); }
+      return;
+    }
     if (tool === "pen"){
       const r = canvas.getBoundingClientRect();
       if (penAnchors.length >= 2){ const d0 = mm2px(penAnchors[0].p); if (Math.hypot(d0.x-(e.clientX-r.left), d0.y-(e.clientY-r.top)) < 8){ finishPen(true); return; } }
@@ -3173,6 +3198,7 @@
     else if (a==="fillet"){ applyCornerMod(true); return; }
     else if (a==="chamfer"){ applyCornerMod(false); return; }
     else if (a==="reverse"){ reversePathDir(); return; }
+    else if (a==="mirrorline"){ startMirror(); return; }
     else if (a==="nodebreak"){ nodeBreak(); return; }
     else if (a==="tocurve"){ nodeToCurve(); return; }
     else if (a==="toline"){ nodeToLine(); return; }
@@ -3260,7 +3286,8 @@
       if (k==="g"){ e.preventDefault(); if (e.shiftKey) ungroupSelection(); else groupSelection(); return; }
     }
     if (e.key==="Escape"){
-      // Escape backs out: drop any selection, then fall back to the select tool.
+      // Escape backs out: cancel a pending mirror, drop any selection, then the tool.
+      if (mirrorAxis){ mirrorAxis = null; updateToolbar(); return; }
       if (sel.size){ selectOnly(null); render(); }
       if (tool!=="select"){ setTool("select"); }
       return;
@@ -3849,10 +3876,10 @@
   Object.assign(I18N.de, { "action.mattest":"Materialtest…","mt.cols":"Leistungsstufen (Spalten)","mt.rows":"Geschwindigkeitsstufen (Zeilen)","mt.toomany":"Zu viele Zellen. Die Palette fasst 28 Testebenen.","mt.pmin":"Min. Leistung %","mt.pmax":"Max. Leistung %","mt.smin":"Min. Geschwindigkeit mm/s","mt.smax":"Max. Geschwindigkeit mm/s","mt.cell":"Zellengröße mm","mt.labels":"Beschriftungen" });
   Object.assign(I18N.fr, { "action.mattest":"Test de matériau…","mt.cols":"Pas de puissance (colonnes)","mt.rows":"Pas de vitesse (lignes)","mt.toomany":"Trop de cellules. La palette contient 28 calques de test.","mt.pmin":"Puissance min %","mt.pmax":"Puissance max %","mt.smin":"Vitesse min mm/s","mt.smax":"Vitesse max mm/s","mt.cell":"Taille de cellule mm","mt.labels":"Étiquettes" });
   Object.assign(I18N["pt-BR"], { "action.mattest":"Teste de material…","mt.cols":"Passos de potência (colunas)","mt.rows":"Passos de velocidade (linhas)","mt.toomany":"Células demais. A paleta comporta 28 camadas de teste.","mt.pmin":"Potência mín %","mt.pmax":"Potência máx %","mt.smin":"Velocidade mín mm/s","mt.smax":"Velocidade máx mm/s","mt.cell":"Tamanho da célula mm","mt.labels":"Etiquetas" });
-  Object.assign(I18N.es, { "action.nodebreak":"Romper en el nodo","action.tocurve":"Convertir en curva","action.toline":"Convertir en línea" });
-  Object.assign(I18N.de, { "action.nodebreak":"Am Knoten trennen","action.tocurve":"In Kurve umwandeln","action.toline":"In Linie umwandeln" });
-  Object.assign(I18N.fr, { "action.nodebreak":"Rompre au nœud","action.tocurve":"Convertir en courbe","action.toline":"Convertir en ligne" });
-  Object.assign(I18N["pt-BR"], { "action.nodebreak":"Quebrar no nó","action.tocurve":"Converter em curva","action.toline":"Converter em linha" });
+  Object.assign(I18N.es, { "action.nodebreak":"Romper en el nodo","action.tocurve":"Convertir en curva","action.toline":"Convertir en línea","action.mirrorline":"Reflejar sobre línea","mir.need":"Seleccione formas y luego haga clic en dos puntos para la línea.","mir.hint":"Haga clic en dos puntos para la línea de reflejo. Escape cancela." });
+  Object.assign(I18N.de, { "action.nodebreak":"Am Knoten trennen","action.tocurve":"In Kurve umwandeln","action.toline":"In Linie umwandeln","action.mirrorline":"An Linie spiegeln","mir.need":"Formen auswählen, dann zwei Punkte für die Linie anklicken.","mir.hint":"Zwei Punkte für die Spiegelachse anklicken. Escape bricht ab." });
+  Object.assign(I18N.fr, { "action.nodebreak":"Rompre au nœud","action.tocurve":"Convertir en courbe","action.toline":"Convertir en ligne","action.mirrorline":"Miroir sur une ligne","mir.need":"Sélectionnez des formes puis cliquez deux points pour la ligne.","mir.hint":"Cliquez deux points pour l'axe du miroir. Échap annule." });
+  Object.assign(I18N["pt-BR"], { "action.nodebreak":"Quebrar no nó","action.tocurve":"Converter em curva","action.toline":"Converter em linha","action.mirrorline":"Espelhar sobre linha","mir.need":"Selecione formas e clique dois pontos para a linha.","mir.hint":"Clique dois pontos para o eixo do espelho. Esc cancela." });
   Object.assign(I18N.es, { "action.mergecsv":"Combinar CSV en texto…","merge.need":"Seleccione primero un objeto de texto, luego elija un CSV.","merge.empty":"Ese CSV no tiene filas de datos.","action.textpath":"Texto sobre trayecto","top.need":"Seleccione un objeto de texto y un trayecto.","top.badpath":"Esa forma no tiene un trayecto utilizable." });
   Object.assign(I18N.de, { "action.mergecsv":"CSV in Text einfügen…","merge.need":"Wählen Sie zuerst ein Textobjekt, dann eine CSV.","merge.empty":"Diese CSV hat keine Datenzeilen.","action.textpath":"Text auf Pfad","top.need":"Wählen Sie ein Textobjekt und einen Pfad.","top.badpath":"Diese Form hat keinen nutzbaren Pfad." });
   Object.assign(I18N.fr, { "action.mergecsv":"Fusionner un CSV dans le texte…","merge.need":"Sélectionnez d'abord un objet texte, puis choisissez un CSV.","merge.empty":"Ce CSV n'a aucune ligne de données.","action.textpath":"Texte sur chemin","top.need":"Sélectionnez un objet texte et un chemin.","top.badpath":"Cette forme n'a pas de chemin utilisable." });
@@ -4050,6 +4077,7 @@
     else if (act==="nodeedit"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(40,40),p(110,40),p(110,95),p(40,95)], closed:true } } }]; selectOnly(0); const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); nodeInsert(p(110,67)); activeNode=0; nodeDelete(); render(); refreshCounts(); }
     else if (act==="tocurve"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(40,50),p(65,90),p(95,35),p(120,80)], closed:false } } }]; selectOnly(0); nodeToCurve(); render(); refreshCounts(); }
     else if (act==="nodebreak"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(45,45),p(110,45),p(110,95),p(45,95)], closed:true } } }]; selectOnly(0); activeNode=1; nodeBreak(); render(); refreshCounts(); }
+    else if (act==="mirrorline"){ const base={ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(30,40),p(70,50),p(35,85),p(55,60)], closed:true } } }; doc.shapes=[base, JSON.parse(JSON.stringify(base))]; sel=new Set([1]); selected=1; mirrorSelAcross(80,20,80,100); render(); refreshCounts(); }
     else if (act==="projround"){ doc.shapes=[rect(30,30,65,45,0), ellipse(110,95,25,20,1)]; stashPage();
       const out={ format:"lasercraft-project", version:1, pageIdx, pages: pages.map(pg=>({ name:pg.name, activeLayer:pg.activeLayer, view:pg.view, doc:pg.doc })) };
       const json=JSON.stringify(out,(k,v)=>(typeof k==="string"&&k.startsWith("_"))?undefined:v);
