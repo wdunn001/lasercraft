@@ -10,10 +10,13 @@ records the baseline controls.
    UDP. These bytes are untrusted. The transport layer bounds every read and the
    protocol framers validate each frame. A malformed response resolves to a typed
    error. It never panics and never drives the hardware past a configured limit.
-2. **Project and art files.** A `.lbrn` project is XML and imported art is image
-   data. Both are untrusted. Parsers reject malformed input with an error and are
-   fuzzed. The never-crash lints forbid `unwrap`, `expect`, and `panic` in every
-   crate. A parse failure surfaces as a `Result`.
+2. **Project and art files.** A `.lbrn` project is XML. Imported art is image
+   data. Imported drawings are SVG and DXF. All of them are untrusted. The DXF and
+   SVG paths run in the browser over a file the user drops in. Parsers reject
+   malformed input with an error. Each is fuzzed. The DXF reader rejects non-finite
+   coordinates. A crafted file cannot push an infinity toward the motion limits.
+   The never-crash lints ban `unwrap` and `expect` in every crate. They ban an
+   outright panic too. A parse failure surfaces as a `Result`.
 3. **Network controllers.** The xTool path speaks HTTP and a WebSocket bus. TLS is
    required for any remote endpoint. Credentials are never compiled into the
    binary. Account linking and tokens flow through CloudCraft. That is the single
@@ -29,6 +32,16 @@ records the baseline controls.
 - Motion output is clamped to the machine limits in `lasercraft-motion` before it
   reaches a dialect. A bad speed or power value cannot be emitted.
 - Dependency advisories and licenses are checked by `cargo deny` using `deny.toml`.
+
+## Audit status
+
+Last reviewed 2026-10-23. `cargo deny check` reports advisories, bans, licenses
+and sources all clean. The one weak-copyleft license in the tree, MPL-2.0 on
+`option-ext`, enters only transitively through `craft-settings` and is allowed for
+dependency use. The craft-libs git sources are the two first-party forks named in
+`deny.toml`; no other git source is permitted. The DXF reader carries fuzz-style
+tests that feed truncated, contradictory and pseudo-random input and assert the
+reader returns without panicking and emits only finite coordinates.
 
 ## Reporting
 

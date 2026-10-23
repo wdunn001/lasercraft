@@ -80,13 +80,22 @@ fn entities(pairs: &[Pair]) -> Vec<Entity> {
     out
 }
 
-/// The first float value for a group code in an entity.
+/// The first finite float value for a group code in an entity.
+///
+/// A non-finite value (`inf`, `nan`) is rejected like a missing one, so a crafted
+/// file cannot push infinities into the geometry and on toward the motion limits.
 fn float_of(entity: &Entity, code: i32) -> Option<f64> {
     entity
         .fields
         .iter()
         .find(|(c, _)| *c == code)
         .and_then(|(_, v)| v.parse::<f64>().ok())
+        .filter(|f| f.is_finite())
+}
+
+/// Parse a coordinate value, keeping only finite numbers.
+fn finite(value: &str) -> Option<f64> {
+    value.parse::<f64>().ok().filter(|f| f.is_finite())
 }
 
 /// The first integer value for a group code in an entity, defaulting to zero.
@@ -118,6 +127,14 @@ const CIRCLE_STEPS: u32 = 64;
 /// a long one stays smooth. The start point is included, so the caller appends the
 /// run directly.
 fn arc_points(cx: f64, cy: f64, radius: f64, start: f64, sweep: f64) -> Vec<(f64, f64)> {
+    if !(cx.is_finite()
+        && cy.is_finite()
+        && radius.is_finite()
+        && start.is_finite()
+        && sweep.is_finite())
+    {
+        return Vec::new();
+    }
     let steps = ((sweep.abs() / (2.0 * PI) * f64::from(CIRCLE_STEPS)).ceil() as u32).max(2);
     let mut pts = Vec::with_capacity(steps as usize + 1);
     for i in 0..=steps {
@@ -165,14 +182,14 @@ fn read_lwpolyline(entity: &Entity) -> Option<DxfPolyline> {
     let mut pending_x: Option<f64> = None;
     for (code, value) in &entity.fields {
         match *code {
-            10 => pending_x = value.parse::<f64>().ok(),
+            10 => pending_x = finite(value),
             20 => {
-                if let (Some(x), Ok(y)) = (pending_x.take(), value.parse::<f64>()) {
+                if let (Some(x), Some(y)) = (pending_x.take(), finite(value)) {
                     verts.push((x, y, 0.0));
                 }
             }
             42 => {
-                if let (Some(last), Ok(b)) = (verts.last_mut(), value.parse::<f64>()) {
+                if let (Some(last), Some(b)) = (verts.last_mut(), finite(value)) {
                     last.2 = b;
                 }
             }
@@ -482,6 +499,50 @@ mod tests {
         for poly in &out {
             assert_eq!(poly.layer, "ENGRAVE");
         }
+    }
+
+    #[test]
+    fn non_finite_coordinates_are_rejected() {
+        // inf and nan in a circle must not reach the output geometry.
+        let out = parse_dxf(&dxf(
+            "0\nCIRCLE\n10\nnan\n20\ninf\n40\n5\n0\nLINE\n10\ninf\n20\n0\n11\n1\n21\n1\n",
+        ));
+        for poly in &out {
+            for &(x, y) in &poly.points {
+                assert!(x.is_finite() && y.is_finite(), "non-finite point {x},{y}");
+            }
+        }
+    }
+
+    #[test]
+    fn adversarial_input_never_panics_and_terminates() {
+        // Truncated, contradictory and non-finite inputs must return cleanly.
+        let cases = [
+            "",
+            "\n\n\n",
+            "0",
+            "0\nLWPOLYLINE",
+            "0\nLWPOLYLINE\n90\n999999999\n70\n1",
+            "0\nPOLYLINE\n70\n1\n0\nVERTEX\n0\nVERTEX\n0\nVERTEX",
+            "0\nARC\n10\n0\n20\n0\n40\n1e308\n50\n0\n51\n1e308",
+            "10\n1\n20\n2\n42\n9",
+        ];
+        for case in cases {
+            let _ = parse_dxf(case);
+        }
+        // A deterministic pseudo-random byte soup, so the test stays stable.
+        let mut soup = String::new();
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..6000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            soup.push(char::from(32 + (state % 95) as u8));
+            if state.is_multiple_of(5) {
+                soup.push('\n');
+            }
+        }
+        let _ = parse_dxf(&soup);
     }
 
     #[test]

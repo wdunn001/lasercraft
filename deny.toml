@@ -5,23 +5,35 @@
 yanked = "deny"
 
 [licenses]
-# The project is MIT OR Apache-2.0 and only pulls permissive dependencies.
+# The project is MIT OR Apache-2.0 and pulls permissive dependencies.
 # Extend this list as new dependencies introduce other permissive licenses.
 allow = [
     "MIT",
     "Apache-2.0",
     "Unicode-3.0",
+    "MPL-2.0",
 ]
 confidence-threshold = 0.9
+
+# MPL-2.0 is weak, file-level copyleft and enters only transitively through
+# craft-settings -> dirs -> dirs-sys -> option-ext. It places no obligation on
+# LaserCraft's own source, so it is allowed for dependency use.
 
 [bans]
 # Flag duplicate major versions so the dependency graph stays lean.
 multiple-versions = "warn"
-# Deny external wildcard version requirements, but allow the internal path
-# dependencies between the workspace crates, which carry no version.
-wildcards = "deny"
+# Deny crates.io wildcard version requirements. The first-party craft-libs crates
+# arrive as git dependencies with no semver, which is intended, so a wildcard is a
+# warning here rather than a hard failure.
+wildcards = "warn"
 allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+# The craft-libs ecosystem lives in these first-party forks, the "use craft-libs"
+# requirement. Nothing else may pull from an arbitrary git source.
+allow-git = [
+    "https://github.com/storytold/craft-libs",
+    "https://github.com/wdunn001/craft-libs",
+]
