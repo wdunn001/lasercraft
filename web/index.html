@@ -1539,7 +1539,12 @@
       if (k==="x"){ if (sel.size){ copySelection(); deleteSelection(); } return; }
       if (k==="v"){ e.preventDefault(); pasteClipboard(); return; }
     }
-    if (e.key==="Escape" && sel.size){ selectOnly(null); render(); return; }
+    if (e.key==="Escape"){
+      // Escape backs out: drop any selection, then fall back to the select tool.
+      if (sel.size){ selectOnly(null); render(); }
+      if (tool!=="select"){ setTool("select"); }
+      return;
+    }
     if ((e.key==="Delete"||e.key==="Backspace") && tool==="node" && activeNode!=null && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); nodeDelete(); return; }
     if ((e.key==="Delete"||e.key==="Backspace") && sel.size && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ deleteSelection(); }
   });
