@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -475,6 +475,7 @@
         <div class="csgroup" id="csFillRow" style="display:none">
           <div class="grid3">
             <div class="f"><label data-i18n="lp.interval">Line interval mm</label><input id="cs_interval" type="number" step="0.01" style="width:100%"></div>
+            <div class="f"><label data-i18n="cs.dpi">Lines per inch</label><input id="cs_dpi" type="number" step="1" style="width:100%"></div>
             <div class="f"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="cs_angle" type="number" style="width:100%"></div>
             <div class="f"><label data-i18n="cs.angleinc">Angle increment&deg;</label><input id="cs_angleinc" type="number" style="width:100%"></div>
           </div>
@@ -1462,6 +1463,8 @@
   function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ if (doc.shapes[i].locked) continue; const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
   function lockSelection(){ let any=false; for (const i of sel){ if (doc.shapes[i]){ doc.shapes[i].locked=true; any=true; } } if(any){ selectOnly(null); snapshot(); render(); } }
   function unlockSelection(){ let any=false; doc.shapes.forEach(s=>{ if (s.locked){ delete s.locked; any=true; } }); if(any){ snapshot(); render(); } }
+  // Reverse the direction a polyline is cut in (flips its start point and winding).
+  function reversePathDir(){ let any=false; for (const i of sel){ const g=doc.shapes[i]&&doc.shapes[i].geometry&&doc.shapes[i].geometry.Polyline; if (g){ g.points.reverse(); any=true; } } if (any){ snapshot(); render(); generate(); } }
   function moveShapeTo(i, nx, ny){ const sh=doc.shapes[i]; const bb=bbox(sh); translateShape(sh, nx-bb.x0, ny-bb.y0); }
 
   // zoom
@@ -1670,7 +1673,7 @@
     $("cs_name").value = L.name; $("cs_output").checked = L.output !== false; $("cs_mode").value = L.mode;
     $("cs_speed").value = L.speed_mm_s; $("cs_passes").value = L.num_passes; $("cs_power").value = L.power_max; $("cs_pmin").value = L.power_min;
     $("cs_air").checked = !!L.air_assist; $("cs_freq").value = L.freq; $("cs_qpulse").value = L.qpulse;
-    $("cs_interval").value = L.interval; $("cs_angle").value = L.angle; $("cs_angleinc").value = L.angleInc||0;
+    $("cs_interval").value = L.interval; $("cs_dpi").value = L.interval>0 ? Math.round(25.4/L.interval) : 0; $("cs_angle").value = L.angle; $("cs_angleinc").value = L.angleInc||0;
     $("cs_autorotate").checked = !!L.autoRotate; $("cs_ramp").value = L.ramp||0; $("cs_dotadj").checked = !!L.dotAdjust; $("cs_crosshatch").checked = !!L.crosshatch;
     $("cs_kerf").value = L.kerf||0; $("cs_perf").checked = !!L.perf; $("cs_perfcut").value = L.perfCut||0.1; $("cs_perfskip").value = L.perfSkip||0.1;
     $("cs_wobble").checked = !!L.wobble; $("cs_wobstep").value = L.wobStep||0.05; $("cs_wobsize").value = L.wobSize||0.1;
@@ -1699,6 +1702,9 @@
     L.pauseBefore = n("cs_pausebefore",0); L.pauseAfter = n("cs_pauseafter",0);
   }
   ["cs_mode","cs_perf","cs_wobble","cs_tabs","cs_timing"].forEach(id => $(id) && ($(id).onchange = csUpdateVis));
+  // Keep DPI and line interval in sync, each the inverse of the other.
+  $("cs_interval") && ($("cs_interval").oninput = () => { const v=+$("cs_interval").value; $("cs_dpi").value = v>0 ? Math.round(25.4/v) : 0; });
+  $("cs_dpi") && ($("cs_dpi").oninput = () => { const v=+$("cs_dpi").value; if (v>0) $("cs_interval").value = (25.4/v).toFixed(3); });
   $("csOk") && ($("csOk").onclick = () => { csApply(); $("csBg").classList.remove("show"); snapshot(); renderLayers(); render(); generate(); });
   $("csClose") && ($("csClose").onclick = $("csCancel").onclick = () => $("csBg").classList.remove("show"));
   $("csDefault") && ($("csDefault").onclick = () => { csApply(); try { localStorage.setItem("lc_layerdefault", JSON.stringify(doc.layers[csLayer])); } catch(e){} });
@@ -2774,6 +2780,7 @@
     else if (a==="distv"){ distribute(false); return; }
     else if (a==="fillet"){ applyCornerMod(true); return; }
     else if (a==="chamfer"){ applyCornerMod(false); return; }
+    else if (a==="reverse"){ reversePathDir(); return; }
     else if (a==="lock"){ lockSelection(); return; }
     else if (a==="unlock"){ unlockSelection(); return; }
     else if (a==="rotary"){ openRotary(); return; }
@@ -3302,6 +3309,7 @@
   Object.assign(I18N.de, { "lbrn.bad":"Die Datei ist kein gültiges LightBurn-XML.","lbrn.none":"Keine importierbaren Formen in der LightBurn-Datei gefunden." });
   Object.assign(I18N.fr, { "lbrn.bad":"Ce fichier n'est pas un XML LightBurn valide.","lbrn.none":"Aucune forme importable trouvée dans le fichier LightBurn." });
   Object.assign(I18N["pt-BR"], { "lbrn.bad":"O arquivo não é um XML válido do LightBurn.","lbrn.none":"Nenhuma forma importável encontrada no arquivo do LightBurn." });
+  Object.assign(I18N.es, { "cs.dpi":"Líneas por pulgada","action.reverse":"Invertir dirección del trazado" }); Object.assign(I18N.de, { "cs.dpi":"Linien pro Zoll","action.reverse":"Pfadrichtung umkehren" }); Object.assign(I18N.fr, { "cs.dpi":"Lignes par pouce","action.reverse":"Inverser le sens du tracé" }); Object.assign(I18N["pt-BR"], { "cs.dpi":"Linhas por polegada","action.reverse":"Inverter direção do traçado" });
   Object.assign(I18N.es, { "cs.crosshatch":"Entramado cruzado" }); Object.assign(I18N.de, { "cs.crosshatch":"Kreuzschraffur" });
   Object.assign(I18N.fr, { "cs.crosshatch":"Hachures croisées" }); Object.assign(I18N["pt-BR"], { "cs.crosshatch":"Hachura cruzada" });
   Object.assign(I18N.es, { "gd.ioports":"Puertos IO","gd.addport":"+ Añadir puerto","gd.noports":"Ningún puerto asignado. Añada uno.","gd.removeport":"Quitar" });
