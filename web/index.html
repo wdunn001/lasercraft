@@ -1165,12 +1165,31 @@
     const b = new Blob([text], { type:"application/dxf" }); const u = URL.createObjectURL(b);
     const x = document.createElement("a"); x.href = u; x.download = "lasercraft.dxf"; x.click(); URL.revokeObjectURL(u);
   }
+  // The layer name an SVG element belongs to, from its nearest labelled group.
+  // Inkscape layers carry inkscape:label; an Illustrator group carries a readable
+  // id. An auto-generated id like "g1234" is ignored. No labelled group means the
+  // element lands on the active layer.
+  function svgLayerName(el){
+    let g = el.parentElement;
+    while (g && g.tagName && g.tagName.toLowerCase() !== "svg"){
+      if (g.tagName.toLowerCase() === "g"){
+        const label = g.getAttributeNS("http://www.inkscape.org/namespaces/inkscape", "label") || g.getAttribute("inkscape:label");
+        if (label) return label;
+        const id = g.getAttribute("id");
+        if (id && !/^(g|layer|svg|path)[-_]?\d*$/i.test(id)) return id;
+      }
+      g = g.parentElement;
+    }
+    return null;
+  }
   function importSvg(text){
-    const d=new DOMParser().parseFromString(text,"image/svg+xml"); const cut=doc.layers[activeLayer].index;
-    d.querySelectorAll("rect").forEach(r=>doc.shapes.push(rect(+r.getAttribute("x")||0,+r.getAttribute("y")||0,+r.getAttribute("width")||0,+r.getAttribute("height")||0,cut)));
-    d.querySelectorAll("circle").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("r")||0,+c.getAttribute("r")||0,cut)));
-    d.querySelectorAll("ellipse").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("rx")||0,+c.getAttribute("ry")||0,cut)));
-    d.querySelectorAll("polygon,polyline").forEach(pl=>{ const pts=(pl.getAttribute("points")||"").trim().split(/\s+/).map(s=>s.split(",").map(Number)).filter(a=>a.length===2); if(pts.length) doc.shapes.push(poly(pts, pl.tagName==="polygon", cut)); });
+    const d=new DOMParser().parseFromString(text,"image/svg+xml");
+    const cutFor = el => layerIndexForName(svgLayerName(el));
+    d.querySelectorAll("rect").forEach(r=>doc.shapes.push(rect(+r.getAttribute("x")||0,+r.getAttribute("y")||0,+r.getAttribute("width")||0,+r.getAttribute("height")||0,cutFor(r))));
+    d.querySelectorAll("circle").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("r")||0,+c.getAttribute("r")||0,cutFor(c))));
+    d.querySelectorAll("ellipse").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("rx")||0,+c.getAttribute("ry")||0,cutFor(c))));
+    d.querySelectorAll("polygon,polyline").forEach(pl=>{ const pts=(pl.getAttribute("points")||"").trim().split(/\s+/).map(s=>s.split(",").map(Number)).filter(a=>a.length===2); if(pts.length) doc.shapes.push(poly(pts, pl.tagName==="polygon", cutFor(pl))); });
+    renderLayers(); renderPalette();
   }
 
   // ---- Move / jog panel ----
@@ -1369,6 +1388,11 @@
       pr(0,"LINE");pr(10,20);pr(20,160);pr(11,120);pr(21,185);
       pr(0,"ENDSEC");pr(0,"EOF");
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
+    else if (act==="svglayers"){ const svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">'
+      + '<g inkscape:label="CUT"><rect x="20" y="25" width="60" height="45"/></g>'
+      + '<g inkscape:label="ENGRAVE"><circle cx="115" cy="50" r="22"/></g>'
+      + '<g id="Score"><polyline points="20,100 130,120"/></g></svg>';
+      doc.shapes=[]; importSvg(svg); render(); refreshCounts(); }
     else if (act==="dxfround"){ const L=[], pr=(c,v)=>{L.push(c);L.push(v);};
       pr(0,"SECTION");pr(2,"ENTITIES");
       pr(0,"LWPOLYLINE");pr(90,4);pr(70,1);pr(10,20);pr(20,20);pr(10,90);pr(20,20);pr(42,0.6);pr(10,90);pr(20,55);pr(10,20);pr(20,55);
