@@ -40,7 +40,7 @@ because every item ships at once.
 
 - Document/File: core open/save/import/export Done. Many import formats (AI/PDF/HPGL/Gerber/3D) Gap. Templates, bundles, print: Gap.
 - Drawing: primary shapes Done; star Done; triangle/pentagon/octagon/bar-code Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
-- Edit/Transform: selection, clipboard, undo/redo, align, arrays, boolean, offset, draw-order, lock Done/Partial. Nesting, dock, two-point rotate, mirror-across-line: Gap.
+- Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
 - Node editing: insert/delete/move Done; trim/extend/convert/break/optimize/warp/deform: Gap.
 - Text: core + alignment + fonts Done; variable text, text-on-path, bending, bar code: Gap.
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, kerf, tabs, perforation, ramp Done; lead-in/out, overcut, sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
@@ -59,4 +59,7 @@ Hardware control (GRBL serial run/frame/pause/stop, position readout), machine
 add/edit/delete with capabilities and origin/baud/job-start, Properties tab, grid
 snap, per-layer output/show toggles, cut-order drag reorder, kerf, tabs/bridges,
 machine-scoped material library with finishes and 3-format import, group/ungroup,
-star tool, cut preview. Full i18n across en/es/de/fr/pt-BR for every new control.
+star tool, cut preview, six dithering modes, distribute horizontally/vertically,
+lock/unlock shapes. Full i18n across en/es/de/fr/pt-BR for every new control. An
+adversarial code review ran over the new JavaScript and all six confirmed defects
+were fixed; the wasm builds green and every change was screenshot-verified.
