@@ -38,8 +38,15 @@
   .tool.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .tool svg { width: 20px; height: 20px; }
 
-  .canvas-wrap { position: relative; background: #060709; overflow: hidden; }
-  #canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+  .canvas-wrap { position: relative; background: #060709; overflow: hidden; display: flex; flex-direction: column; }
+  #canvas { flex: 1; width: 100%; min-height: 0; display: block; cursor: crosshair; }
+  .pagebar { display: flex; align-items: stretch; gap: 2px; background: var(--panel2); border-bottom: 1px solid var(--line); padding: 3px 6px 0; min-height: 28px; overflow-x: auto; }
+  .pagebar .ptab { display: flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 12px; color: var(--muted); background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; white-space: nowrap; }
+  .pagebar .ptab.active { color: var(--ink); background: #060709; border-color: var(--line); }
+  .pagebar .ptab .x { color: var(--faint); font-size: 13px; }
+  .pagebar .ptab .x:hover { color: var(--accent); }
+  .pagebar .padd { align-self: center; margin-left: 4px; color: var(--muted); cursor: pointer; border: 1px solid var(--line); border-radius: 6px; width: 24px; height: 20px; display: inline-flex; align-items: center; justify-content: center; }
+  .pagebar .padd:hover { color: var(--ink); border-color: var(--accent); }
   #canvas.select { cursor: default; }
   .readout { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; background: rgba(0,0,0,.4); padding: 3px 8px; border-radius: 5px; }
   .zoomctl { position: absolute; right: 10px; bottom: 8px; display: flex; gap: 4px; }
@@ -190,6 +197,7 @@
     <div class="tools" id="tools"></div>
 
     <div class="canvas-wrap">
+      <div class="pagebar" id="pagebar"></div>
       <video id="cam" autoplay playsinline muted style="position:absolute;left:0;top:0;display:none;transform-origin:0 0;pointer-events:none"></video>
       <svg id="canvas" style="position:relative"></svg>
       <div class="readout" id="readout">x 0.0  y 0.0 mm</div>
@@ -1113,6 +1121,29 @@
   function undo(){ if (hptr > 0){ hptr--; restore(); } }
   function redo(){ if (hptr < history.length - 1){ hptr++; restore(); } }
 
+  // ---- work-area pages (each page is its own document with its own undo) ----
+  let pages = [], pageIdx = 0;
+  function blankDoc(){ return { shapes: [], layers: [ layer(0,"Cut",20,80,"Line"), layer(1,"Score",60,20,"Line"), layer(2,"Engrave",100,40,"Fill") ] }; }
+  function stashPage(){ const pg = pages[pageIdx]; if (pg){ pg.doc=doc; pg.activeLayer=activeLayer; pg.view=view; pg.history=history; pg.hptr=hptr; } }
+  function adoptPage(i){ const pg=pages[i]; doc=pg.doc; activeLayer=pg.activeLayer; view=pg.view; history=pg.history; hptr=pg.hptr; selectOnly(null); renderPageTabs(); renderLayers(); renderPalette(); render(); generate(); }
+  function loadPage(i){ if (i<0 || i>=pages.length || i===pageIdx) return; stashPage(); pageIdx=i; adoptPage(i); }
+  function addPage(){ stashPage(); pages.push({ name:"Page "+(pages.length+1), doc:blankDoc(), activeLayer:0, view:{s:3.2,x:40,y:40}, history:[], hptr:-1 }); pageIdx=pages.length-1; adoptPage(pageIdx); }
+  function closePage(i){ if (pages.length<=1) return; stashPage(); pages.splice(i,1); if (pageIdx>i) pageIdx--; else if (pageIdx>=pages.length) pageIdx=pages.length-1; adoptPage(pageIdx); }
+  function editPageName(i, tabEl){ const span=tabEl.querySelector(".nm"); if (!span) return; const inp=document.createElement("input"); inp.value=pages[i].name; inp.style.width="96px"; span.replaceWith(inp); inp.focus(); inp.select();
+    const commit=()=>{ pages[i].name = inp.value.trim() || pages[i].name; renderPageTabs(); };
+    inp.onblur=commit; inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } else if(e.key==="Escape"){ inp.value=pages[i].name; inp.blur(); } };
+  }
+  function renderPageTabs(){
+    const host=$("pagebar"); if (!host) return; host.innerHTML="";
+    pages.forEach((pg,i)=>{ const t=document.createElement("div"); t.className="ptab"+(i===pageIdx?" active":"");
+      t.innerHTML=`<span class="nm">${pg.name}</span>`+(pages.length>1?`<span class="x" title="Close page">&times;</span>`:"");
+      t.querySelector(".nm").onclick=()=>loadPage(i); t.ondblclick=()=>editPageName(i,t);
+      const x=t.querySelector(".x"); if(x) x.onclick=e=>{ e.stopPropagation(); closePage(i); };
+      host.appendChild(t);
+    });
+    const add=document.createElement("div"); add.className="padd"; add.title="New page"; add.textContent="+"; add.onclick=addPage; host.appendChild(add);
+  }
+
   // ---- Weld (boolean union) and Concentric fill, via craft-pathops in WASM ----
   function closedPolys(shapes){ return shapes.filter(s => s.geometry.Polyline && s.geometry.Polyline.closed).map(s => s.geometry.Polyline.points.map(q => [q.x, q.y])); }
   function weldActive(){
@@ -1584,6 +1615,7 @@
   // boot
   function layout(){ const r=canvas.getBoundingClientRect(); canvas.setAttribute("viewBox",`0 0 ${r.width} ${r.height}`); render(); }
   window.addEventListener("resize", layout);
+  pages = [{ name:"Page 1", doc, activeLayer, view, history, hptr }]; pageIdx = 0; renderPageTabs();
   renderLayers(); renderPalette(); updateToolbar(); $("canvas").classList.toggle("select", tool==="select");
   const params = new URLSearchParams(location.search);
   const urlLang = params.get("lang");
@@ -1633,6 +1665,7 @@
       pr(0,"ENDSEC");pr(0,"EOF");
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
     else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
+    else if (act==="pages"){ doc.shapes=[rect(30,30,80,50,0)]; addPage(); doc.shapes=[ellipse(90,90,40,30,1)]; addPage(); doc.shapes=[rect(20,20,40,40,2), ellipse(100,100,30,30,0)]; renderPageTabs(); render(); refreshCounts(); }
     else if (act==="textobj"){ $("textIn").value="Hello 2026"; $("textH").value=16;
       doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"Hello 2026", x:18, y:95, h:16, gap:16*0.28, align:"left" } } },
         { kind:"Text", cut_index:1, geometry:{ Text:{ s:"centered label", x:75, y:55, h:11, gap:11*0.28, align:"center" } } },
