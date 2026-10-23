@@ -423,6 +423,7 @@ dependencies = [
  "lasercraft-geomops",
  "lasercraft-laser-doc",
  "lasercraft-motion",
+ "lasercraft-svg",
  "lasercraft-text",
  "serde",
  "serde_json",

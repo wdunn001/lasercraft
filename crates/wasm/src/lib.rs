@@ -165,7 +165,13 @@ pub fn concentric(polyline_json: &str, interval: f64, max_rings: u32) -> Result<
 /// of polylines, each an array of `[x, y]` pairs, which the page lays on the
 /// active layer. The font is single-line, the right choice for a galvo or diode.
 #[wasm_bindgen]
-pub fn text_to_paths(text: &str, height_mm: f64, x: f64, y: f64, gap_mm: f64) -> Result<String, JsError> {
+pub fn text_to_paths(
+    text: &str,
+    height_mm: f64,
+    x: f64,
+    y: f64,
+    gap_mm: f64,
+) -> Result<String, JsError> {
     let out = lasercraft_text::text_to_polylines(text, height_mm, x, y, gap_mm);
     serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
@@ -227,10 +233,26 @@ pub fn export_dxf(polylines_json: &str) -> Result<String, JsError> {
         .map(|p| lasercraft_dxf::DxfPolyline {
             points: p.points,
             closed: p.closed,
-            layer: if p.layer.is_empty() { "0".to_string() } else { p.layer },
+            layer: if p.layer.is_empty() {
+                "0".to_string()
+            } else {
+                p.layer
+            },
         })
         .collect();
     Ok(lasercraft_dxf::write_dxf(&dxf))
+}
+
+/// Parse one SVG path `d` attribute into cubic bezier subpaths.
+///
+/// The result is a JSON array of paths, each `{ start, segments, closed }` in the
+/// document's shape form, so curves import as true beziers the node tool can edit.
+/// Bad path data returns an error. The page reads the layer from the element.
+#[wasm_bindgen]
+pub fn svg_path_to_paths(d: &str) -> Result<String, JsError> {
+    let paths = lasercraft_svg::parse_path_data(d)
+        .map_err(|e| JsError::new(&format!("invalid path data: {e}")))?;
+    serde_json::to_string(&paths).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
 /// Build a material-test grid project from `spec` and return it as project JSON.

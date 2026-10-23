@@ -329,7 +329,7 @@
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf, export_dxf } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf, export_dxf, svg_path_to_paths } from "./pkg/lasercraft_wasm.js";
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
@@ -1189,6 +1189,9 @@
     d.querySelectorAll("circle").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("r")||0,+c.getAttribute("r")||0,cutFor(c))));
     d.querySelectorAll("ellipse").forEach(c=>doc.shapes.push(ellipse(+c.getAttribute("cx")||0,+c.getAttribute("cy")||0,+c.getAttribute("rx")||0,+c.getAttribute("ry")||0,cutFor(c))));
     d.querySelectorAll("polygon,polyline").forEach(pl=>{ const pts=(pl.getAttribute("points")||"").trim().split(/\s+/).map(s=>s.split(",").map(Number)).filter(a=>a.length===2); if(pts.length) doc.shapes.push(poly(pts, pl.tagName==="polygon", cutFor(pl))); });
+    // <path> data parses in the engine into cubic subpaths, kept as true beziers.
+    if (ready) d.querySelectorAll("path").forEach(pa=>{ const dd=pa.getAttribute("d"); if(!dd) return; const cut=cutFor(pa);
+      try { for (const bp of JSON.parse(svg_path_to_paths(dd))) doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Path: bp } }); } catch(e){ console.error(e); } });
     renderLayers(); renderPalette();
   }
 
@@ -1388,6 +1391,10 @@
       pr(0,"LINE");pr(10,20);pr(20,160);pr(11,120);pr(21,185);
       pr(0,"ENDSEC");pr(0,"EOF");
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
+    else if (act==="svgpath"){ const svg = '<svg xmlns="http://www.w3.org/2000/svg">'
+      + '<path d="M 30 40 C 50 90 100 90 120 40 C 100 10 50 10 30 40 Z"/>'
+      + '<path d="M 20 120 L 60 100 L 100 130 L 140 110"/></svg>';
+      doc.shapes=[]; importSvg(svg); render(); refreshCounts(); }
     else if (act==="svglayers"){ const svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">'
       + '<g inkscape:label="CUT"><rect x="20" y="25" width="60" height="45"/></g>'
       + '<g inkscape:label="ENGRAVE"><circle cx="115" cy="50" r="22"/></g>'
