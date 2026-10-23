@@ -57,7 +57,7 @@ because every item ships at once.
 - Depth / heat-map engrave: a grayscale image drives cut depth, banded into
   multi-pass cut layers (lighter carves deeper), for fiber-laser relief and texture.
   Direction and level count set in Preferences.
-- Camera: overlay, 4-corner align, print-and-cut marks Done; lens calibration wizard, head-mounted, LiDAR: Gap.
+- Camera: overlay, 4-corner align, print-and-cut marks, lens-calibration (Brown radial k1/k2, 5x5 grid solve, image undistort; solver reference-verified) Done; head-mounted, LiDAR: Gap.
 - Rotary: Done (setup dialog: type, axis, steps, diameter, speeds, reverse, return). Galvo rotary-marking extras: Gap.
 - Advanced: preview, cylinder correction, keyboard shortcuts (undo/redo, select-all, copy/cut/paste, group/ungroup, duplicate, arrow-nudge) Done; settings/prefs Partial (language done); bundles, center finder, dual laser: Gap.
 
