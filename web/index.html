@@ -805,7 +805,7 @@
   }
   const toolsEl = $("tools");
   function setTool(name){
-    tool = name; measureA = null; if (name!=="pen") penAnchors = []; drawing = null;
+    tool = name; measureA = null; if (name!=="pen") penAnchors = []; if (name!=="poly") polyAnchors = []; drawing = null;
     document.querySelectorAll(".tool").forEach(t=>{ const on = t.dataset.tool===name; t.classList.toggle("active", on); t.style.background = on ? (t.dataset.gcolor||"") : ""; t.style.borderColor = on ? (t.dataset.gcolor||"") : ""; });
     $("canvas").classList.toggle("select", name==="select"); updateToolbar(); render();
   }
@@ -1099,7 +1099,24 @@
   function copySelection(){ if (!sel.size) return; clipboard = [...sel].sort((a,b)=>a-b).map(i => JSON.parse(JSON.stringify(doc.shapes[i]))); }
   function pasteClipboard(){ if (!clipboard.length) return; const added = clipboard.map(s => { const c = JSON.parse(JSON.stringify(s)); moveShapeTo2(c, 6, 6); return c; }); remapGroups(added); const startIdx = doc.shapes.length; doc.shapes.push(...added); sel = new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1 ? startIdx : null; snapshot(); render(); refreshCounts(); }
   function setLayerForSelection(cutIndex){ for (const i of sel){ if (doc.shapes[i]) doc.shapes[i].cut_index = cutIndex; } snapshot(); render(); generate(); }
-  let penAnchors = [], penDrag = false, measureA = null;
+  let penAnchors = [], penDrag = false, measureA = null, polyAnchors = [];
+  // Preview polyline for the poly tool: the committed corners plus a rubber-band
+  // segment to the cursor.
+  function polyPreview(cur){
+    const col = layerColor(doc.layers[activeLayer]);
+    const pts = polyAnchors.map(a=>mm2px(a)); if (cur) pts.push(mm2px(cur));
+    const d = pts.map((pt,i)=>`${i?"L":"M"} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(" ");
+    let s = `<path d="${d}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`;
+    polyAnchors.forEach(a=>{ const d2=mm2px(a); s += `<rect x="${d2.x-3}" y="${d2.y-3}" width="6" height="6" fill="${col}"/>`; });
+    return s;
+  }
+  function finishPoly(closed){
+    if (polyAnchors.length >= 2){
+      doc.shapes.push({ kind:"Path", cut_index:doc.layers[activeLayer].index, geometry:{ Polyline:{ points: polyAnchors.map(a=>p(a.x,a.y)), closed: !!closed && polyAnchors.length>=3 } } });
+      selectOnly(doc.shapes.length-1); snapshot(); refreshCounts();
+    }
+    polyAnchors = []; drawing = null; render();
+  }
   // The ruler overlay between two mm points: a dashed line with a distance and
   // angle label at the midpoint. Angle is measured from the positive x axis.
   function measureOverlay(a, b){
@@ -1157,6 +1174,11 @@
       if (penAnchors.length >= 2){ const d0 = mm2px(penAnchors[0].p); if (Math.hypot(d0.x-(e.clientX-r.left), d0.y-(e.clientY-r.top)) < 8){ finishPen(true); return; } }
       penAnchors.push({ p:{x:m.x,y:m.y}, hIn:{x:m.x,y:m.y}, hOut:{x:m.x,y:m.y} });
       penDrag = true; drawing = penPreview(); render(); return;
+    }
+    if (tool === "poly"){
+      // Click to drop a corner. Click near the first point, or double-click, to close.
+      if (polyAnchors.length >= 2){ const d0 = mm2px(polyAnchors[0]); const r = canvas.getBoundingClientRect(); if (Math.hypot(d0.x-(e.clientX-r.left), d0.y-(e.clientY-r.top)) < 8){ finishPoly(true); return; } }
+      polyAnchors.push({ x:m.x, y:m.y }); drawing = polyPreview(m); render(); return;
     }
     if (tool === "text"){ placeText(m.x, m.y); return; }
     if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
@@ -1217,6 +1239,9 @@
         : tool==="star" ? (()=>{ const sh=star((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,starPoints,0); const d=shapeD(sh); return `<path d="${d}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`; })()
         : `<ellipse cx="${(a.x+b.x)/2}" cy="${(a.y+b.y)/2}" rx="${Math.abs(b.x-a.x)/2}" ry="${Math.abs(b.y-a.y)/2}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`;
       render(); }
+    if (tool==="line"){ const a=mm2px(start), b=mm2px(m); const col=layerColor(doc.layers[activeLayer]);
+      drawing = `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${col}" stroke-dasharray="4 3"/>`; render(); }
+    if (tool==="poly" && polyAnchors.length){ drawing = polyPreview(m); render(); }
   });
   window.addEventListener("mouseup", e => {
     if (xform){ xform=null; start=null; dragShape=null; render(); refreshCounts(); return; }
@@ -1226,11 +1251,13 @@
     if (tool==="select" && dragShape!=null){ dragShape=null; dragLast=null; start=null; snapshot(); render(); refreshCounts(); return; }
     if (tool==="measure"){ measureA=null; start=null; return; }
     if (tool==="pen"){ penDrag=false; start=null; return; }
+    if (tool==="poly"){ start=null; return; }   // poly commits points on click, not on release
     if (!start){ return; }
     const m = px2mm(e.clientX, e.clientY);
     if (tool==="rect" && Math.abs(m.x-start.x)>1){ doc.shapes.push(rect(Math.min(start.x,m.x),Math.min(start.y,m.y),Math.abs(m.x-start.x),Math.abs(m.y-start.y),doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
     else if (tool==="ellipse" && Math.abs(m.x-start.x)>1){ doc.shapes.push(ellipse((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
     else if (tool==="star" && Math.abs(m.x-start.x)>1){ doc.shapes.push(star((start.x+m.x)/2,(start.y+m.y)/2,Math.abs(m.x-start.x)/2,Math.abs(m.y-start.y)/2,starPoints,doc.layers[activeLayer].index)); selectOnly(doc.shapes.length-1); }
+    else if (tool==="line" && Math.hypot(m.x-start.x,m.y-start.y)>0.5){ doc.shapes.push({ kind:"Path", cut_index:doc.layers[activeLayer].index, geometry:{ Polyline:{ points:[p(start.x,start.y),p(m.x,m.y)], closed:false } } }); selectOnly(doc.shapes.length-1); }
     start=null; drawing=null; dragShape=null; dragNode=null; render(); refreshCounts();
   });
   function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ if (doc.shapes[i].locked) continue; const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
@@ -1247,7 +1274,7 @@
 
   // ---- right-click context menu (options depend on what is under the cursor) ----
   // Double-click in the node tool inserts a node on the nearest edge.
-  canvas.addEventListener("dblclick", e => { if (tool==="node"){ nodeInsert(px2mm(e.clientX, e.clientY)); } });
+  canvas.addEventListener("dblclick", e => { if (tool==="node"){ nodeInsert(px2mm(e.clientX, e.clientY)); } else if (tool==="poly"){ finishPoly(polyAnchors.length>=3); } });
   const ctx = $("ctxmenu");
   function closeCtx(){ ctx.classList.remove("show"); }
   document.addEventListener("click", closeCtx);
@@ -2479,6 +2506,7 @@
   // keyboard
   window.addEventListener("keydown", e => {
     if (tool==="pen" && penAnchors.length){ if (e.key==="Enter"){ e.preventDefault(); finishPen(false); return; } if (e.key==="Escape"){ penAnchors=[]; penDrag=false; drawing=null; render(); return; } }
+    if (tool==="poly" && polyAnchors.length){ if (e.key==="Enter"){ e.preventDefault(); finishPoly(polyAnchors.length>=3); return; } if (e.key==="Escape"){ polyAnchors=[]; drawing=null; render(); return; } }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); return; }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="a" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); sel=new Set(doc.shapes.map((_,i)=>i)); selected=sel.size===1?0:null; render(); return; }
