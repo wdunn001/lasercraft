@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -2413,6 +2413,34 @@
 
   // The live Text object under the selection, or null.
   function selText(){ const sh = selected!=null ? doc.shapes[selected] : null; return (sh && sh.geometry && sh.geometry.Text) ? sh.geometry.Text : null; }
+  // Code 128 (set B) barcode. Each symbol value maps to six bar/space module widths
+  // (the stop symbol has seven). The result is a row of filled bars the laser cuts
+  // or engraves. Verified by construction against the standard Code 128 table.
+  const C128 = ("212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 "
+    + "112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 "
+    + "321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 "
+    + "231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 "
+    + "311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 "
+    + "141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 "
+    + "121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 "
+    + "114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112").split(/\s+/);
+  function barcode128(text, x, y, height, moduleW, cut){
+    const vals = [...text].map(c => c.charCodeAt(0)).filter(c => c >= 32 && c <= 126).map(c => c - 32);
+    if (!vals.length) return [];
+    let sum = 104; vals.forEach((v, i) => sum += v * (i + 1)); const check = sum % 103;
+    const seq = [104, ...vals, check, 106];
+    const bars = []; let cx = x;
+    for (const v of seq){ const pat = C128[v]; for (let i = 0; i < pat.length; i++){ const w = (+pat[i]) * moduleW; if (i % 2 === 0) bars.push(rect(cx, y, w, height, cut)); cx += w; } }
+    return bars;
+  }
+  function createBarcode(){
+    const txt = prompt(tr("bc.text","Barcode text (Code 128)"), "LC-0001"); if (txt == null || !txt) return;
+    const h = parseFloat(prompt(tr("bc.height","Bar height mm"), "15")) || 15;
+    const mw = parseFloat(prompt(tr("bc.module","Narrow bar mm"), "0.5")) || 0.5;
+    const bars = barcode128(txt, 20, 60, h, mw, doc.layers[activeLayer].index);
+    if (!bars.length){ alert(tr("bc.none","No encodable characters.")); return; }
+    doc.shapes.push(...bars); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
+  }
   // Variable text: turn one text object into a numbered series. A %N token (or the
   // first run of digits) in the text is replaced by each incrementing number; a
   // plain label becomes the number itself. Copies lay out in a grid.
@@ -2706,6 +2734,7 @@
     else if (a==="unlock"){ unlockSelection(); return; }
     else if (a==="rotary"){ openRotary(); return; }
     else if (a==="serialize"){ serializeText(); return; }
+    else if (a==="barcode"){ createBarcode(); return; }
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
     else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
@@ -3209,6 +3238,10 @@
   Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","layer.output2":"Ausgabe","lp.mode":"Modus","cs.editcut":"Schnitteinstellungen bearbeiten…","cs.makedefault":"Als Standard","cs.angleinc":"Winkelinkrement°","cs.autorotate":"Auto-Drehen","cs.ramp":"Rampenlänge mm","cs.dotadjust":"Punktbreiten-Anpassung","cs.perf":"Perforation","cs.wobble":"Wobbeln","cs.perfcut":"Perf. Schnitt mm","cs.perfskip":"Perf. Sprung mm","cs.wobstep":"Wobbel-Schritt mm","cs.wobsize":"Wobbel-Größe mm","cs.tabsize":"Steggröße mm","cs.tabspacing":"Gleichmäßiger Abstand mm","cs.tabspershape":"Stege pro Form","cs.tabpower":"Stegleistung %","cs.tabskipinner":"Innere Formen überspringen","cs.timing":"Standardzeiten überschreiben","cs.jumpspeed":"Sprunggeschwindigkeit mm/s","cs.minjump":"Min. Sprungverzögerung us","cs.maxjump":"Max. Sprungverzögerung us","cs.laseron":"Laser-Ein TC us","cs.laseroff":"Laser-Aus TC us","cs.endtc":"End-TC us","cs.polytc":"Polygon-TC us","cs.pausebefore":"Pause davor ms","cs.pauseafter":"Pause danach ms" });
   Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","layer.output2":"Sortie","lp.mode":"Mode","cs.editcut":"Modifier les réglages de coupe…","cs.makedefault":"Par défaut","cs.angleinc":"Incrément d'angle°","cs.autorotate":"Rotation auto","cs.ramp":"Longueur de rampe mm","cs.dotadjust":"Ajustement largeur de point","cs.perf":"Perforation","cs.wobble":"Oscillation","cs.perfcut":"Coupe perf. mm","cs.perfskip":"Saut perf. mm","cs.wobstep":"Pas d'oscillation mm","cs.wobsize":"Taille d'oscillation mm","cs.tabsize":"Taille de patte mm","cs.tabspacing":"Espacement régulier mm","cs.tabspershape":"Pattes par forme","cs.tabpower":"Puissance de patte %","cs.tabskipinner":"Ignorer formes intérieures","cs.timing":"Remplacer les délais par défaut","cs.jumpspeed":"Vitesse de saut mm/s","cs.minjump":"Délai min. de saut us","cs.maxjump":"Délai max. de saut us","cs.laseron":"Laser activé TC us","cs.laseroff":"Laser désactivé TC us","cs.endtc":"TC de fin us","cs.polytc":"TC de polygone us","cs.pausebefore":"Pause avant ms","cs.pauseafter":"Pause après ms" });
   Object.assign(I18N["pt-BR"], { "cs.title":"Ajustes de corte","layer.output2":"Saída","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Tornar padrão","cs.angleinc":"Incremento de ângulo°","cs.autorotate":"Auto-rotação","cs.ramp":"Comprimento da rampa mm","cs.dotadjust":"Ajuste largura do ponto","cs.perf":"Perfuração","cs.wobble":"Oscilação","cs.perfcut":"Corte perf. mm","cs.perfskip":"Salto perf. mm","cs.wobstep":"Passo de oscilação mm","cs.wobsize":"Tamanho de oscilação mm","cs.tabsize":"Tamanho da aba mm","cs.tabspacing":"Espaçamento uniforme mm","cs.tabspershape":"Abas por forma","cs.tabpower":"Potência da aba %","cs.tabskipinner":"Pular formas internas","cs.timing":"Substituir tempos padrão","cs.jumpspeed":"Velocidade de salto mm/s","cs.minjump":"Atraso mín. de salto us","cs.maxjump":"Atraso máx. de salto us","cs.laseron":"Laser ligado TC us","cs.laseroff":"Laser desligado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa depois ms" });
+  Object.assign(I18N.es, { "action.barcode":"Crear código de barras…","bc.text":"Texto del código (Code 128)","bc.height":"Altura de barra mm","bc.module":"Barra estrecha mm","bc.none":"Sin caracteres codificables." });
+  Object.assign(I18N.de, { "action.barcode":"Barcode erstellen…","bc.text":"Barcode-Text (Code 128)","bc.height":"Balkenhöhe mm","bc.module":"Schmaler Balken mm","bc.none":"Keine kodierbaren Zeichen." });
+  Object.assign(I18N.fr, { "action.barcode":"Créer un code-barres…","bc.text":"Texte du code (Code 128)","bc.height":"Hauteur de barre mm","bc.module":"Barre étroite mm","bc.none":"Aucun caractère encodable." });
+  Object.assign(I18N["pt-BR"], { "action.barcode":"Criar código de barras…","bc.text":"Texto do código (Code 128)","bc.height":"Altura da barra mm","bc.module":"Barra estreita mm","bc.none":"Nenhum caractere codificável." });
   Object.assign(I18N.es, { "action.serialize":"Serializar texto…","ser.need":"Seleccione primero un objeto de texto.","ser.start":"Número inicial","ser.count":"Cuántas copias","ser.step":"Paso entre números","ser.digits":"Dígitos mínimos (0 = ninguno)" });
   Object.assign(I18N.de, { "action.serialize":"Text serialisieren…","ser.need":"Zuerst ein Textobjekt auswählen.","ser.start":"Startnummer","ser.count":"Wie viele Kopien","ser.step":"Schritt zwischen Nummern","ser.digits":"Mindestziffern (0 = keine)" });
   Object.assign(I18N.fr, { "action.serialize":"Sérialiser le texte…","ser.need":"Sélectionnez d'abord un objet texte.","ser.start":"Numéro de départ","ser.count":"Combien de copies","ser.step":"Pas entre les numéros","ser.digits":"Chiffres minimum (0 = aucun)" });
@@ -3337,6 +3370,7 @@
     else if (act==="rotary"){ openRotary(); }
     else if (act==="lbrn"){ const xml=`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/><speed Value="15"/><maxPower Value="80"/></CutSetting><CutSetting type="Scan"><index Value="1"/><name Value="Engrave"/><speed Value="200"/><maxPower Value="40"/></CutSetting><Shape Type="Rect" CutIndex="0" W="60" H="40"><XForm>1 0 0 1 80 60</XForm></Shape><Shape Type="Ellipse" CutIndex="1" Rx="20" Ry="15"><XForm>1 0 0 1 45 100</XForm></Shape><Shape Type="Path" CutIndex="0"><XForm>1 0 0 1 0 0</XForm><VertList>V10 20V40 20V40 55V10 55</VertList><PrimList>LineClosed</PrimList></Shape></LightBurnProject>`; doc.shapes=[]; importLbrn(xml); }
     else if (act==="serial"){ doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"SN-%N", x:20, y:95, h:9, gap:9*0.28, align:"left", font:"mark" } } }]; selectOnly(0); doSerialize(1,10,1,4); }
+    else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
     else if (act==="crosshatch"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=true; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="hatchonly"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=false; L.angle=45; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="inch"){ dispUnits="in"; sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; const tb=document.querySelector('.docktabs button[data-dock="props"]'); if(tb) tb.click(); render(); }
