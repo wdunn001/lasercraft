@@ -734,6 +734,10 @@
   function marqueeHits(x0,y0,x1,y1){ const lo={x:Math.min(x0,x1),y:Math.min(y0,y1)}, hi={x:Math.max(x0,x1),y:Math.max(y0,y1)}; const out=[]; doc.shapes.forEach((sh,i)=>{ const b=bbox(sh); if (b.x1>=lo.x&&b.x0<=hi.x&&b.y1>=lo.y&&b.y0<=hi.y) out.push(i); }); return out; }
   function deleteSelection(){ const idx=[...sel].sort((a,b)=>b-a); for (const i of idx) doc.shapes.splice(i,1); selectOnly(null); snapshot(); render(); refreshCounts(); }
   function duplicateSelection(){ const added=[]; for (const i of [...sel].sort((a,b)=>a-b)){ const c=JSON.parse(JSON.stringify(doc.shapes[i])); moveShapeTo2(c,5,5); added.push(c); } const startIdx=doc.shapes.length; doc.shapes.push(...added); sel=new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1?startIdx:(added.length?startIdx:null); snapshot(); render(); refreshCounts(); }
+  // Clipboard of shapes, copied and pasted with a small offset so they are visible.
+  let clipboard = [];
+  function copySelection(){ if (!sel.size) return; clipboard = [...sel].sort((a,b)=>a-b).map(i => JSON.parse(JSON.stringify(doc.shapes[i]))); }
+  function pasteClipboard(){ if (!clipboard.length) return; const added = clipboard.map(s => { const c = JSON.parse(JSON.stringify(s)); moveShapeTo2(c, 6, 6); return c; }); const startIdx = doc.shapes.length; doc.shapes.push(...added); sel = new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1 ? startIdx : null; snapshot(); render(); refreshCounts(); }
   function setLayerForSelection(cutIndex){ for (const i of sel){ if (doc.shapes[i]) doc.shapes[i].cut_index = cutIndex; } snapshot(); render(); generate(); }
   let penAnchors = [], penDrag = false, measureA = null;
   // The ruler overlay between two mm points: a dashed line with a distance and
@@ -1410,6 +1414,12 @@
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); return; }
     if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="a" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); sel=new Set(doc.shapes.map((_,i)=>i)); selected=sel.size===1?0:null; render(); return; }
+    if ((e.ctrlKey||e.metaKey) && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){
+      const k = e.key.toLowerCase();
+      if (k==="c"){ copySelection(); return; }
+      if (k==="x"){ if (sel.size){ copySelection(); deleteSelection(); } return; }
+      if (k==="v"){ e.preventDefault(); pasteClipboard(); return; }
+    }
     if (e.key==="Escape" && sel.size){ selectOnly(null); render(); return; }
     if ((e.key==="Delete"||e.key==="Backspace") && sel.size && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ deleteSelection(); }
   });
@@ -1764,6 +1774,7 @@
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
     else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
     else if (act==="pages"){ doc.shapes=[rect(30,30,80,50,0)]; addPage(); doc.shapes=[ellipse(90,90,40,30,1)]; addPage(); doc.shapes=[rect(20,20,40,40,2), ellipse(100,100,30,30,0)]; renderPageTabs(); render(); refreshCounts(); }
+    else if (act==="copypaste"){ doc.shapes=[rect(30,30,42,30,0), ellipse(55,45,12,10,1)]; sel=new Set([0,1]); selected=null; copySelection(); pasteClipboard(); pasteClipboard(); render(); refreshCounts(); }
     else if (act==="projround"){ doc.shapes=[rect(30,30,65,45,0), ellipse(110,95,25,20,1)]; stashPage();
       const out={ format:"lasercraft-project", version:1, pageIdx, pages: pages.map(pg=>({ name:pg.name, activeLayer:pg.activeLayer, view:pg.view, doc:pg.doc })) };
       const json=JSON.stringify(out,(k,v)=>(typeof k==="string"&&k.startsWith("_"))?undefined:v);
