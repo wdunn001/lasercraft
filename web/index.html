@@ -226,6 +226,7 @@
         <div data-act="import" data-i18n="action.import">Import SVG / DXF&hellip;</div>
         <div data-act="image" data-i18n="action.image">Import Image (dither)&hellip;</div>
         <div data-act="trace" data-i18n="action.trace">Trace Image (vector)&hellip;</div>
+        <div data-act="depth" data-i18n="action.depth">Depth Engrave (texture)&hellip;</div>
         <div data-act="export" data-i18n="action.export">Export GCode&hellip;</div>
         <div data-act="exportdxf" data-i18n="action.exportdxf">Export DXF&hellip;</div>
       </div>
@@ -610,6 +611,10 @@
             <option value="ordered">Ordered (Bayer)</option><option value="threshold">Threshold</option>
           </select>
         </div>
+        <div class="grid3" style="margin-top:14px">
+          <div class="f"><label data-i18n="prefs.depthlevels">Depth levels</label><input id="depthLevels" type="number" min="2" max="10" value="5" style="width:100%"></div>
+          <div class="f" style="grid-column:span 2"><label data-i18n="prefs.depthinvert">Depth direction</label><label class="mccap" style="padding-top:6px"><input type="checkbox" id="depthInvert" style="width:auto"> <span data-i18n="prefs.depthinvertlbl">Darker cuts deeper (invert)</span></label></div>
+        </div>
       </div>
       <div class="mfoot"><span class="spacer"></span><button class="btn" id="prefCancel" data-i18n="action.cancel">Close</button></div>
     </div>
@@ -633,6 +638,7 @@
   let curStart = "abs";                          // job start: absolute coords or current position
   let curOrigin = "FL";                          // which bed corner is machine zero
   let ditherMode = "floyd";                      // image dithering algorithm (set in Preferences)
+  let depthLevels = 5, depthInvert = false;      // depth-engrave bands and direction (Preferences)
   let curAxes = 2;                               // number of jog axes the machine exposes
   const SVGNS = "http://www.w3.org/2000/svg";
   const $ = id => document.getElementById(id);
@@ -2381,6 +2387,7 @@
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
     else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
+    else if (a==="depth"){ imgMode="depth"; $("imgFile").click(); }
     else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
     else if (a==="exportdxf"){ exportDxf(); }
     else if (a==="save"){ saveProject(); return; }
@@ -2398,6 +2405,8 @@
   $("addLayer").onclick = addLayer;
   $("prefClose").onclick = $("prefCancel").onclick = () => $("prefBg").classList.remove("show");
   $("dmSel") && ($("dmSel").value = ditherMode, $("dmSel").onchange = () => { ditherMode = $("dmSel").value; });
+  $("depthLevels") && ($("depthLevels").onchange = () => { depthLevels = +$("depthLevels").value || 5; });
+  $("depthInvert") && ($("depthInvert").onchange = () => { depthInvert = $("depthInvert").checked; });
   function moveShapeTo2(sh,dx,dy){ translateShape(sh,dx,dy); }
   // Tile the selection into a cols by rows grid. Gap is the mm space between copies.
   function arrayGrid(cols, rows, gapX, gapY){
@@ -2461,7 +2470,7 @@
     const f = ev.target.files[0]; if (!f) return;
     const mode = imgMode;
     const img = new Image();
-    img.onload = () => { try { if (mode==="trace") traceImage(img); else ditherImage(img); } catch(e){ console.error(e); } URL.revokeObjectURL(img.src); };
+    img.onload = () => { try { if (mode==="trace") traceImage(img); else if (mode==="depth") depthImage(img); else ditherImage(img); } catch(e){ console.error(e); } URL.revokeObjectURL(img.src); };
     img.src = URL.createObjectURL(f);
   };
   // Trace a bitmap into closed vector contours and lay them on the active layer,
@@ -2524,6 +2533,46 @@
       }
     }
     doc.shapes.push(...added); selectOnly(null); render(); refreshCounts();
+  }
+  // Depth / heat map engraving: image brightness drives cut depth. Lighter areas
+  // cut deeper. Brightness is banded into levels; each level becomes a layer whose
+  // pass count rises with depth, so the laser revisits lighter regions more often.
+  // Good for carving textures and relief, especially on metal with a fiber laser.
+  function depthImage(img){
+    const targetW = 140;
+    const w = targetW, h = Math.max(1, Math.round(img.height / img.width * targetW));
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d"); ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const N = Math.max(2, Math.min(10, depthLevels|0));
+    const bw = Math.min(BED.w * 0.8, 100), px = bw / w;
+    const bx = (BED.w - bw) / 2, by0 = (BED.h - h*px) / 2;
+    // One layer per depth band, pass count rising with depth. Darkest band (0) is
+    // left uncut.
+    const baseIdx = doc.layers.reduce((m,l)=>Math.max(m,l.index),-1) + 1;
+    const used = layerColorsInUse(null);
+    const bandLayer = [];
+    for (let d = 1; d <= N; d++){
+      const L = layer(baseIdx + d - 1, "Depth " + d, 300, Math.round(20 + 60*d/N), "Line");
+      L.num_passes = d; L.mode = "Line";
+      const free = PALETTE.find(c => !used.has(c.toLowerCase())); if (free){ L.color = free; used.add(free.toLowerCase()); }
+      doc.layers.push(L); bandLayer[d] = L.index;
+    }
+    const depthOf = (b) => { const v = depthInvert ? (255-b) : b; return Math.round(v/255 * N); };   // lighter = deeper
+    const added = [];
+    for (let y = 0; y < h; y++){
+      const yy = by0 + (h - 1 - y) * px;
+      let run = -1, runD = 0;
+      for (let x = 0; x <= w; x++){
+        const b = x < w ? (0.299*data[(y*w+x)*4] + 0.587*data[(y*w+x)*4+1] + 0.114*data[(y*w+x)*4+2]) : -1;
+        const d = x < w ? depthOf(b) : 0;
+        if (d !== runD){
+          if (runD > 0 && run >= 0) added.push({ kind:"Path", cut_index:bandLayer[runD], geometry:{ Polyline:{ points:[p(bx+run*px, yy), p(bx+x*px, yy)], closed:false } } });
+          run = x; runD = d;
+        }
+      }
+    }
+    doc.shapes.push(...added); activeLayer = doc.layers.length - 1; selectOnly(null); snapshot(); renderLayers(); render(); refreshCounts();
   }
   $("file").onchange = ev => {
     const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
@@ -2793,6 +2842,10 @@
   Object.assign(I18N.de, { "layer.taken":"belegt","layer.colortaken":"Eine andere Ebene nutzt diese Farbe bereits." });
   Object.assign(I18N.fr, { "layer.taken":"utilisée","layer.colortaken":"Un autre calque utilise déjà cette couleur." });
   Object.assign(I18N["pt-BR"], { "layer.taken":"em uso","layer.colortaken":"Outra camada já usa essa cor." });
+  Object.assign(I18N.es, { "action.depth":"Grabado en profundidad (textura)…","prefs.depthlevels":"Niveles de profundidad","prefs.depthinvert":"Dirección de profundidad","prefs.depthinvertlbl":"Lo más oscuro corta más profundo (invertir)" });
+  Object.assign(I18N.de, { "action.depth":"Tiefengravur (Textur)…","prefs.depthlevels":"Tiefenstufen","prefs.depthinvert":"Tiefenrichtung","prefs.depthinvertlbl":"Dunkler schneidet tiefer (umkehren)" });
+  Object.assign(I18N.fr, { "action.depth":"Gravure en profondeur (texture)…","prefs.depthlevels":"Niveaux de profondeur","prefs.depthinvert":"Sens de la profondeur","prefs.depthinvertlbl":"Le plus foncé coupe plus profond (inverser)" });
+  Object.assign(I18N["pt-BR"], { "action.depth":"Gravação em profundidade (textura)…","prefs.depthlevels":"Níveis de profundidade","prefs.depthinvert":"Direção da profundidade","prefs.depthinvertlbl":"Mais escuro corta mais fundo (inverter)" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -2872,6 +2925,7 @@
     else if (act==="cs"){ openCutSettings(2); }
     else if (act==="bezier"){ doc.shapes.push({ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:30,y:35}, segments:[{Cubic:{c1:{x:45,y:75},c2:{x:95,y:75},to:{x:115,y:35}}},{Cubic:{c1:{x:95,y:5},c2:{x:45,y:5},to:{x:30,y:35}}}], closed:true } } }); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="dither"){ const c=document.createElement("canvas"); c.width=220; c.height=150; const cx=c.getContext("2d"); const g=cx.createRadialGradient(110,75,8,110,75,100); g.addColorStop(0,"#fff"); g.addColorStop(1,"#000"); cx.fillStyle=g; cx.fillRect(0,0,220,150); const im=new Image(); im.onload=()=>ditherImage(im); im.src=c.toDataURL(); }
+    else if (act==="depth"){ const c=document.createElement("canvas"); c.width=220; c.height=150; const cx=c.getContext("2d"); const g=cx.createRadialGradient(110,75,8,110,75,100); g.addColorStop(0,"#fff"); g.addColorStop(1,"#000"); cx.fillStyle=g; cx.fillRect(0,0,220,150); const im=new Image(); im.onload=()=>depthImage(im); im.src=c.toDataURL(); }
     else if (act==="arraygrid"){ doc.shapes=[rect(15,15,24,16,0)]; selectOnly(0); arrayGrid(4,3,6,6); openArrange(); }
     else if (act==="arraycircular"){ doc.shapes=[rect(66,18,18,12,0)]; selectOnly(0); arrayCircular(9,30); openArrange(); }
     else if (act==="alignbed"){ doc.shapes=[rect(8,8,26,18,0)]; selectOnly(0); alignBed("center"); openArrange(); }
