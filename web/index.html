@@ -28,6 +28,11 @@
   select, input { font: inherit; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; }
   .btn { font: inherit; border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 7px; padding: 7px 13px; cursor: pointer; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.danger { border-color: #7a2b2b; color: #ff8d8d; }
+  .btn.danger:hover { background: #3a1e1e; }
+  .mccaps { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+  .mccap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .mccap input { width: auto; }
   .btn.ok { color: var(--ok); }
 
   /* workspace grid */
@@ -61,15 +66,24 @@
   .dock h3 .mini span { width: 22px; height: 22px; border: 1px solid var(--line); background: var(--field); border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; font-size: 12px; }
 
   /* layers */
-  .cols { display: grid; grid-template-columns: 46px 1fr 96px 34px 34px; padding: 5px 14px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+  .cols { display: grid; grid-template-columns: 46px 1fr 96px; padding: 5px 14px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
   .cols span:nth-child(n+4) { text-align: center; }
   .layers { overflow-y: auto; max-height: 190px; }
-  .row { display: grid; grid-template-columns: 46px 1fr 96px 34px 34px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); cursor: pointer; position: relative; }
+  .row { display: grid; grid-template-columns: 46px 1fr 96px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); cursor: pointer; position: relative; }
   .row.sel { background: #223046; }
   .row.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--sel); }
   .lyr { display: flex; align-items: center; gap: 8px; }
-  .lyr .sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(255,255,255,.15); }
+  .lyr .sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(255,255,255,.15); cursor: pointer; }
+  .lyr .sw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
   .lyr .n { font-weight: 600; }
+  .lyr-rename { font: inherit; font-weight: 600; width: 100%; background: var(--field); color: var(--ink); border: 1px solid var(--accent); border-radius: 5px; padding: 1px 5px; }
+  .colorpop { position: fixed; z-index: 60; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+  .cp-grid { display: grid; grid-template-columns: repeat(6, 22px); gap: 6px; }
+  .cp-sw { width: 22px; height: 22px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .cp-sw:hover { border-color: var(--ink); }
+  .cp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+  .cp-custom { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .cp-custom input[type=color] { width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; }
   .badge { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); justify-self: start; }
   .badge.line { color: #7fd1ff; background: #16222e; }
   .badge.fill { color: #ffb27f; background: #2a2016; }
@@ -84,7 +98,9 @@
   .out .devrow { display: flex; gap: 8px; }
   .out .devrow select { flex: 1; }
   .out .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .gcode { flex: 1; min-height: 80px; overflow: auto; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .gcode { position: relative; flex: 1; min-height: 80px; overflow: auto; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .gchdr { position: sticky; top: -10px; margin: -10px -10px 6px; padding: 6px 8px; display: flex; justify-content: flex-end; background: var(--field); border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; }
+  .btn.sm { padding: 3px 10px; font-size: 11px; }
   .gcode pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; line-height: 1.5; color: #cdd3e0; white-space: pre; }
   .stat { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); }
   .stat b { color: var(--ink); }
@@ -138,7 +154,7 @@
   .toolbar .tgrp { display: flex; align-items: center; gap: 8px; }
   .toolbar .tplabel { color: var(--muted); font-size: 12px; }
   .dropdown .sep { height: 1px; background: var(--line); margin: 4px 2px; }
-  .lyr-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 8px; }
+  .lyr-head { display: flex; align-items: center; justify-content: flex-end; padding: 2px 2px 6px; }
   .lyr-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   .iconbtn { background: transparent; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
   .iconbtn:hover { background: var(--panel2); border-color: var(--accent); }
@@ -224,7 +240,6 @@
       <div id="designPane" class="dpane">
       <div class="section">
         <div class="lyr-head">
-          <span class="lyr-title" data-i18n="panel.layers">Layers</span>
           <button class="iconbtn" id="addLayer" title="Add layer" data-i18n-t="layer.add">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M12 11v6"/><path d="M9 14h6"/></svg>
           </button>
@@ -237,17 +252,7 @@
       <div class="section" style="flex:1">
         <h3 data-i18n="panel.laser">Laser</h3>
         <div class="out">
-          <div class="devrow"><select id="machine" title="Machine" style="flex:1"></select></div>
-          <div class="devrow">
-            <select id="flavor" style="flex:1">
-              <option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option>
-              <option value="grbl-lpc">GRBL-LPC</option><option value="marlin">Marlin</option>
-              <option value="smoothie">Smoothie</option><option value="reprap">RepRapFirmware</option>
-              <option value="linuxcnc">LinuxCNC</option>
-              <option value="galvo">EZCAD2 / JCZFiber (galvo)</option>
-            </select>
-            <button class="btn" id="copyBtn" data-i18n="action.copy">Copy</button>
-          </div>
+          <div class="devrow"><select id="machine" title="Machine" style="flex:1"></select><button class="btn" id="editMachine" title="Edit machine" data-i18n-t="mc.edit"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button></div>
           <div class="devrow" id="galvoRow" style="display:none">
             <button class="btn" id="connectBtn" style="flex:1" data-i18n="galvo.connect">Connect galvo (WebUSB)</button>
             <button class="btn" id="sendBtn" disabled data-i18n="galvo.send">Send</button>
@@ -255,7 +260,7 @@
           <div class="stat" id="devstat" style="display:none" data-i18n="galvo.notconnected">Galvo not connected. Plug in the board and click Connect.</div>
           <div class="devrow"><button class="btn" id="frameBtn" style="flex:1" data-i18n="action.frame">Frame</button><button class="btn primary" id="genBtn" style="flex:1" data-i18n="action.generate">Generate</button></div>
           <button class="btn" id="matBtn" style="width:100%" data-i18n="mat.open">Material Library&hellip;</button>
-          <div class="gcode"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
+          <div class="gcode"><div class="gchdr"><button class="btn sm" id="copyBtn" data-i18n="action.copy">Copy</button></div><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
           <div class="stat"><span><span data-i18n="stat.lines">Lines</span> <b id="lineCount">0</b></span><span><span data-i18n="stat.shapes">Shapes</span> <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
       </div>
@@ -346,13 +351,19 @@
   <!-- add machine -->
   <div class="modal-bg" id="mcBg">
     <div class="modal" style="width:440px">
-      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="mc.add">Add machine</h2><span class="spacer"></span><span class="btn" id="mcClose">&times;</span></div>
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 id="mcTitle" data-i18n="mc.add">Add machine</h2><span class="spacer"></span><span class="btn" id="mcClose">&times;</span></div>
       <div class="mbody">
         <div class="f"><label data-i18n="mc.name">Name</label><input id="mc_name" style="width:100%" placeholder="My laser"></div>
-        <div class="f" style="margin-top:12px"><label data-i18n="mc.ctrl">Controller</label><select id="mc_ctrl" style="width:100%"><option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option><option value="marlin">Marlin</option><option value="smoothie">Smoothie</option><option value="galvo">EZCAD2 / JCZFiber (galvo)</option></select></div>
+        <div class="f" style="margin-top:12px"><label data-i18n="mc.ctrl">Controller</label><select id="mc_ctrl" style="width:100%"><option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option><option value="grbl-lpc">GRBL-LPC</option><option value="marlin">Marlin</option><option value="smoothie">Smoothie</option><option value="reprap">RepRapFirmware</option><option value="linuxcnc">LinuxCNC</option><option value="galvo">EZCAD2 / JCZFiber (galvo)</option></select></div>
         <div class="grid3" style="margin-top:12px"><div class="f"><label data-i18n="mc.w">Width mm</label><input id="mc_w" type="number" value="400" style="width:100%"></div><div class="f"><label data-i18n="mc.h">Height mm</label><input id="mc_h" type="number" value="400" style="width:100%"></div><div></div></div>
+        <div class="f" style="margin-top:12px"><label data-i18n="mc.features">Features</label>
+          <div class="mccaps">
+            <label class="mccap"><input type="checkbox" id="mc_frame" checked> <span data-i18n="mc.cap.frame">Frame (traverse outline)</span></label>
+            <label class="mccap"><input type="checkbox" id="mc_air" checked> <span data-i18n="mc.cap.air">Air assist</span></label>
+          </div>
+        </div>
       </div>
-      <div class="mfoot"><span class="spacer"></span><button class="btn" id="mcCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="mcOk" data-i18n="mc.save">Add</button></div>
+      <div class="mfoot"><button class="btn danger" id="mcDelete" style="display:none" data-i18n="mc.delete">Delete</button><span class="spacer"></span><button class="btn" id="mcCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="mcOk" data-i18n="mc.save">Add</button></div>
     </div>
   </div>
 
@@ -408,7 +419,13 @@
   fetch("text-sans.ttf").then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b){ FONT_BYTES = new Uint8Array(b); if (typeof render === "function") render(); } }).catch(() => {});
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
+  // A layer draws in its own stored color when it has one, else the palette slot
+  // for its index. Shapes paint in the color of the layer whose index they carry.
+  function layerColor(L){ return (L && L.color) || PALETTE[((L ? L.index : 0) % PALETTE.length + PALETTE.length) % PALETTE.length]; }
+  function layerByIndex(ix){ return (typeof doc === "object" && doc.layers) ? (doc.layers.find(L => L.index === ix) || doc.layers[0]) : null; }
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
+  let curFlavor = "grbl";                        // controller dialect, set by the machine
+  let curAir = true;                             // machine has a controllable air assist
   const SVGNS = "http://www.w3.org/2000/svg";
   const $ = id => document.getElementById(id);
 
@@ -587,7 +604,7 @@
     s += `<circle cx="${o.x}" cy="${o.y}" r="4" fill="#28c08a"/>`;
     // shapes
     doc.shapes.forEach((sh, i) => {
-      const col = PALETTE[(sh.cut_index)%PALETTE.length];
+      const col = layerColor(layerByIndex(sh.cut_index));
       const dd = shapeD(sh);
       if (!dd) return;
       const isSel = sel.has(i);
@@ -878,7 +895,7 @@
       else moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y);
       render(); return;
     }
-    if (tool==="rect" || tool==="ellipse"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=PALETTE[activeLayer%PALETTE.length];
+    if (tool==="rect" || tool==="ellipse"){ const a=mm2px(p(Math.min(start.x,m.x),Math.max(start.y,m.y))); const b=mm2px(p(Math.max(start.x,m.x),Math.min(start.y,m.y))); const col=layerColor(doc.layers[activeLayer]);
       drawing = tool==="rect" ? `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`
         : `<ellipse cx="${(a.x+b.x)/2}" cy="${(a.y+b.y)/2}" rx="${Math.abs(b.x-a.x)/2}" ry="${Math.abs(b.y-a.y)/2}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>`;
       render(); }
@@ -922,7 +939,7 @@
     if (!sel.has(hit)) selectOnly(hit);
     render();
     const n = sel.size;
-    const layerItems = doc.layers.map(L=>`<div class="mi" data-setlayer="${L.index}"><span class="swatch" style="background:${PALETTE[L.index%PALETTE.length]}"></span>${L.name}</div>`).join("");
+    const layerItems = doc.layers.map(L=>`<div class="mi" data-setlayer="${L.index}"><span class="swatch" style="background:${layerColor(L)}"></span>${L.name}</div>`).join("");
     const head = n > 1 ? `<div class="mi" style="color:var(--muted);pointer-events:none">${n} selected</div><div class="sep"></div>` : "";
     ctx.innerHTML = head
       + `<div class="mi has-sub"><span class="caret">&#9656;</span><span data-i18n="ctx.changelayer">Change layer</span><div class="sub">${layerItems}</div></div>`
@@ -949,14 +966,19 @@
   function renderLayers(){
     const host=$("layers"); host.innerHTML="";
     doc.layers.forEach((L,i)=>{
-      const col=PALETTE[L.index%PALETTE.length];
+      const col=layerColor(L);
       const cls = L.mode==="Fill"?"fill":(L.mode==="Image"?"img":"line");
       const el=document.createElement("div"); el.className="row"+(i===activeLayer?" sel":"");
-      el.innerHTML=`<div class="lyr"><span class="sw" style="background:${col}"></span><span class="n">${L.name}</span></div>`
+      el.innerHTML=`<div class="lyr"><span class="sw" title="${tr("layer.pickcolor","Pick layer color")}" style="background:${col}"></span><span class="n">${L.name}</span></div>`
         +`<span class="badge ${cls}">${trMode(L.mode)}</span>`
-        +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`
-        +`<span class="sw-toggle"></span><span class="sw-toggle"></span>`;
-      el.onclick=()=>{ activeLayer=i; renderLayers(); };
+        +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`;
+      // Click a row: make it active, and select its shapes on the canvas so the
+      // selection and the layer stay in step.
+      el.onclick=(ev)=>{ if (ev.target.closest(".sw")) return; activeLayer=i; selectLayerShapes(L.index); renderLayers(); render(); };
+      // Double-click the name to rename in place.
+      el.querySelector(".n").ondblclick=(ev)=>{ ev.stopPropagation(); beginRenameLayer(el, i); };
+      // Click the swatch to open the color palette for this layer.
+      el.querySelector(".sw").onclick=(ev)=>{ ev.stopPropagation(); openColorPicker(ev.currentTarget, L); };
       host.appendChild(el);
     });
     $("shapeCount").textContent=doc.shapes.length;
@@ -965,6 +987,47 @@
   // renderPalette is retired with the bottom palette bar; kept as a no-op so the
   // many existing call sites stay valid.
   function renderPalette(){}
+  // Select every shape that sits on one layer, so clicking the layer lights up its
+  // work in the canvas.
+  function selectLayerShapes(layerIndex){
+    const idx = []; doc.shapes.forEach((sh,i)=>{ if (sh.cut_index===layerIndex) idx.push(i); });
+    sel = new Set(idx); selected = idx.length===1 ? idx[0] : (idx.length ? idx[0] : null);
+    activeNode = null;
+  }
+  // Inline rename: swap the name label for an input, commit on Enter or blur.
+  function beginRenameLayer(rowEl, i){
+    const span = rowEl.querySelector(".n"); if (!span) return;
+    const inp = document.createElement("input"); inp.className="lyr-rename"; inp.value = doc.layers[i].name;
+    span.replaceWith(inp); inp.focus(); inp.select();
+    let done = false;
+    const commit = (save)=>{ if (done) return; done=true; if (save){ const v=inp.value.trim(); if (v) doc.layers[i].name=v; } renderLayers(); generate(); };
+    inp.onkeydown = (e)=>{ if (e.key==="Enter"){ e.preventDefault(); commit(true); } else if (e.key==="Escape"){ e.preventDefault(); commit(false); } };
+    inp.onblur = ()=>commit(true);
+    inp.onclick = (e)=>e.stopPropagation();
+  }
+  // Floating palette for choosing a layer colour. Offers the preset swatches plus a
+  // native picker for any custom colour; "reset" drops back to the palette default.
+  function openColorPicker(anchor, L){
+    closeColorPicker();
+    const pop = document.createElement("div"); pop.className="colorpop"; pop.id="colorpop";
+    const sw = PALETTE.map(c=>`<button class="cp-sw" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("");
+    pop.innerHTML = `<div class="cp-grid">${sw}</div>`
+      + `<div class="cp-row"><label class="cp-custom"><input type="color" id="cp_custom" value="${layerColor(L)}"><span data-i18n="layer.custom">Custom…</span></label>`
+      + `<button class="btn sm" id="cp_reset" data-i18n="layer.resetcolor">Default</button></div>`;
+    document.body.appendChild(pop);
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = Math.min(r.left, innerWidth - pop.offsetWidth - 8) + "px";
+    pop.style.top = (r.bottom + 6) + "px";
+    const apply = (c)=>{ if (c) L.color = c; else delete L.color; closeColorPicker(); renderLayers(); render(); generate(); };
+    pop.querySelectorAll(".cp-sw").forEach(b=>b.onclick=()=>apply(b.dataset.c));
+    pop.querySelector("#cp_custom").oninput = (e)=>{ L.color = e.target.value; renderLayers(); render(); };
+    pop.querySelector("#cp_custom").onchange = (e)=>apply(e.target.value);
+    pop.querySelector("#cp_reset").onclick = ()=>apply(null);
+    localizeIn(pop);
+    setTimeout(()=>document.addEventListener("mousedown", colorPickerAway), 0);
+  }
+  function colorPickerAway(e){ const pop=$("colorpop"); if (pop && !pop.contains(e.target)) closeColorPicker(); }
+  function closeColorPicker(){ const pop=$("colorpop"); if (pop) pop.remove(); document.removeEventListener("mousedown", colorPickerAway); }
   // Inline editor for the active layer, so laser options are adjustable in place.
   const LP_MODES=[["Line","outline"],["Fill","hatch"],["Concentric","offset"],["Image","bitmap"]];
   function renderLayerProps(){
@@ -980,7 +1043,7 @@
       + `<div class="f2"><label data-i18n="lp.passes">Passes</label><input id="lp_passes" type="number" min="1" value="${L.num_passes}"></div>`
       + ((L.mode==="Fill"||L.mode==="Concentric")?`<div class="f2"><label data-i18n="lp.interval">Line interval mm</label><input id="lp_interval" type="number" step="0.05" min="0.01" value="${L.interval}"></div><div class="f2"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="lp_angle" type="number" value="${L.angle}"></div>`:"")
       + (galvo?`<div class="f2"><label data-i18n="lp.freq">Frequency kHz</label><input id="lp_freq" type="number" value="${L.freq}"></div><div class="f2"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="lp_qpulse" type="number" value="${L.qpulse}"></div>`:"")
-      + `<div class="f2 full"><label><input type="checkbox" id="lp_air" style="width:auto" ${L.air_assist?"checked":""}> <span data-i18n="lp.air">Air assist</span></label></div>`;
+      + (curAir?`<div class="f2 full"><label><input type="checkbox" id="lp_air" style="width:auto" ${L.air_assist?"checked":""}> <span data-i18n="lp.air">Air assist</span></label></div>`:"");
     localizeIn(host);
     const commit=()=>{ render(); generate(); renderLayers(); };
     $("lp_seg").querySelectorAll("button").forEach(b=>b.onclick=()=>{ L.mode=b.dataset.m; snapshot(); commit(); });
@@ -1094,26 +1157,51 @@
   }
   function applyMachine(mc){
     BED = { w: mc.w, h: mc.h };
-    $("flavor").value = mc.ctrl;
+    curFlavor = mc.ctrl;
+    curAir = mc.air !== false;
     const g = mc.ctrl === "galvo";
     $("galvoRow").style.display = g ? "flex" : "none";
     $("devstat").style.display = g ? "flex" : "none";
-    // Frame is a machine feature. Show it only when the profile keeps it (default
-    // on). A machine with no traverse-framing sets supportsFrame:false.
-    const fb = $("frameBtn"); if (fb) fb.parentElement.style.display = (mc.supportsFrame === false) ? "none" : "flex";
+    // Frame is a machine feature. Show the button only when the profile keeps it
+    // (default on). Hide only the button, never its row-mate Generate.
+    const fb = $("frameBtn"); if (fb) fb.style.display = (mc.frame === false) ? "none" : "";
     fit(); layout(); generate();
   }
+  const BUILTIN_COUNT = BUILTIN_MACHINES.length;
+  let mcEditIdx = null;                            // machine being edited, null when adding
+  function openMachineDialog(idx){
+    mcEditIdx = (idx != null && allMachines()[idx]) ? idx : null;
+    const editing = mcEditIdx != null;
+    const mc = editing ? allMachines()[mcEditIdx] : { name:"", ctrl:"grbl", w:400, h:400, frame:true, air:true };
+    $("mc_name").value = mc.name; $("mc_ctrl").value = mc.ctrl; $("mc_w").value = mc.w; $("mc_h").value = mc.h;
+    $("mc_frame").checked = mc.frame !== false; $("mc_air").checked = mc.air !== false;
+    $("mcTitle").textContent = tr(editing ? "mc.edit" : "mc.add", editing ? "Edit machine" : "Add machine");
+    $("mcOk").textContent = editing ? tr("mc.update", "Save") : tr("mc.save", "Add");
+    // Delete is offered for custom machines only; built-ins are read-only presets.
+    $("mcDelete").style.display = (editing && mcEditIdx >= BUILTIN_COUNT) ? "" : "none";
+    $("mcBg").classList.add("show");
+  }
   $("machine").onchange = () => {
-    if ($("machine").value === "add"){ populateMachines("0"); $("mcBg").classList.add("show"); return; }
+    if ($("machine").value === "add"){ openMachineDialog(null); return; }
     const mc = allMachines()[+$("machine").value]; if (mc) applyMachine(mc);
   };
+  $("editMachine").onclick = () => openMachineDialog(+$("machine").value || 0);
   $("mcOk").onclick = () => {
-    const mc = { name: $("mc_name").value || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400 };
-    const custom = customMachines(); custom.push(mc);
+    const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked };
+    const custom = customMachines();
+    let selIdx;
+    if (mcEditIdx != null && mcEditIdx >= BUILTIN_COUNT){ custom[mcEditIdx - BUILTIN_COUNT] = mc; selIdx = mcEditIdx; }
+    else { custom.push(mc); selIdx = BUILTIN_COUNT + custom.length - 1; }   // add, or save a built-in edit as a new custom
     try { localStorage.setItem("lc_machines", JSON.stringify(custom)); } catch(e){}
-    $("mcBg").classList.remove("show"); populateMachines(String(allMachines().length - 1)); applyMachine(mc);
+    $("mcBg").classList.remove("show"); populateMachines(String(selIdx)); applyMachine(allMachines()[selIdx]);
   };
-  $("mcClose").onclick = $("mcCancel").onclick = () => { $("mcBg").classList.remove("show"); populateMachines("0"); };
+  $("mcDelete").onclick = () => {
+    if (mcEditIdx == null || mcEditIdx < BUILTIN_COUNT) return;
+    const custom = customMachines(); custom.splice(mcEditIdx - BUILTIN_COUNT, 1);
+    try { localStorage.setItem("lc_machines", JSON.stringify(custom)); } catch(e){}
+    $("mcBg").classList.remove("show"); populateMachines("0"); applyMachine(allMachines()[0]);
+  };
+  $("mcClose").onclick = $("mcCancel").onclick = () => { $("mcBg").classList.remove("show"); populateMachines(String(+$("machine").value || 0)); };
   populateMachines("0");
 
   // ---- export to engine project JSON ----
@@ -1162,7 +1250,7 @@
           `;\n; Connect the board over WebUSB (button above) and Send to write it.\n`;
         $("lineCount").textContent = bytes.length/12;
       } else {
-        const g = generate_gcode(pj, MOTION, $("flavor").value);
+        const g = generate_gcode(pj, MOTION, curFlavor);
         $("gcode").textContent = g;
         $("lineCount").textContent = g.split("\n").length;
       }
@@ -1305,12 +1393,11 @@
   $("textFont").addEventListener("change", () => { const t = selText(); if (t){ t.font = $("textFont").value; t._sig = null; render(); generate(); } });
 
   $("genBtn").onclick = generate;
-  $("frameBtn").onclick = () => { if(!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":$("flavor").value); } catch(e){ $("gcode").textContent=String(e); } };
-  $("flavor").onchange = () => { const g=isGalvo(); $("galvoRow").style.display=g?"flex":"none"; $("devstat").style.display=g?"flex":"none"; generate(); };
+  $("frameBtn").onclick = () => { if(!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":curFlavor); } catch(e){ $("gcode").textContent=String(e); } };
   $("copyBtn").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("gcode").textContent);
 
   // ---- galvo output + real WebUSB connection ----
-  function isGalvo(){ return $("flavor").value==="galvo"; }
+  function isGalvo(){ return curFlavor==="galvo"; }
   function galvoBytes(){ return generate_galvo_lmc(JSON.stringify(toProject()), 110, 16, 30, 100, 2048); }
   function hex(a){ return Array.from(a).map(b=>b.toString(16).padStart(2,"0")).join(" "); }
 
@@ -1683,7 +1770,7 @@
   }
   async function jogHome(){ jogPos = { x:0x8000, y:0x8000 }; updatePos(); if (USB.dev){ try { await ctl(GotoXY, 0x8000, 0x8000, 0, 0); } catch(e){} } }
   $("jogHome").onclick = jogHome;
-  $("jogFrame").onclick = () => { if (!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":$("flavor").value); } catch(e){} };
+  $("jogFrame").onclick = () => { if (!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":curFlavor); } catch(e){} };
   $("jogOrigin").onclick = () => { jogPos = { x:0x8000, y:0x8000 }; updatePos(); $("moveStat").textContent = "Origin set at the current position."; };
   $("jogFire").onclick = async () => { if (!USB.dev){ $("moveStat").textContent = "Connect the galvo to fire the pointer."; return; } try { await ctl(LaserSignalOn); setTimeout(async () => { try { await ctl(LaserSignalOff); } catch(e){} }, 300); $("moveStat").textContent = "Fired the red pointer briefly."; } catch(e){ $("moveStat").textContent = "Fire failed: " + e.message; } };
   buildJog(); updatePos();
@@ -1737,6 +1824,10 @@
   Object.assign(I18N.de, { "panel.layers":"Ebenen","action.copy":"Kopieren","stat.lines":"Linien","stat.shapes":"Formen","galvo.notconnected":"Galvo nicht verbunden. Platine anschließen und auf Verbinden klicken." });
   Object.assign(I18N.fr, { "panel.layers":"Calques","action.copy":"Copier","stat.lines":"Lignes","stat.shapes":"Formes","galvo.notconnected":"Galvo non connecté. Branchez la carte et cliquez sur Connecter." });
   Object.assign(I18N["pt-BR"], { "panel.layers":"Camadas","action.copy":"Copiar","stat.lines":"Linhas","stat.shapes":"Formas","galvo.notconnected":"Galvo não conectado. Conecte a placa e clique em Conectar." });
+  Object.assign(I18N.es, { "mc.edit":"Editar máquina","mc.update":"Guardar","mc.delete":"Eliminar","mc.features":"Funciones","mc.cap.frame":"Marco (recorrido del contorno)","mc.cap.air":"Asistencia de aire","layer.pickcolor":"Elegir color de capa","layer.custom":"Personalizado…","layer.resetcolor":"Predeterminado" });
+  Object.assign(I18N.de, { "mc.edit":"Maschine bearbeiten","mc.update":"Speichern","mc.delete":"Löschen","mc.features":"Funktionen","mc.cap.frame":"Rahmen (Umriss abfahren)","mc.cap.air":"Luftunterstützung","layer.pickcolor":"Ebenenfarbe wählen","layer.custom":"Benutzerdefiniert…","layer.resetcolor":"Standard" });
+  Object.assign(I18N.fr, { "mc.edit":"Modifier la machine","mc.update":"Enregistrer","mc.delete":"Supprimer","mc.features":"Fonctions","mc.cap.frame":"Cadre (parcours du contour)","mc.cap.air":"Assistance d'air","layer.pickcolor":"Choisir la couleur du calque","layer.custom":"Personnalisé…","layer.resetcolor":"Par défaut" });
+  Object.assign(I18N["pt-BR"], { "mc.edit":"Editar máquina","mc.update":"Salvar","mc.delete":"Excluir","mc.features":"Recursos","mc.cap.frame":"Moldura (percorrer contorno)","mc.cap.air":"Assistência de ar","layer.pickcolor":"Escolher cor da camada","layer.custom":"Personalizado…","layer.resetcolor":"Padrão" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -1766,6 +1857,7 @@
     const t = I18N[curLang] || {}, en = I18N.en || {};
     root.querySelectorAll("[data-i18n]").forEach(el => { const k = el.dataset.i18n; el.textContent = t[k] !== undefined ? t[k] : (en[k] || el.textContent); });
     root.querySelectorAll("[data-i18n-ph]").forEach(el => { const k = el.dataset.i18nPh; el.placeholder = t[k] !== undefined ? t[k] : (en[k] || el.placeholder); });
+    root.querySelectorAll("[data-i18n-t]").forEach(el => { const k = el.dataset.i18nT; const v = t[k] !== undefined ? t[k] : en[k]; if (v) el.title = v; });
   }
   function applyLang(lang){
     curLang = lang;
