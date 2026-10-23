@@ -153,6 +153,18 @@ impl GCodeDialect {
         }
     }
 
+    /// RepRapFirmware (Duet), `M3`/`M5` with `S` scaled to 255. Laser mode is set
+    /// by `M452`, whose `R` parameter is the maximum laser value and defaults to
+    /// 255, so `S` runs 0 to 255 unless the firmware config raises it. A machine
+    /// whose configured maximum differs sets its own scale in the device profile.
+    pub fn reprap() -> Self {
+        Self {
+            flavor: Flavor::RepRap,
+            laser_mode: "M3 S0",
+            power: PowerStyle::IntScale(255),
+        }
+    }
+
     /// LinuxCNC, `M3`/`M5` with `S` scaled to 1000, LightBurn's default S-value
     /// maximum for this controller. A machine whose configured maximum differs
     /// sets its own scale in the device profile.
@@ -277,5 +289,13 @@ mod tests {
         assert_eq!(smoothie.flavor(), Flavor::Smoothie);
         // Smoothieware power is a 0.0 to 1.0 fraction.
         assert_eq!(smoothie.emit(&cut_50()), "G1 X10.000 Y5.000 F1200 S0.500");
+    }
+
+    #[test]
+    fn reprap_scales_power_to_the_m452_default() {
+        let reprap = GCodeDialect::reprap();
+        assert_eq!(reprap.flavor(), Flavor::RepRap);
+        // 50 percent of the M452 default 255 range is S128.
+        assert_eq!(reprap.emit(&cut_50()), "G1 X10.000 Y5.000 F1200 S128");
     }
 }
