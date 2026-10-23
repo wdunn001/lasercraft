@@ -10,7 +10,7 @@ because every item ships at once.
 
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
-| 1 | New / Open / Save / Import / Export, project files | Done | Native .lcproj; SVG/DXF/image import; GCode/DXF export. LightBurn .lbrn import is a Gap. |
+| 1 | New / Open / Save / Import / Export, project files | Done | Native .lcproj; SVG/DXF/image/.lbrn import; GCode/DXF export. .lbrn import composes group transforms and maps cut modes. |
 | 2 | Draw lines + shape tools (rect, ellipse, polygon, star) | Done | rect, rounded rect, ellipse, regular N-gon, freeform poly, star, slot, line, pen, text. |
 | 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
 | 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
@@ -47,7 +47,7 @@ because every item ships at once.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
 - Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI) Done; bidirectional, overscan, fill grouping, flood fill: Gap (engine work).
 - Image/art: trace + dither import Done; adjust image, dither-mode picker, mask, convert-to-bitmap, 3D depth map: Gap.
-- Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); console, macros, file list, bridge: Gap.
+- Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position, GRBL console Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); macros, file list, bridge: Gap.
 - Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
 
 ## Beyond LightBurn
