@@ -83,11 +83,10 @@
   /* Left tool strip: collapsible, colour-coded groups. */
   .toolgrp { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden; max-height: 600px; opacity: 1; transition: max-height .24s ease-in-out, opacity .18s ease-in-out; }
   .toolgrp.collapsed { max-height: 0; opacity: 0; margin: 0; }
-  .toolhdr { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding: 3px 0; }
-  .toolhdr .tsw { width: 22px; height: 5px; border-radius: 3px; opacity: .9; }
-  .toolhdr .tsw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .toolhdr .tchev { font-size: 8px; color: var(--muted); line-height: 1; transition: transform .22s ease-in-out; }
-  .toolhdr.collapsed .tchev { transform: rotate(-90deg); }
+  .toolhdr { display: flex; justify-content: center; cursor: pointer; padding: 4px 0; width: 100%; }
+  .toolhdr .tsw { width: 24px; height: 4px; border-radius: 2px; opacity: .85; transition: width .2s ease, opacity .2s ease; }
+  .toolhdr:hover .tsw { opacity: 1; width: 30px; }
+  .toolhdr.collapsed .tsw { width: 12px; opacity: .5; }
   .dock h3 { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); padding: 11px 14px 7px; display: flex; align-items: center; }
   .dock h3 .mini { margin-left: auto; display: flex; gap: 4px; }
   .dock h3 .mini span { width: 22px; height: 22px; border: 1px solid var(--line); background: var(--field); border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; font-size: 12px; }
@@ -261,6 +260,7 @@
     <input type="file" id="imgFile" accept="image/*" class="hidden" />
     <input type="file" id="projFile" accept=".lcproj,.json" class="hidden" />
     <input type="file" id="mergeFile" accept=".csv" class="hidden" />
+    <input type="file" id="fontFile" accept=".ttf,.otf,.ttc" class="hidden" />
   </div>
 
   <!-- tool properties bar: context controls for the active tool -->
@@ -269,7 +269,7 @@
       <span class="tplabel" data-i18n="text.add">Add Text</span>
       <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:200px" />
       <input id="textH" type="number" value="8" step="1" title="height mm" style="width:58px" />
-      <select id="textFont" title="Font"><option value="mark">Mark (single-stroke)</option><option value="sans">Sans (filled)</option></select>
+      <select id="textFont" title="Font"><option value="mark" data-i18n="font.mark">Mark (single-stroke)</option><option value="sans" data-i18n="font.sans">Sans (filled)</option><option value="__load" data-i18n="font.load">Load font&hellip;</option></select>
       <select id="textAlign" title="Alignment"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
       <button class="btn" id="addText" data-i18n="text.place">Place</button>
     </span>
@@ -726,7 +726,12 @@
 
   // Filled-text font, loaded once from a served asset so the wasm stays small.
   let FONT_BYTES = null;
+  // User-loaded outline fonts, keyed by the name shown in the font menu. The bytes
+  // feed the skrifa outliner, so any TrueType or OpenType font becomes real paths.
+  const LOADED_FONTS = {};
   fetch("text-sans.ttf").then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b){ FONT_BYTES = new Uint8Array(b); if (typeof render === "function") render(); } }).catch(() => {});
+  // Bytes for a given font key: the built-in sans, a loaded font, or none (mark).
+  function fontBytesFor(name){ return name === "sans" ? FONT_BYTES : (LOADED_FONTS[name] || null); }
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39",
                    "#d22","#1a5","#06c","#da0","#92e","#088","#c50","#5a0","#a33","#36a","#6a0","#a07",
@@ -1008,8 +1013,9 @@
   TOOL_GROUPS.forEach((g, gi) => { if (toolGroupPrefs["c"+gi]) g.color = toolGroupPrefs["c"+gi]; });
   function saveToolGroups(){ const o = {}; TOOL_GROUPS.forEach((g, gi) => { o["c"+gi] = g.color; o["x"+gi] = document.querySelector(`.toolgrp[data-group="${gi}"]`).classList.contains("collapsed"); }); try { localStorage.setItem("lc_toolgroups", JSON.stringify(o)); } catch(e){} }
   TOOL_GROUPS.forEach((g, gi) => {
-    const hdr = document.createElement("div"); hdr.className = "toolhdr"; hdr.dataset.group = gi; hdr.title = g.name;
-    hdr.innerHTML = `<span class="tsw" style="background:${g.color}"></span><span class="tchev">&#9662;</span>`;
+    // The colour-coded divider is the collapse toggle for its group.
+    const hdr = document.createElement("div"); hdr.className = "toolhdr"; hdr.dataset.group = gi; hdr.title = g.name + " (collapse)";
+    hdr.innerHTML = `<span class="tsw" style="background:${g.color}"></span>`;
     const wrap = document.createElement("div"); wrap.className = "toolgrp"; wrap.dataset.group = gi;
     for (const [name, d] of g.tools){
       const el = document.createElement("div");
@@ -1021,29 +1027,10 @@
       el.onclick = () => { if (name==="image"){ $("imgFile").click(); return; } setTool(name); };
       wrap.appendChild(el);
     }
-    // Clicking the colour swatch opens the picker; clicking elsewhere collapses.
-    hdr.querySelector(".tsw").onclick = (e) => { e.stopPropagation(); openToolGroupColor(e.currentTarget, gi); };
     hdr.onclick = () => { const col = wrap.classList.toggle("collapsed"); hdr.classList.toggle("collapsed", col); saveToolGroups(); };
     toolsEl.appendChild(hdr); toolsEl.appendChild(wrap);
     if (toolGroupPrefs["x"+gi]){ wrap.classList.add("collapsed"); hdr.classList.add("collapsed"); }
   });
-  // Recolour a whole tool group from the shared palette.
-  function openToolGroupColor(anchor, gi){
-    closeColorPicker();
-    const g = TOOL_GROUPS[gi];
-    const sw = PALETTE.map(c => `<button class="cp-sw" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("");
-    const pop = document.createElement("div"); pop.className = "colorpop"; pop.id = "colorpop";
-    pop.innerHTML = `<div class="cp-grid">${sw}</div><div class="cp-row"><label class="cp-custom"><input type="color" id="cp_gcustom" value="${g.color}"><span data-i18n="layer.custom">Custom…</span></label></div>`;
-    document.body.appendChild(pop);
-    const r = anchor.getBoundingClientRect();
-    pop.style.left = Math.min(r.right + 6, innerWidth - pop.offsetWidth - 8) + "px";
-    pop.style.top = Math.min(r.top, innerHeight - pop.offsetHeight - 8) + "px";
-    const apply = (c) => { g.color = c; document.querySelector(`.toolhdr[data-group="${gi}"] .tsw`).style.background = c; if (TOOL_GROUPS[gi].tools.some(t => t[0] === tool)){ const el = document.querySelector(`.tool[data-group="${gi}"].active`); if (el){ el.style.background = c; el.style.borderColor = c; } } saveToolGroups(); closeColorPicker(); };
-    pop.querySelectorAll(".cp-sw").forEach(b => b.onclick = () => apply(b.dataset.c));
-    pop.querySelector("#cp_gcustom").onchange = (e) => apply(e.target.value);
-    localizeIn(pop);
-    setTimeout(() => document.addEventListener("mousedown", colorPickerAway), 0);
-  }
 
   // ---- canvas ----
   const canvas = $("canvas");
@@ -1129,11 +1116,12 @@
   function textPolys(t){
     if (!ready) return [];
     const font = t.font || "mark";
+    const bytes = font === "mark" ? null : fontBytesFor(font);
     const gap = (t.gap != null ? t.gap : (t.h||8) * 0.28);
-    const sig = (t.s||"")+"|"+(t.h||8)+"|"+gap+"|"+(t.align||"left")+"|"+font+"|"+(FONT_BYTES?"1":"0");
+    const sig = (t.s||"")+"|"+(t.h||8)+"|"+gap+"|"+(t.align||"left")+"|"+font+"|"+(bytes?"1":"0");
     if (t._sig !== sig){
       let base = [];
-      if (font === "sans" && FONT_BYTES){ try { base = JSON.parse(text_outline_paths(FONT_BYTES, t.s||"", t.h||8, 0, 0)); } catch(e){ base = []; } t._closed = true; }
+      if (bytes){ try { base = JSON.parse(text_outline_paths(bytes, t.s||"", t.h||8, 0, 0)); } catch(e){ base = []; } t._closed = true; }
       else { try { base = JSON.parse(text_to_paths(t.s||"", t.h||8, 0, 0, gap)); } catch(e){ base = []; } t._closed = false; }
       let w = 0; for (const pl of base) for (const a of pl) if (a[0] > w) w = a[0];
       t._base = base; t._w = w; t._sig = sig;
@@ -3184,7 +3172,28 @@
   $("textIn").addEventListener("input", () => { const t = selText(); if (t){ t.s = $("textIn").value; render(); generate(); refreshCounts(); } });
   $("textH").addEventListener("input", () => { const t = selText(); if (t){ t.h = +$("textH").value || 8; t.gap = t.h*0.28; render(); generate(); } });
   $("textAlign").addEventListener("change", () => { const t = selText(); if (t){ t.align = $("textAlign").value; render(); generate(); } });
-  $("textFont").addEventListener("change", () => { const t = selText(); if (t){ t.font = $("textFont").value; t._sig = null; render(); generate(); } });
+  let prevFontSel = "mark";
+  $("textFont").addEventListener("change", () => {
+    const v = $("textFont").value;
+    if (v === "__load"){ $("fontFile").click(); $("textFont").value = prevFontSel; return; }
+    prevFontSel = v;
+    const t = selText(); if (t){ t.font = v; t._sig = null; render(); generate(); }
+  });
+  // Load a TrueType or OpenType font; its glyphs become real outline paths.
+  $("fontFile") && ($("fontFile").onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const name = f.name.replace(/\.(ttf|otf|ttc)$/i, "");
+      LOADED_FONTS[name] = new Uint8Array(r.result);
+      const sel = $("textFont");
+      if (!Array.from(sel.options).some(o => o.value === name)){ const o = document.createElement("option"); o.value = name; o.textContent = name; sel.insertBefore(o, sel.querySelector('option[value="__load"]')); }
+      sel.value = name; prevFontSel = name;
+      const t = selText(); if (t){ t.font = name; t._sig = null; }
+      render(); generate();
+    };
+    r.readAsArrayBuffer(f); e.target.value = "";
+  });
   // Properties tab numeric fields.
   $("pr_x") && ($("pr_x").onchange = propsMove);
   $("pr_y") && ($("pr_y").onchange = propsMove);
@@ -4313,7 +4322,11 @@
   Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","layer.output2":"Ausgabe","lp.mode":"Modus","cs.editcut":"Schnitteinstellungen bearbeiten…","cs.makedefault":"Als Standard","cs.angleinc":"Winkelinkrement°","cs.autorotate":"Auto-Drehen","cs.ramp":"Rampenlänge mm","cs.dotadjust":"Punktbreiten-Anpassung","cs.perf":"Perforation","cs.wobble":"Wobbeln","cs.perfcut":"Perf. Schnitt mm","cs.perfskip":"Perf. Sprung mm","cs.overcut":"Überschnitt mm","cs.leadin":"Einlauf mm","cs.leadout":"Auslauf mm","cs.wobstep":"Wobbel-Schritt mm","cs.wobsize":"Wobbel-Größe mm","cs.tabsize":"Steggröße mm","cs.tabspacing":"Gleichmäßiger Abstand mm","cs.tabspershape":"Stege pro Form","cs.tabpower":"Stegleistung %","cs.tabskipinner":"Innere Formen überspringen","cs.timing":"Standardzeiten überschreiben","cs.jumpspeed":"Sprunggeschwindigkeit mm/s","cs.minjump":"Min. Sprungverzögerung us","cs.maxjump":"Max. Sprungverzögerung us","cs.laseron":"Laser-Ein TC us","cs.laseroff":"Laser-Aus TC us","cs.endtc":"End-TC us","cs.polytc":"Polygon-TC us","cs.pausebefore":"Pause davor ms","cs.pauseafter":"Pause danach ms" });
   Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","layer.output2":"Sortie","lp.mode":"Mode","cs.editcut":"Modifier les réglages de coupe…","cs.makedefault":"Par défaut","cs.angleinc":"Incrément d'angle°","cs.autorotate":"Rotation auto","cs.ramp":"Longueur de rampe mm","cs.dotadjust":"Ajustement largeur de point","cs.perf":"Perforation","cs.wobble":"Oscillation","cs.perfcut":"Coupe perf. mm","cs.perfskip":"Saut perf. mm","cs.overcut":"Surcoupe mm","cs.leadin":"Entrée mm","cs.leadout":"Sortie mm","cs.wobstep":"Pas d'oscillation mm","cs.wobsize":"Taille d'oscillation mm","cs.tabsize":"Taille de patte mm","cs.tabspacing":"Espacement régulier mm","cs.tabspershape":"Pattes par forme","cs.tabpower":"Puissance de patte %","cs.tabskipinner":"Ignorer formes intérieures","cs.timing":"Remplacer les délais par défaut","cs.jumpspeed":"Vitesse de saut mm/s","cs.minjump":"Délai min. de saut us","cs.maxjump":"Délai max. de saut us","cs.laseron":"Laser activé TC us","cs.laseroff":"Laser désactivé TC us","cs.endtc":"TC de fin us","cs.polytc":"TC de polygone us","cs.pausebefore":"Pause avant ms","cs.pauseafter":"Pause après ms" });
   Object.assign(I18N["pt-BR"], { "cs.title":"Ajustes de corte","layer.output2":"Saída","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Tornar padrão","cs.angleinc":"Incremento de ângulo°","cs.autorotate":"Auto-rotação","cs.ramp":"Comprimento da rampa mm","cs.dotadjust":"Ajuste largura do ponto","cs.perf":"Perfuração","cs.wobble":"Oscilação","cs.perfcut":"Corte perf. mm","cs.perfskip":"Salto perf. mm","cs.overcut":"Sobrecorte mm","cs.leadin":"Entrada mm","cs.leadout":"Saída mm","cs.wobstep":"Passo de oscilação mm","cs.wobsize":"Tamanho de oscilação mm","cs.tabsize":"Tamanho da aba mm","cs.tabspacing":"Espaçamento uniforme mm","cs.tabspershape":"Abas por forma","cs.tabpower":"Potência da aba %","cs.tabskipinner":"Pular formas internas","cs.timing":"Substituir tempos padrão","cs.jumpspeed":"Velocidade de salto mm/s","cs.minjump":"Atraso mín. de salto us","cs.maxjump":"Atraso máx. de salto us","cs.laseron":"Laser ligado TC us","cs.laseroff":"Laser desligado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa depois ms" });
-  Object.assign(I18N.es, { "action.datetime":"Insertar fecha/hora…","dt.fmt":"Formato de fecha (yyyy MM dd HH mm ss)" }); Object.assign(I18N.de, { "action.datetime":"Datum/Uhrzeit einfügen…","dt.fmt":"Datumsformat (yyyy MM dd HH mm ss)" });
+  Object.assign(I18N.es, { "action.datetime":"Insertar fecha/hora…","dt.fmt":"Formato de fecha (yyyy MM dd HH mm ss)" });
+  Object.assign(I18N.es, { "font.mark":"Trazo único","font.sans":"Sans (relleno)","font.load":"Cargar fuente…" });
+  Object.assign(I18N.de, { "font.mark":"Einlinig","font.sans":"Sans (gefüllt)","font.load":"Schrift laden…" });
+  Object.assign(I18N.fr, { "font.mark":"Trait simple","font.sans":"Sans (plein)","font.load":"Charger une police…" });
+  Object.assign(I18N["pt-BR"], { "font.mark":"Traço único","font.sans":"Sans (preenchido)","font.load":"Carregar fonte…" }); Object.assign(I18N.de, { "action.datetime":"Datum/Uhrzeit einfügen…","dt.fmt":"Datumsformat (yyyy MM dd HH mm ss)" });
   Object.assign(I18N.fr, { "action.datetime":"Insérer date/heure…","dt.fmt":"Format de date (yyyy MM dd HH mm ss)" }); Object.assign(I18N["pt-BR"], { "action.datetime":"Inserir data/hora…","dt.fmt":"Formato de data (yyyy MM dd HH mm ss)" });
   Object.assign(I18N.es, { "action.mattest":"Prueba de material…","mt.cols":"Pasos de potencia (columnas)","mt.rows":"Pasos de velocidad (filas)","mt.toomany":"Demasiadas celdas. La paleta admite 28 capas de prueba.","mt.pmin":"Potencia mín %","mt.pmax":"Potencia máx %","mt.smin":"Velocidad mín mm/s","mt.smax":"Velocidad máx mm/s","mt.cell":"Tamaño de celda mm","mt.labels":"Etiquetas" });
   Object.assign(I18N.de, { "action.mattest":"Materialtest…","mt.cols":"Leistungsstufen (Spalten)","mt.rows":"Geschwindigkeitsstufen (Zeilen)","mt.toomany":"Zu viele Zellen. Die Palette fasst 28 Testebenen.","mt.pmin":"Min. Leistung %","mt.pmax":"Max. Leistung %","mt.smin":"Min. Geschwindigkeit mm/s","mt.smax":"Max. Geschwindigkeit mm/s","mt.cell":"Zellengröße mm","mt.labels":"Beschriftungen" });
