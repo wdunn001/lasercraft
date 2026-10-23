@@ -19,7 +19,9 @@ use lasercraft_gcode::{Dialect, Op, program};
 use lasercraft_laser_doc::{CutSetting, FillMode, Geometry, Point2, Project, Shape, ShapeKind};
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
-use lasercraft_toolpath::{BBox, Point, follow_polyline, hatch_fill, line_fill, wobble_path};
+use lasercraft_toolpath::{
+    BBox, Point, follow_polyline, hatch_fill_angled, line_fill, wobble_path,
+};
 
 /// Errors the engine can return while executing a command.
 #[derive(Debug, thiserror::Error)]
@@ -143,7 +145,18 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
             continue;
         };
         let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
-        let segments = follow_polyline(&path, closed);
+        // A Fill layer hatches the closed interior with scan lines; every other mode
+        // follows the outline. This makes engrave fills work on G-code machines, not
+        // just galvo.
+        let segments = match (closed, setting.galvo.as_ref()) {
+            (true, Some(g)) if g.mode == FillMode::Fill => hatch_fill_angled(
+                &path,
+                g.fill.line_interval_mm,
+                g.fill.hatch_angle_deg,
+                g.fill.cross_hatch,
+            ),
+            _ => follow_polyline(&path, closed),
+        };
         if segments.is_empty() {
             continue;
         }
@@ -169,19 +182,29 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
     for &index in &order {
         let Some(run) = runs.get(index) else { continue };
         for _ in 0..run.passes {
-            if let Some(first) = run.segments.first() {
-                ops.push(Op::RapidTo {
-                    x: first.start.x,
-                    y: first.start.y,
-                });
-            }
+            // Rapid to the start of any segment that does not continue from the last
+            // one, so disconnected hatch lines travel with the beam off.
+            let mut cur: Option<Point> = None;
             for segment in &run.segments {
+                let gap = match cur {
+                    Some(p) => {
+                        (p.x - segment.start.x).abs() > 1e-6 || (p.y - segment.start.y).abs() > 1e-6
+                    }
+                    None => true,
+                };
+                if gap {
+                    ops.push(Op::RapidTo {
+                        x: segment.start.x,
+                        y: segment.start.y,
+                    });
+                }
                 ops.push(Op::CutTo {
                     x: segment.end.x,
                     y: segment.end.y,
                     feed_mm_s: run.feed,
                     power: run.power,
                 });
+                cur = Some(segment.end);
             }
         }
     }
@@ -558,7 +581,12 @@ pub fn plan_galvo_project(
             && galvo.mode == FillMode::Fill
         {
             let poly: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
-            let segments = hatch_fill(&poly, galvo.fill.line_interval_mm);
+            let segments = hatch_fill_angled(
+                &poly,
+                galvo.fill.line_interval_mm,
+                galvo.fill.hatch_angle_deg,
+                galvo.fill.cross_hatch,
+            );
             commands.push(GalvoCommand::SetPower {
                 percent: setting.power_max.clamp(0.0, 100.0),
             });

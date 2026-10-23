@@ -286,6 +286,52 @@ pub fn hatch_fill(polygon: &[Point], interval_mm: f64) -> Vec<Segment> {
     segments
 }
 
+/// Hatch fill at an arbitrary scan angle, with an optional perpendicular
+/// cross-hatch pass. The polygon is rotated by `-angle` about its centroid so the
+/// existing horizontal scan applies, then every segment is rotated back. A
+/// `cross_hatch` pass adds a second set of lines at `angle + 90`.
+pub fn hatch_fill_angled(
+    polygon: &[Point],
+    interval_mm: f64,
+    angle_deg: f64,
+    cross_hatch: bool,
+) -> Vec<Segment> {
+    if polygon.len() < 3 || interval_mm <= 0.0 {
+        return Vec::new();
+    }
+    let (cx, cy) = {
+        let (sx, sy) = polygon
+            .iter()
+            .fold((0.0, 0.0), |(ax, ay), p| (ax + p.x, ay + p.y));
+        let k = polygon.len() as f64;
+        (sx / k, sy / k)
+    };
+    let rot = |p: &Point, th: f64| {
+        let (s, c) = th.sin_cos();
+        let (dx, dy) = (p.x - cx, p.y - cy);
+        Point {
+            x: cx + dx * c - dy * s,
+            y: cy + dx * s + dy * c,
+        }
+    };
+    let one = |deg: f64| -> Vec<Segment> {
+        let th = deg.to_radians();
+        let turned: Vec<Point> = polygon.iter().map(|p| rot(p, -th)).collect();
+        hatch_fill(&turned, interval_mm)
+            .into_iter()
+            .map(|s| Segment {
+                start: rot(&s.start, th),
+                end: rot(&s.end, th),
+            })
+            .collect()
+    };
+    let mut out = one(angle_deg);
+    if cross_hatch {
+        out.extend(one(angle_deg + 90.0));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +406,35 @@ mod tests {
                 "span {lo}..{hi}"
             );
         }
+    }
+
+    #[test]
+    fn hatch_fill_angled_turns_lines_vertical_at_ninety() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        let lines = hatch_fill_angled(&square, 1.0, 90.0, false);
+        assert_eq!(lines.len(), 10);
+        // Every line now runs vertically: equal x on both ends.
+        for seg in &lines {
+            assert!((seg.start.x - seg.end.x).abs() < 1e-6, "not vertical");
+        }
+    }
+
+    #[test]
+    fn cross_hatch_doubles_the_line_count() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        let single = hatch_fill_angled(&square, 1.0, 0.0, false);
+        let crossed = hatch_fill_angled(&square, 1.0, 0.0, true);
+        assert_eq!(crossed.len(), single.len() * 2);
     }
 
     #[test]

@@ -482,6 +482,7 @@
             <label class="mccap"><input type="checkbox" id="cs_autorotate"> <span data-i18n="cs.autorotate">Auto-rotate</span></label>
             <div class="f"><label data-i18n="cs.ramp">Ramp length mm</label><input id="cs_ramp" type="number" step="0.1" style="width:100%"></div>
             <label class="mccap"><input type="checkbox" id="cs_dotadj"> <span data-i18n="cs.dotadjust">Dot-width adjust</span></label>
+            <label class="mccap"><input type="checkbox" id="cs_crosshatch"> <span data-i18n="cs.crosshatch">Cross-hatch</span></label>
           </div>
         </div>
         <hr class="csrule">
@@ -1670,7 +1671,7 @@
     $("cs_speed").value = L.speed_mm_s; $("cs_passes").value = L.num_passes; $("cs_power").value = L.power_max; $("cs_pmin").value = L.power_min;
     $("cs_air").checked = !!L.air_assist; $("cs_freq").value = L.freq; $("cs_qpulse").value = L.qpulse;
     $("cs_interval").value = L.interval; $("cs_angle").value = L.angle; $("cs_angleinc").value = L.angleInc||0;
-    $("cs_autorotate").checked = !!L.autoRotate; $("cs_ramp").value = L.ramp||0; $("cs_dotadj").checked = !!L.dotAdjust;
+    $("cs_autorotate").checked = !!L.autoRotate; $("cs_ramp").value = L.ramp||0; $("cs_dotadj").checked = !!L.dotAdjust; $("cs_crosshatch").checked = !!L.crosshatch;
     $("cs_kerf").value = L.kerf||0; $("cs_perf").checked = !!L.perf; $("cs_perfcut").value = L.perfCut||0.1; $("cs_perfskip").value = L.perfSkip||0.1;
     $("cs_wobble").checked = !!L.wobble; $("cs_wobstep").value = L.wobStep||0.05; $("cs_wobsize").value = L.wobSize||0.1;
     $("cs_tabs").checked = !!L.tabs; $("cs_tabsize").value = L.tabSize||0.5; $("cs_tabspacing").value = L.tabSpacing||50;
@@ -1688,7 +1689,7 @@
     L.speed_mm_s = Math.max(1, n("cs_speed",100)); L.num_passes = Math.max(1,n("cs_passes",1)); L.power_max = n("cs_power",0); L.power_min = n("cs_pmin",0);
     L.air_assist = csC("cs_air"); L.freq = n("cs_freq",30); L.qpulse = n("cs_qpulse",200);
     L.interval = n("cs_interval",0.1); L.angle = n("cs_angle",0); L.angleInc = n("cs_angleinc",0);
-    L.autoRotate = csC("cs_autorotate"); L.ramp = n("cs_ramp",0); L.dotAdjust = csC("cs_dotadj");
+    L.autoRotate = csC("cs_autorotate"); L.ramp = n("cs_ramp",0); L.dotAdjust = csC("cs_dotadj"); L.crosshatch = csC("cs_crosshatch");
     L.kerf = n("cs_kerf",0); L.perf = csC("cs_perf"); L.perfCut = n("cs_perfcut",0.1); L.perfSkip = n("cs_perfskip",0.1);
     L.wobble = csC("cs_wobble"); L.wobStep = n("cs_wobstep",0.05); L.wobSize = n("cs_wobsize",0.1);
     L.tabs = csC("cs_tabs"); L.tabSize = n("cs_tabsize",0.5); L.tabSpacing = n("cs_tabspacing",50);
@@ -2257,7 +2258,7 @@
         index:L.index, name:L.name, speed_mm_s:L.speed_mm_s, power_min:L.power_min, power_max:L.power_max,
         num_passes:L.num_passes, air_assist:L.air_assist,
         galvo: { mode:L.mode, frequency_khz:L.freq, q_pulse_width_ns:L.qpulse, global_passes:1,
-          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:L.angleInc||0, auto_rotate:!!L.autoRotate, dot_width_adjust:!!L.dotAdjust, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:!!L.rampOuter },
+          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:L.angleInc||0, auto_rotate:!!L.autoRotate, dot_width_adjust:!!L.dotAdjust, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:!!L.rampOuter, cross_hatch:!!L.crosshatch },
           line:{ kerf_offset_mm:L.kerf||0, perforation:!!L.perf, perforation_cut_mm:L.perfCut||0.1, perforation_skip_mm:L.perfSkip||0.1 },
           tabs:{ enabled:!!L.tabs, automatic:true, size_mm:L.tabSize||0.5, spacing_mm:L.tabSpacing||50, tabs_per_shape:L.tabsPerShape||1, skip_inner_shapes:!!L.tabSkipInner, cut_power_pct:L.tabPower||0 },
           wobble:{ enabled:!!L.wobble, step_mm:L.wobStep||0.05, size_mm:L.wobSize||0.1 },
@@ -3144,6 +3145,8 @@
   Object.assign(I18N.de, { "cs.title":"Schnitteinstellungen","layer.output2":"Ausgabe","lp.mode":"Modus","cs.editcut":"Schnitteinstellungen bearbeiten…","cs.makedefault":"Als Standard","cs.angleinc":"Winkelinkrement°","cs.autorotate":"Auto-Drehen","cs.ramp":"Rampenlänge mm","cs.dotadjust":"Punktbreiten-Anpassung","cs.perf":"Perforation","cs.wobble":"Wobbeln","cs.perfcut":"Perf. Schnitt mm","cs.perfskip":"Perf. Sprung mm","cs.wobstep":"Wobbel-Schritt mm","cs.wobsize":"Wobbel-Größe mm","cs.tabsize":"Steggröße mm","cs.tabspacing":"Gleichmäßiger Abstand mm","cs.tabspershape":"Stege pro Form","cs.tabpower":"Stegleistung %","cs.tabskipinner":"Innere Formen überspringen","cs.timing":"Standardzeiten überschreiben","cs.jumpspeed":"Sprunggeschwindigkeit mm/s","cs.minjump":"Min. Sprungverzögerung us","cs.maxjump":"Max. Sprungverzögerung us","cs.laseron":"Laser-Ein TC us","cs.laseroff":"Laser-Aus TC us","cs.endtc":"End-TC us","cs.polytc":"Polygon-TC us","cs.pausebefore":"Pause davor ms","cs.pauseafter":"Pause danach ms" });
   Object.assign(I18N.fr, { "cs.title":"Réglages de coupe","layer.output2":"Sortie","lp.mode":"Mode","cs.editcut":"Modifier les réglages de coupe…","cs.makedefault":"Par défaut","cs.angleinc":"Incrément d'angle°","cs.autorotate":"Rotation auto","cs.ramp":"Longueur de rampe mm","cs.dotadjust":"Ajustement largeur de point","cs.perf":"Perforation","cs.wobble":"Oscillation","cs.perfcut":"Coupe perf. mm","cs.perfskip":"Saut perf. mm","cs.wobstep":"Pas d'oscillation mm","cs.wobsize":"Taille d'oscillation mm","cs.tabsize":"Taille de patte mm","cs.tabspacing":"Espacement régulier mm","cs.tabspershape":"Pattes par forme","cs.tabpower":"Puissance de patte %","cs.tabskipinner":"Ignorer formes intérieures","cs.timing":"Remplacer les délais par défaut","cs.jumpspeed":"Vitesse de saut mm/s","cs.minjump":"Délai min. de saut us","cs.maxjump":"Délai max. de saut us","cs.laseron":"Laser activé TC us","cs.laseroff":"Laser désactivé TC us","cs.endtc":"TC de fin us","cs.polytc":"TC de polygone us","cs.pausebefore":"Pause avant ms","cs.pauseafter":"Pause après ms" });
   Object.assign(I18N["pt-BR"], { "cs.title":"Ajustes de corte","layer.output2":"Saída","lp.mode":"Modo","cs.editcut":"Editar ajustes de corte…","cs.makedefault":"Tornar padrão","cs.angleinc":"Incremento de ângulo°","cs.autorotate":"Auto-rotação","cs.ramp":"Comprimento da rampa mm","cs.dotadjust":"Ajuste largura do ponto","cs.perf":"Perfuração","cs.wobble":"Oscilação","cs.perfcut":"Corte perf. mm","cs.perfskip":"Salto perf. mm","cs.wobstep":"Passo de oscilação mm","cs.wobsize":"Tamanho de oscilação mm","cs.tabsize":"Tamanho da aba mm","cs.tabspacing":"Espaçamento uniforme mm","cs.tabspershape":"Abas por forma","cs.tabpower":"Potência da aba %","cs.tabskipinner":"Pular formas internas","cs.timing":"Substituir tempos padrão","cs.jumpspeed":"Velocidade de salto mm/s","cs.minjump":"Atraso mín. de salto us","cs.maxjump":"Atraso máx. de salto us","cs.laseron":"Laser ligado TC us","cs.laseroff":"Laser desligado TC us","cs.endtc":"TC final us","cs.polytc":"TC de polígono us","cs.pausebefore":"Pausa antes ms","cs.pauseafter":"Pausa depois ms" });
+  Object.assign(I18N.es, { "cs.crosshatch":"Entramado cruzado" }); Object.assign(I18N.de, { "cs.crosshatch":"Kreuzschraffur" });
+  Object.assign(I18N.fr, { "cs.crosshatch":"Hachures croisées" }); Object.assign(I18N["pt-BR"], { "cs.crosshatch":"Hachura cruzada" });
   Object.assign(I18N.es, { "gd.ioports":"Puertos IO","gd.addport":"+ Añadir puerto","gd.noports":"Ningún puerto asignado. Añada uno.","gd.removeport":"Quitar" });
   Object.assign(I18N.de, { "gd.ioports":"IO-Ports","gd.addport":"+ Port hinzufügen","gd.noports":"Keine Ports zugeordnet. Fügen Sie einen hinzu.","gd.removeport":"Entfernen" });
   Object.assign(I18N.fr, { "gd.ioports":"Ports IO","gd.addport":"+ Ajouter un port","gd.noports":"Aucun port mappé. Ajoutez-en un.","gd.removeport":"Retirer" });
@@ -3260,6 +3263,8 @@
     else if (act==="cutsettings"){ openCutSettings(0); }
     else if (act==="galvosettings"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); }
     else if (act==="rotary"){ openRotary(); }
+    else if (act==="crosshatch"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=true; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
+    else if (act==="hatchonly"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=false; L.angle=45; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="inch"){ dispUnits="in"; sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; const tb=document.querySelector('.docktabs button[data-dock="props"]'); if(tb) tb.click(); render(); }
     else if (act==="fillet"){ doc.shapes=[rect(40,30,70,50,0)]; sel=new Set([0]); selected=0; const g=doc.shapes[0].geometry.Polyline; g.points=cornerMod(g.points,true,12,true,8).map(q=>p(q.x,q.y)); render(); refreshCounts(); }
     else if (act==="shapes"){ doc.shapes=[roundedRect(20,70,50,35,8,0), regPolygon(110,88,22,22,6,0), slotShape(20,25,70,20,1)]; selectOnly(null); render(); refreshCounts(); }

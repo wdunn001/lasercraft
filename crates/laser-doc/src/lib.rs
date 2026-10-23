@@ -219,6 +219,9 @@ pub struct FillParams {
     pub ramp_length_mm: f64,
     /// Ramp the outer edge as well as the inner. LightBurn "Ramp Outer Edge".
     pub ramp_outer_edge: bool,
+    /// Add a second fill pass perpendicular to the first. LightBurn "Cross-Hatch".
+    #[serde(default)]
+    pub cross_hatch: bool,
 }
 
 impl Default for FillParams {
@@ -232,6 +235,7 @@ impl Default for FillParams {
             dot_width_mm: 0.08,
             ramp_length_mm: 0.0,
             ramp_outer_edge: false,
+            cross_hatch: false,
         }
     }
 }
