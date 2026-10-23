@@ -488,7 +488,34 @@ pub fn plan_galvo_project(
 ) -> Vec<GalvoCommand> {
     const CURVE_STEPS: u32 = 24;
     let mut commands = Vec::new();
-    for shape in &project.shapes {
+    // Order the shapes so an enclosed shape marks before the shape that encloses
+    // it, the same containment rule the GCode planner uses, applied to the galvo
+    // path. A fiber job then marks a hole or counter before its outline frees it.
+    let mut drawable: Vec<usize> = Vec::new();
+    let mut ord_points: Vec<Vec<Point>> = Vec::new();
+    let mut ord_closed: Vec<bool> = Vec::new();
+    let mut ord_start: Vec<Point> = Vec::new();
+    for (si, shape) in project.shapes.iter().enumerate() {
+        let (points, closed) = match &shape.geometry {
+            Geometry::Polyline { points, closed } => (points.clone(), *closed),
+            Geometry::Path(path) => (path.flatten(CURVE_STEPS), path.closed),
+            Geometry::Empty => continue,
+        };
+        if project.cut_setting_for(shape).is_none() {
+            continue;
+        }
+        let pts: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+        let start = pts.first().copied().unwrap_or(Point { x: 0.0, y: 0.0 });
+        drawable.push(si);
+        ord_start.push(start);
+        ord_closed.push(closed);
+        ord_points.push(pts);
+    }
+    let order = nested_order(&ord_points, &ord_closed, &ord_start);
+    for &oi in &order {
+        let Some(shape) = drawable.get(oi).and_then(|&si| project.shapes.get(si)) else {
+            continue;
+        };
         let (points, closed) = match &shape.geometry {
             Geometry::Polyline { points, closed } => (points.clone(), *closed),
             Geometry::Path(path) => (path.flatten(CURVE_STEPS), path.closed),
@@ -1030,6 +1057,52 @@ mod tests {
             fill_cmds.len(),
             outline_cmds.len()
         );
+    }
+
+    #[test]
+    fn galvo_marks_an_enclosed_shape_first() {
+        let param = GalvoParam {
+            field_size_mm: 50.0,
+            resolution_bits: 16,
+        };
+        let outer = Geometry::Polyline {
+            points: vec![
+                Point2 { x: -20.0, y: -20.0 },
+                Point2 { x: 20.0, y: -20.0 },
+                Point2 { x: 20.0, y: 20.0 },
+                Point2 { x: -20.0, y: 20.0 },
+            ],
+            closed: true,
+        };
+        let inner = Geometry::Polyline {
+            points: vec![
+                Point2 { x: 5.0, y: 5.0 },
+                Point2 { x: 10.0, y: 5.0 },
+                Point2 { x: 10.0, y: 10.0 },
+                Point2 { x: 5.0, y: 10.0 },
+            ],
+            closed: true,
+        };
+        let mut project = Project::new();
+        project.cut_settings.push(cut());
+        // Outer first in document order, so document order would mark it first.
+        project.shapes.push(Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: outer,
+        });
+        project.shapes.push(Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: inner,
+        });
+        let commands = plan_galvo_project(&project, &param, 30_000);
+        let first_jump = commands.iter().find_map(|c| match c {
+            GalvoCommand::Jump { x, y } => Some((*x, *y)),
+            _ => None,
+        });
+        // The first jump lands on the inner square's start, not the outer's.
+        assert_eq!(first_jump, Some(param.logic_to_device(5.0, 5.0)));
     }
 
     #[test]
