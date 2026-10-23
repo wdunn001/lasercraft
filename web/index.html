@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="qr" data-i18n="action.qr">Create QR code&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -2492,6 +2492,147 @@
     if (!bars.length){ alert(tr("bc.none","No encodable characters.")); return; }
     doc.shapes.push(...bars); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
   }
+  // ---- QR code (byte mode, error-correction level M, versions 1 to 10) ----
+  // A from-scratch encoder following ISO/IEC 18004: GF(256) Reed-Solomon, the
+  // block interleave, the finder/timing/alignment function patterns, all eight
+  // data masks scored by the standard penalty, and BCH format information.
+  const QR = (function(){
+    const EXP = new Array(512), LOG = new Array(256);
+    { let x = 1; for (let i = 0; i < 255; i++){ EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; } for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255]; }
+    const gmul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+    function rsGen(n){ let g = [1]; for (let i = 0; i < n; i++){ const ng = new Array(g.length + 1).fill(0); for (let j = 0; j < g.length; j++){ ng[j] ^= g[j]; ng[j + 1] ^= gmul(g[j], EXP[i]); } g = ng; } return g; }
+    function rsEcc(data, n){ const gen = rsGen(n); const res = new Array(n).fill(0); for (const d of data){ const f = d ^ res[0]; res.shift(); res.push(0); if (f !== 0) for (let j = 0; j < n; j++) res[j] ^= gmul(gen[j + 1], f); } return res; }
+    // EC level M, per version: ecc codewords per block, then block groups [count, dataPerBlock].
+    const SPEC = {
+      1:[10,[[1,16]]], 2:[16,[[1,28]]], 3:[26,[[1,44]]], 4:[18,[[2,32]]], 5:[24,[[2,43]]],
+      6:[16,[[4,27]]], 7:[18,[[4,31]]], 8:[22,[[2,38],[2,39]]], 9:[22,[[3,36],[2,37]]], 10:[26,[[4,43],[1,44]]]
+    };
+    const ALIGN = { 1:[], 2:[6,18], 3:[6,22], 4:[6,26], 5:[6,30], 6:[6,34], 7:[6,22,38], 8:[6,24,42], 9:[6,26,46], 10:[6,28,50] };
+    const dataCW = (v) => SPEC[v][1].reduce((s, g) => s + g[0] * g[1], 0);
+    const capacityBytes = (v) => { const cc = v <= 9 ? 8 : 16; return Math.floor((dataCW(v) * 8 - 4 - cc - 4) / 8); };
+    function pickVersion(n){ for (let v = 1; v <= 10; v++) if (capacityBytes(v) >= n) return v; return -1; }
+    function bitsToCodewords(bytes, v){
+      const bits = [];
+      const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+      push(0b0100, 4);                                   // byte mode
+      push(bytes.length, v <= 9 ? 8 : 16);               // char count
+      for (const b of bytes) push(b, 8);
+      push(0, 4);                                        // terminator (clamped below)
+      while (bits.length % 8) bits.push(0);
+      const cw = [];
+      for (let i = 0; i < bits.length; i += 8){ let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; cw.push(b); }
+      const need = dataCW(v); const pad = [0xec, 0x11]; let k = 0;
+      while (cw.length < need) cw.push(pad[k++ % 2]);
+      return cw;
+    }
+    function interleave(cw, v){
+      const [ecLen, groups] = SPEC[v];
+      const blocks = []; let pos = 0;
+      for (const [count, dlen] of groups) for (let b = 0; b < count; b++){ const d = cw.slice(pos, pos + dlen); pos += dlen; blocks.push({ d, e: rsEcc(d, ecLen) }); }
+      const maxD = Math.max(...blocks.map(b => b.d.length)); const out = [];
+      for (let i = 0; i < maxD; i++) for (const b of blocks) if (i < b.d.length) out.push(b.d[i]);
+      for (let i = 0; i < ecLen; i++) for (const b of blocks) out.push(b.e[i]);
+      return out;
+    }
+    // Build the module matrix. Returns a size x size array of 0/1 (and null while free).
+    function matrix(v, finalCW){
+      const size = 17 + v * 4;
+      const m = Array.from({ length: size }, () => new Array(size).fill(null));
+      const res = Array.from({ length: size }, () => new Array(size).fill(false));   // reserved (function) modules
+      const setF = (r, c, val) => { m[r][c] = val; res[r][c] = true; };
+      const finder = (r, c) => { for (let i = -1; i <= 7; i++) for (let j = -1; j <= 7; j++){ const rr = r + i, cc = c + j; if (rr < 0 || rr >= size || cc < 0 || cc >= size) continue; const on = (i >= 0 && i <= 6 && (j === 0 || j === 6)) || (j >= 0 && j <= 6 && (i === 0 || i === 6)) || (i >= 2 && i <= 4 && j >= 2 && j <= 4); setF(rr, cc, on ? 1 : 0); } };
+      finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+      for (let i = 0; i < size; i++){ if (m[6][i] === null) setF(6, i, i % 2 === 0 ? 1 : 0); if (m[i][6] === null) setF(i, 6, i % 2 === 0 ? 1 : 0); }   // timing
+      const ap = ALIGN[v];
+      for (const r of ap) for (const c of ap){ if ((r <= 7 && c <= 7) || (r <= 7 && c >= size - 8) || (r >= size - 8 && c <= 7)) continue; for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++){ const on = Math.max(Math.abs(i), Math.abs(j)) !== 1; setF(r + i, c + j, on ? 1 : 0); } }
+      setF(size - 8, 8, 1);                               // dark module
+      if (v >= 7){
+        // Version information: an 18-bit BCH word placed by two finders for v7 up.
+        let rem = v; for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+        const vbits = (v << 12) | (rem & 0xfff);
+        for (let i = 0; i < 18; i++){ const b = (vbits >> i) & 1; const a = size - 11 + i % 3, d = Math.floor(i / 3); setF(a, d, b); setF(d, a, b); }
+      }
+      for (let i = 0; i < 9; i++){ if (!res[8][i] || m[8][i] === null) res[8][i] = true; if (!res[i][8]) res[i][8] = true; }   // reserve format area
+      for (let i = 0; i < 8; i++){ res[8][size - 1 - i] = true; res[size - 1 - i][8] = true; }
+      // Place data bits in the zigzag order.
+      const bits = []; for (const b of finalCW) for (let i = 7; i >= 0; i--) bits.push((b >> i) & 1);
+      let bi = 0, up = true;
+      for (let col = size - 1; col > 0; col -= 2){
+        if (col === 6) col--;                             // skip the timing column
+        for (let t = 0; t < size; t++){
+          const row = up ? size - 1 - t : t;
+          for (let c = 0; c < 2; c++){ const cc = col - c; if (res[row][cc]) continue; m[row][cc] = bi < bits.length ? bits[bi] : 0; bi++; }
+        }
+        up = !up;
+      }
+      return { m, res, size };
+    }
+    const maskFn = [
+      (r, c) => (r + c) % 2 === 0, (r, c) => r % 2 === 0, (r, c) => c % 3 === 0, (r, c) => (r + c) % 3 === 0,
+      (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0, (r, c) => (r * c) % 2 + (r * c) % 3 === 0,
+      (r, c) => ((r * c) % 2 + (r * c) % 3) % 2 === 0, (r, c) => ((r + c) % 2 + (r * c) % 3) % 2 === 0
+    ];
+    function applyMask(base, res, size, mask){
+      const m = base.map(row => row.slice());
+      for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (!res[r][c] && maskFn[mask](r, c)) m[r][c] ^= 1;
+      return m;
+    }
+    function formatBits(mask){
+      let fmt = (0b00 << 3) | mask;                       // EC level M = 00
+      let rem = fmt << 10; const g = 0b10100110111;
+      for (let i = 14; i >= 10; i--) if ((rem >> i) & 1) rem ^= g << (i - 10);
+      return ((fmt << 10) | rem) ^ 0b101010000010010;
+    }
+    function placeFormat(m, size, mask){
+      const bits = formatBits(mask); const bit = (i) => (bits >> i) & 1;
+      for (let i = 0; i <= 5; i++) m[i][8] = bit(i);
+      m[7][8] = bit(6); m[8][8] = bit(7); m[8][7] = bit(8);
+      for (let i = 9; i < 15; i++) m[8][14 - i] = bit(i);
+      for (let i = 0; i < 8; i++) m[8][size - 1 - i] = bit(i);
+      for (let i = 8; i < 15; i++) m[size - 15 + i][8] = bit(i);
+    }
+    function penalty(m, size){
+      let p = 0;
+      for (let r = 0; r < size; r++){ let run = 1; for (let c = 1; c < size; c++){ if (m[r][c] === m[r][c - 1]){ run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1; } }
+      for (let c = 0; c < size; c++){ let run = 1; for (let r = 1; r < size; r++){ if (m[r][c] === m[r - 1][c]){ run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1; } }
+      for (let r = 0; r < size - 1; r++) for (let c = 0; c < size - 1; c++) if (m[r][c] === m[r][c + 1] && m[r][c] === m[r + 1][c] && m[r][c] === m[r + 1][c + 1]) p += 3;
+      let dark = 0; for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) dark += m[r][c];
+      const ratio = dark / (size * size) * 100; p += Math.floor(Math.abs(ratio - 50) / 5) * 10;
+      return p;
+    }
+    // Encode a string to a size x size array of 0/1 modules.
+    function encode(str){
+      const bytes = [...unescape(encodeURIComponent(str))].map(c => c.charCodeAt(0));
+      const v = pickVersion(bytes.length);
+      if (v < 0) return null;                             // too long for version 10
+      const cw = interleave(bitsToCodewords(bytes, v), v);
+      const { m, res, size } = matrix(v, cw);
+      let best = null, bestP = Infinity;
+      for (let mask = 0; mask < 8; mask++){
+        const mm = applyMask(m, res, size, mask); placeFormat(mm, size, mask);
+        const p = penalty(mm, size); if (p < bestP){ bestP = p; best = mm; }
+      }
+      return { modules: best, size, version: v };
+    }
+    return { encode, capacityBytes };
+  })();
+  // Lay a QR code as filled module squares on the active layer.
+  function qrShapes(text, x, y, moduleMm, cut){
+    const q = QR.encode(text); if (!q) return null;
+    const out = [];
+    for (let r = 0; r < q.size; r++) for (let c = 0; c < q.size; c++){
+      if (q.modules[r][c]) out.push(rect(x + c * moduleMm, y + (q.size - 1 - r) * moduleMm, moduleMm, moduleMm, cut));
+    }
+    return out;
+  }
+  function createQr(){
+    const txt = prompt(tr("qr.text","QR code text or URL"), "https://quasarke.net"); if (txt == null || !txt) return;
+    const mm = parseFloat(prompt(tr("qr.module","Module size mm"), "1.2")) || 1.2;
+    if (txt.length > QR.capacityBytes(10)){ alert(tr("qr.toolong","That text is too long for this encoder (max around 213 bytes).")); return; }
+    const mods = qrShapes(txt, 20, 20, mm, doc.layers[activeLayer].index);
+    if (!mods || !mods.length){ alert(tr("qr.toolong","That text is too long for this encoder (max around 213 bytes).")); return; }
+    doc.shapes.push(...mods); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
+  }
   // Material test generator: a grid of filled squares. Columns step power, rows step
   // speed. Each cell gets its own Fill layer carrying that cell's settings, so one
   // run dials in a new material. Row and column labels engrave the values.
@@ -2963,6 +3104,7 @@
     else if (a==="textpath"){ textOnPath(); return; }
     else if (a==="datetime"){ insertDateTime(); return; }
     else if (a==="barcode"){ createBarcode(); return; }
+    else if (a==="qr"){ createQr(); return; }
     else if (a==="mattest"){ materialTest(); return; }
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
@@ -3498,6 +3640,10 @@
   Object.assign(I18N.de, { "action.mergecsv":"CSV in Text einfügen…","merge.need":"Wählen Sie zuerst ein Textobjekt, dann eine CSV.","merge.empty":"Diese CSV hat keine Datenzeilen.","action.textpath":"Text auf Pfad","top.need":"Wählen Sie ein Textobjekt und einen Pfad.","top.badpath":"Diese Form hat keinen nutzbaren Pfad." });
   Object.assign(I18N.fr, { "action.mergecsv":"Fusionner un CSV dans le texte…","merge.need":"Sélectionnez d'abord un objet texte, puis choisissez un CSV.","merge.empty":"Ce CSV n'a aucune ligne de données.","action.textpath":"Texte sur chemin","top.need":"Sélectionnez un objet texte et un chemin.","top.badpath":"Cette forme n'a pas de chemin utilisable." });
   Object.assign(I18N["pt-BR"], { "action.mergecsv":"Mesclar CSV no texto…","merge.need":"Selecione primeiro um objeto de texto, depois escolha um CSV.","merge.empty":"Esse CSV não tem linhas de dados.","action.textpath":"Texto no caminho","top.need":"Selecione um objeto de texto e um caminho.","top.badpath":"Essa forma não tem um caminho utilizável." });
+  Object.assign(I18N.es, { "action.qr":"Crear código QR…","qr.text":"Texto o URL del QR","qr.module":"Tamaño de módulo mm","qr.toolong":"Ese texto es demasiado largo para este codificador (máx. unos 213 bytes)." });
+  Object.assign(I18N.de, { "action.qr":"QR-Code erstellen…","qr.text":"QR-Text oder URL","qr.module":"Modulgröße mm","qr.toolong":"Dieser Text ist für diesen Encoder zu lang (max. etwa 213 Byte)." });
+  Object.assign(I18N.fr, { "action.qr":"Créer un code QR…","qr.text":"Texte ou URL du QR","qr.module":"Taille de module mm","qr.toolong":"Ce texte est trop long pour cet encodeur (max. environ 213 octets)." });
+  Object.assign(I18N["pt-BR"], { "action.qr":"Criar código QR…","qr.text":"Texto ou URL do QR","qr.module":"Tamanho do módulo mm","qr.toolong":"Esse texto é longo demais para este codificador (máx. cerca de 213 bytes)." });
   Object.assign(I18N.es, { "action.barcode":"Crear código de barras…","bc.text":"Texto del código (Code 128)","bc.height":"Altura de barra mm","bc.module":"Barra estrecha mm","bc.none":"Sin caracteres codificables." });
   Object.assign(I18N.de, { "action.barcode":"Barcode erstellen…","bc.text":"Barcode-Text (Code 128)","bc.height":"Balkenhöhe mm","bc.module":"Schmaler Balken mm","bc.none":"Keine kodierbaren Zeichen." });
   Object.assign(I18N.fr, { "action.barcode":"Créer un code-barres…","bc.text":"Texte du code (Code 128)","bc.height":"Hauteur de barre mm","bc.module":"Barre étroite mm","bc.none":"Aucun caractère encodable." });
@@ -3637,6 +3783,7 @@
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
+    else if (act==="qr"){ const q=QR.encode("https://quasarke.net"); console.log("QR version", q&&q.version, "size", q&&q.size); doc.shapes=qrShapes("https://quasarke.net", 45, 30, 2.2, 0)||[]; selectOnly(null); render(); refreshCounts(); }
     else if (act==="mattest"){ doMaterialTest(5,5,10,100,50,400,10); }
     else if (act==="crosshatch"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=true; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
     else if (act==="hatchonly"){ const L=doc.layers[2]; L.mode="Fill"; L.crosshatch=false; L.angle=45; L.interval=3; doc.shapes=[rect(45,40,65,50,L.index)]; selectOnly(null); generate(); openPreview(); }
