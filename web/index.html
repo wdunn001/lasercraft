@@ -36,6 +36,7 @@
   .tool { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); border: 1px solid transparent; }
   .tool:hover { background: var(--field); color: var(--ink); }
   .tool.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .toolsep { width: 22px; height: 3px; border-radius: 2px; margin: 5px 0; opacity: .75; }
   .tool svg { width: 20px; height: 20px; }
 
   .canvas-wrap { position: relative; background: #060709; overflow: hidden; display: flex; flex-direction: column; }
@@ -492,17 +493,15 @@
   doc.shapes.push(...textShapes("LASERCRAFT", 20, 70, 11, 2));
 
   // ---- toolbar ----
-  const TOOLS = [
-    ["select","M4 2l9 16 2-7 7-2z"],
-    ["node","M5 5h3v3H5z M16 16h3v3h-3z M7 7l10 10"],
-    ["rect","M3 5h18v14H3z"],
-    ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"],
-    ["poly","M12 3l9 7-3 11H6L3 10z"],
-    ["line","M4 20L20 4"],
-    ["pen","M4 20l7-2 8-8-5-5-8 8z"],
-    ["text","M5 5h14 M12 5v14 M9 19h6"],
-    ["measure","M3 17L17 3l4 4L7 21z M7 13l2 2 M11 9l2 2 M15 5l2 2"],
+  // Tools are grouped and colour-coded by discipline, so the drawing (vector),
+  // CAD and image sides read apart the way the user framed them.
+  const TOOL_GROUPS = [
+    { name:"Select", color:"#8b93a7", tools:[ ["select","M4 2l9 16 2-7 7-2z"], ["node","M5 5h3v3H5z M16 16h3v3h-3z M7 7l10 10"] ] },
+    { name:"Vector", color:"#3b82f6", tools:[ ["rect","M3 5h18v14H3z"], ["ellipse","M12 5c5 0 9 3 9 7s-4 7-9 7-9-3-9-7 4-7 9-7z"], ["poly","M12 3l9 7-3 11H6L3 10z"], ["line","M4 20L20 4"], ["pen","M4 20l7-2 8-8-5-5-8 8z"], ["text","M5 5h14 M12 5v14 M9 19h6"] ] },
+    { name:"CAD", color:"#28c08a", tools:[ ["measure","M3 17L17 3l4 4L7 21z M7 13l2 2 M11 9l2 2 M15 5l2 2"] ] },
+    { name:"Image", color:"#b06ef5", tools:[ ["image","M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M8 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"] ] },
   ];
+  const TOOLS = TOOL_GROUPS.flatMap(g => g.tools);
   // Per-tool hint shown in the properties bar, and the text tool's own controls.
   const TOOL_HINT = {
     select:"Select and move. Drag a handle to scale or rotate.",
@@ -534,15 +533,24 @@
     const h = $("toolHint"); if (h) h.textContent = TOOL_HINT[tool] || TOOL_HINT.select;
   }
   const toolsEl = $("tools");
-  for (const [name, d] of TOOLS) {
-    const el = document.createElement("div");
-    el.className = "tool" + (name===tool?" active":"");
-    el.dataset.tool = name;
-    el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${d}"/></svg>`;
-    el.title = name;
-    el.onclick = () => { tool = name; measureA = null; if (name!=="pen") penAnchors = []; drawing = null; document.querySelectorAll(".tool").forEach(t=>t.classList.toggle("active", t.dataset.tool===name)); $("canvas").classList.toggle("select", name==="select"); updateToolbar(); render(); };
-    toolsEl.appendChild(el);
+  function setTool(name){
+    tool = name; measureA = null; if (name!=="pen") penAnchors = []; drawing = null;
+    document.querySelectorAll(".tool").forEach(t=>{ const on = t.dataset.tool===name; t.classList.toggle("active", on); t.style.background = on ? (t.dataset.gcolor||"") : ""; t.style.borderColor = on ? (t.dataset.gcolor||"") : ""; });
+    $("canvas").classList.toggle("select", name==="select"); updateToolbar(); render();
   }
+  TOOL_GROUPS.forEach((g, gi) => {
+    if (gi > 0){ const sep = document.createElement("div"); sep.className = "toolsep"; sep.style.background = g.color; sep.title = g.name; toolsEl.appendChild(sep); }
+    for (const [name, d] of g.tools){
+      const el = document.createElement("div");
+      el.className = "tool" + (name===tool?" active":"");
+      el.dataset.tool = name; el.dataset.gcolor = g.color;
+      el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${d}"/></svg>`;
+      el.title = name + " · " + g.name;
+      if (name===tool){ el.style.background = g.color; el.style.borderColor = g.color; }
+      el.onclick = () => { if (name==="image"){ $("imgFile").click(); return; } setTool(name); };
+      toolsEl.appendChild(el);
+    }
+  });
 
   // ---- canvas ----
   const canvas = $("canvas");
