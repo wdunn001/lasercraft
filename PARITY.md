@@ -56,7 +56,7 @@ because every item ships at once.
   multi-pass cut layers (lighter carves deeper), for fiber-laser relief and texture.
   Direction and level count set in Preferences.
 - Camera: overlay, 4-corner align, print-and-cut marks Done; lens calibration wizard, head-mounted, LiDAR: Gap.
-- Rotary: Gap.
+- Rotary: Done (setup dialog: type, axis, steps, diameter, speeds, reverse, return). Galvo rotary-marking extras: Gap.
 - Advanced: preview Done; settings/prefs Partial (language done); hotkeys, bundles, center finder, cylinder correction, taper, dual laser: Gap.
 
 ## Done this session (2026-10-23)
