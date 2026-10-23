@@ -54,12 +54,44 @@ like 0x201, 0x209 that step by 8) are the setting type and the controller config
 address. This is the machine-parameter model. `craft-dsp` can carry it as a
 descriptor table.
 
+## The wire encoder and its framing
+
+Scoring the overrides for coordinate shifts and append calls points at the real
+encoders. They shift coordinates and append through `QByteArray`. The byte stores
+pass through the append helper. A direct-memory-store score misses them.
+
+| controller | encoder VA |
+|---|---|
+| Trocen | `0x1408e1c20`, `0x1408e01a0` |
+| Topwisdom | `0x1408dfa50`, `0x1408e1980` |
+
+The Trocen encoder at `0x1408e1c20` builds a packet by appending one byte per
+`append(char)` call. The opening sequence loads the byte into `dl` and calls the
+append helper:
+
+```
+mov dl, 1    ; append 0x01
+mov dl, 0xd7 ; append 0xD7
+             ; append a computed byte
+mov dl, 4    ; append 0x04
+mov dl, 0x22 ; append 0x22
+mov dl, 0xd7 ; append 0xD7
+             ; append a computed byte
+mov dl, 4    ; append 0x04
+mov dl, 0x32 ; append 0x32
+```
+
+So the command bytes include `0xD7` as a prefix and `0x22`, `0x32` as opcodes,
+with `0x04` as a count or type field. The coordinates that follow are split into
+7-bit groups, the run of `shl r8d, 7` repeated five times. That is the same 7-bit
+coordinate packing the DSP family uses, the one the Ruida codec already implements.
+
 ## What is still open
 
-The per-move wire framing, the bytes a cut or a jog turns into with its header and
-checksum, lives in a different override on the 80-entry vtable, below the job-send
-path. It is reachable from these vtable addresses, but pinning the exact encoder
-and reversing its coordinate and checksum maths is a continued effort.
+One encoder method shows the framing shape. The complete command set for Trocen and
+Topwisdom spans several encoder methods, each a different packet. The checksum or
+terminator is not yet confirmed. The remaining work is to map every command with its
+coordinate and checksum layout before a byte-correct reimplementation.
 
 ## Boundary
 
