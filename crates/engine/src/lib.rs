@@ -134,6 +134,8 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         feed: f64,
         power: f64,
         passes: u32,
+        fill: bool,
+        overscan: f64,
     }
     let mut runs: Vec<Run> = Vec::new();
     for shape in &project.shapes {
@@ -146,6 +148,13 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
             continue;
         };
         let path: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+        let is_fill =
+            closed && matches!(setting.galvo.as_ref(), Some(g) if g.mode == FillMode::Fill);
+        let overscan = setting
+            .galvo
+            .as_ref()
+            .map(|g| g.fill.overscan_mm)
+            .unwrap_or(0.0);
         // A Fill layer hatches the closed interior with scan lines; every other mode
         // follows the outline. This makes engrave fills work on G-code machines, not
         // just galvo.
@@ -220,6 +229,8 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
             feed: motion.clamp_feed(setting.speed_mm_s),
             power: setting.power_max,
             passes: setting.num_passes,
+            fill: is_fill,
+            overscan,
         });
     }
     // Order the runs so an enclosed shape cuts before its container, and travel
@@ -237,15 +248,40 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         for _ in 0..run.passes {
             // Rapid to the start of any segment that does not continue from the last
             // one, so disconnected hatch lines travel with the beam off.
+            // Overscan runs each fill scan line past its ends with the beam off, so
+            // the head reaches speed before it enters the engraving.
+            let overscan = if run.fill { run.overscan } else { 0.0 };
             let mut cur: Option<Point> = None;
             for segment in &run.segments {
+                let (dx, dy) = (
+                    segment.end.x - segment.start.x,
+                    segment.end.y - segment.start.y,
+                );
+                let len = dx.hypot(dy);
+                let (ux, uy) = if len > 1e-9 {
+                    (dx / len, dy / len)
+                } else {
+                    (0.0, 0.0)
+                };
                 let gap = match cur {
                     Some(p) => {
                         (p.x - segment.start.x).abs() > 1e-6 || (p.y - segment.start.y).abs() > 1e-6
                     }
                     None => true,
                 };
-                if gap {
+                if gap && overscan > 0.0 && len > 1e-9 {
+                    // Rapid to a point before the line, then feed in with the beam off.
+                    ops.push(Op::RapidTo {
+                        x: segment.start.x - ux * overscan,
+                        y: segment.start.y - uy * overscan,
+                    });
+                    ops.push(Op::CutTo {
+                        x: segment.start.x,
+                        y: segment.start.y,
+                        feed_mm_s: run.feed,
+                        power: 0.0,
+                    });
+                } else if gap {
                     ops.push(Op::RapidTo {
                         x: segment.start.x,
                         y: segment.start.y,
@@ -257,7 +293,22 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
                     feed_mm_s: run.feed,
                     power: run.power,
                 });
-                cur = Some(segment.end);
+                if overscan > 0.0 && len > 1e-9 {
+                    // Continue past the end with the beam off.
+                    let post = Point {
+                        x: segment.end.x + ux * overscan,
+                        y: segment.end.y + uy * overscan,
+                    };
+                    ops.push(Op::CutTo {
+                        x: post.x,
+                        y: post.y,
+                        feed_mm_s: run.feed,
+                        power: 0.0,
+                    });
+                    cur = Some(post);
+                } else {
+                    cur = Some(segment.end);
+                }
             }
         }
     }
@@ -1286,6 +1337,60 @@ mod tests {
         assert_eq!(cut_moves, 3);
         // The cut runs at the layer feed and power.
         assert!(out.contains("F1200 S800"));
+    }
+
+    #[test]
+    fn overscan_runs_fill_lines_past_the_edge_with_beam_off() {
+        use lasercraft_laser_doc::{FillParams, GalvoSettings};
+        let motion = MotionConfig {
+            max_speed_mm_s: 100.0,
+            accel_mm_s2: 1000.0,
+            accel_to_decel_mm_s2: 500.0,
+        };
+        let mut setting = cut();
+        setting.galvo = Some(GalvoSettings {
+            mode: FillMode::Fill,
+            fill: FillParams {
+                line_interval_mm: 2.0,
+                overscan_mm: 5.0,
+                ..FillParams::default()
+            },
+            ..GalvoSettings::default()
+        });
+        let project = Project {
+            app_version: "0.1.0".to_string(),
+            shapes: vec![Shape {
+                kind: ShapeKind::Rect,
+                cut_index: 0,
+                geometry: Geometry::Polyline {
+                    points: vec![
+                        Point2 { x: 0.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 0.0 },
+                        Point2 { x: 10.0, y: 10.0 },
+                        Point2 { x: 0.0, y: 10.0 },
+                    ],
+                    closed: true,
+                },
+            }],
+            cut_settings: vec![setting],
+        };
+        let out = plan_project(&project, &motion, &GCodeDialect::grbl());
+        // Overscan emits laser-off feed moves (S0) to approach and exit each line.
+        assert!(
+            out.lines()
+                .any(|l| l.starts_with("G1 ") && l.ends_with("S0")),
+            "expected an S0 feed move"
+        );
+        // A move reaches past the 10 mm right edge by the 5 mm overscan.
+        let max_x = out
+            .lines()
+            .filter(|l| l.starts_with("G1 ") || l.starts_with("G0 "))
+            .filter_map(|l| {
+                l.split_whitespace()
+                    .find_map(|w| w.strip_prefix('X').and_then(|v| v.parse::<f64>().ok()))
+            })
+            .fold(f64::MIN, f64::max);
+        assert!(max_x > 14.0, "max_x {max_x}");
     }
 
     #[test]

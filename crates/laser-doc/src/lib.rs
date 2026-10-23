@@ -222,6 +222,10 @@ pub struct FillParams {
     /// Add a second fill pass perpendicular to the first. LightBurn "Cross-Hatch".
     #[serde(default)]
     pub cross_hatch: bool,
+    /// Run each scan line past the fill edge by this distance with the beam off,
+    /// so the head is at speed before it enters. LightBurn "Overscanning".
+    #[serde(default)]
+    pub overscan_mm: f64,
 }
 
 impl Default for FillParams {
@@ -236,6 +240,7 @@ impl Default for FillParams {
             ramp_length_mm: 0.0,
             ramp_outer_edge: false,
             cross_hatch: false,
+            overscan_mm: 0.0,
         }
     }
 }
