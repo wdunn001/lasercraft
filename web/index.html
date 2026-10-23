@@ -126,6 +126,31 @@
   .mfoot { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }
   .mfoot .spacer { flex: 1; }
   .hidden { display: none !important; }
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 4px 12px; background: var(--panel); border-bottom: 1px solid var(--line); min-height: 32px; }
+  .toolbar .tgrp { display: flex; align-items: center; gap: 8px; }
+  .toolbar .tplabel { color: var(--muted); font-size: 12px; }
+  .dropdown .sep { height: 1px; background: var(--line); margin: 4px 2px; }
+  .lyr-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 8px; }
+  .lyr-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .iconbtn { background: transparent; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .iconbtn:hover { background: var(--panel2); border-color: var(--accent); }
+  .lp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 6px 2px 2px; }
+  .lp .f2 { display: flex; flex-direction: column; gap: 3px; }
+  .lp .f2.full { grid-column: 1 / -1; }
+  .lp label { font-size: 11px; color: var(--muted); }
+  .lp input, .lp select { width: 100%; background: var(--field, #12151d); border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 4px 6px; font-size: 13px; }
+  .lp .seg { grid-column: 1 / -1; display: flex; gap: 4px; }
+  .lp .seg button { flex: 1; font-size: 12px; padding: 5px 0; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 6px; cursor: pointer; }
+  .lp .seg button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ctxmenu { position: fixed; z-index: 200; display: none; min-width: 170px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 13px; }
+  .ctxmenu.show { display: block; }
+  .ctxmenu .mi { padding: 7px 10px; border-radius: 5px; cursor: pointer; white-space: nowrap; position: relative; }
+  .ctxmenu .mi:hover { background: var(--panel2); }
+  .ctxmenu .mi .caret { float: right; color: var(--muted); margin-left: 12px; }
+  .ctxmenu .sub { display: none; position: absolute; left: 100%; top: -5px; min-width: 150px; max-height: 260px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+  .ctxmenu .mi.has-sub:hover > .sub { display: block; }
+  .ctxmenu .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+  .ctxmenu .sep { height: 1px; background: var(--line); margin: 4px 2px; }
 </style>
 </head>
 <body>
@@ -141,23 +166,23 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
-    <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:150px;margin-left:8px" />
-    <input id="textH" type="number" value="8" step="1" title="height mm" style="width:52px" />
-    <button class="btn" id="addText" data-i18n="text.add">Add Text</button>
     <span class="spacer"></span>
-    <select id="machine" title="Machine" style="margin-right:10px;max-width:220px"></select>
-    <select id="lang" title="Language" style="margin-right:10px">
-      <option value="en">English</option><option value="es">Español</option>
-      <option value="de">Deutsch</option><option value="fr">Français</option><option value="pt-BR">Português</option>
-    </select>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
-    <span class="btn ok" id="wasmok" style="margin-right:8px">loading&hellip;</span>
-    <button class="btn" id="frameBtn" data-i18n="action.frame">Frame</button>
-    <button class="btn primary" id="genBtn" data-i18n="action.generate">Generate</button>
     <input type="file" id="file" accept=".svg,.dxf" class="hidden" />
     <input type="file" id="imgFile" accept="image/*" class="hidden" />
+  </div>
+
+  <!-- tool properties bar: context controls for the active tool -->
+  <div class="toolbar" id="toolbar">
+    <span class="tgrp" id="tp-text" style="display:none">
+      <span class="tplabel" data-i18n="text.add">Add Text</span>
+      <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:200px" />
+      <input id="textH" type="number" value="8" step="1" title="height mm" style="width:58px" />
+      <button class="btn" id="addText" data-i18n="text.place">Place</button>
+    </span>
+    <span class="tgrp" id="tp-hint"><span class="tplabel" id="toolHint" data-i18n="tool.hint.select">Select and move. Drag a handle to scale or rotate.</span></span>
   </div>
 
   <div class="work">
@@ -176,21 +201,29 @@
 
     <div class="dock">
       <div class="docktabs">
-        <button class="active" data-dock="design" data-i18n="tab.design">Design</button>
+        <button class="active" data-dock="design" data-i18n="tab.layers">Layers</button>
         <button data-dock="move" data-i18n="tab.move">Move</button>
         <button data-dock="camera" data-i18n="tab.camera">Camera</button>
       </div>
       <div id="designPane" class="dpane">
       <div class="section">
-        <h3><span data-i18n="panel.layers">Cuts / Layers</span> <span class="mini"><span id="layerUp">&#9650;</span><span id="layerDown">&#9660;</span></span></h3>
-        <div class="cols"><span data-i18n="col.layer">Layer</span><span data-i18n="col.mode">Mode</span><span data-i18n="col.spd">Speed / Pwr</span><span data-i18n="col.out">Out</span><span data-i18n="col.show">Show</span></div>
+        <div class="lyr-head">
+          <span class="lyr-title" data-i18n="panel.layers">Layers</span>
+          <button class="iconbtn" id="addLayer" title="Add layer" data-i18n-t="layer.add">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M12 11v6"/><path d="M9 14h6"/></svg>
+          </button>
+        </div>
         <div class="layers" id="layers"></div>
+      </div>
+      <div class="section" id="lpSection">
+        <div class="lp" id="lp"></div>
       </div>
       <div class="section" style="flex:1">
         <h3 data-i18n="panel.laser">Laser</h3>
         <div class="out">
+          <div class="devrow"><select id="machine" title="Machine" style="flex:1"></select></div>
           <div class="devrow">
-            <select id="flavor">
+            <select id="flavor" style="flex:1">
               <option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option>
               <option value="grbl-lpc">GRBL-LPC</option><option value="marlin">Marlin</option>
               <option value="smoothie">Smoothie</option><option value="reprap">RepRapFirmware</option>
@@ -204,6 +237,7 @@
             <button class="btn" id="sendBtn" disabled data-i18n="galvo.send">Send</button>
           </div>
           <div class="stat" id="devstat" style="display:none">Galvo not connected. Plug in the board and click Connect.</div>
+          <div class="devrow"><button class="btn" id="frameBtn" style="flex:1" data-i18n="action.frame">Frame</button><button class="btn primary" id="genBtn" style="flex:1" data-i18n="action.generate">Generate</button></div>
           <button class="btn" id="matBtn" style="width:100%" data-i18n="mat.open">Material Library&hellip;</button>
           <div class="gcode"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
           <div class="stat"><span>Lines <b id="lineCount">0</b></span><span>Shapes <b id="shapeCount">0</b></span><span id="galvo"></span></div>
@@ -243,7 +277,8 @@
     </div>
   </div>
 
-  <div class="palette" id="palette"><span class="lbl">Layer</span></div>
+  <!-- right-click context menu -->
+  <div class="ctxmenu" id="ctxmenu"></div>
 
   <!-- Cut settings editor -->
   <div class="modal-bg" id="modalBg">
@@ -325,6 +360,23 @@
         <div class="grid3"><div class="f"><label data-i18n="ar.dist">Distance mm</label><input id="ar_dist" type="number" min="0" step="0.5" value="2" style="width:100%"></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_outset" style="width:100%" data-i18n="ar.outset">Outset</button></div><div class="f" style="align-self:end"><button class="btn primary" id="ar_inset" style="width:100%" data-i18n="ar.inset">Inset</button></div></div>
       </div>
       <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="ar.note">Select a shape first. Array copies the selection.</span><button class="btn" id="arCancel" data-i18n="action.cancel">Close</button></div>
+    </div>
+  </div>
+
+  <!-- preferences -->
+  <div class="modal-bg" id="prefBg">
+    <div class="modal" style="width:380px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="prefs.title">Preferences</h2><span class="spacer"></span><span class="btn" id="prefClose">&times;</span></div>
+      <div class="mbody">
+        <div class="f"><label data-i18n="prefs.lang">Language</label>
+          <select id="lang" style="width:100%">
+            <option value="en">English</option><option value="es">Español</option>
+            <option value="de">Deutsch</option><option value="fr">Français</option><option value="pt-BR">Português</option>
+          </select>
+        </div>
+        <div class="stat" style="color:var(--muted);margin-top:8px" data-i18n="prefs.langnote">The default follows your browser.</div>
+      </div>
+      <div class="mfoot"><span class="spacer"></span><button class="btn" id="prefCancel" data-i18n="action.cancel">Close</button></div>
     </div>
   </div>
 
@@ -439,8 +491,27 @@
     ["poly","M12 3l9 7-3 11H6L3 10z"],
     ["line","M4 20L20 4"],
     ["pen","M4 20l7-2 8-8-5-5-8 8z"],
+    ["text","M5 5h14 M12 5v14 M9 19h6"],
     ["measure","M3 17L17 3l4 4L7 21z M7 13l2 2 M11 9l2 2 M15 5l2 2"],
   ];
+  // Per-tool hint shown in the properties bar, and the text tool's own controls.
+  const TOOL_HINT = {
+    select:"Select and move. Drag a handle to scale or rotate.",
+    node:"Edit nodes. Drag an anchor or a bezier handle.",
+    rect:"Drag to draw a rectangle.",
+    ellipse:"Drag to draw an ellipse.",
+    poly:"Click to add points. Double-click to finish.",
+    line:"Drag to draw a line.",
+    pen:"Click for anchors, drag for handles. Enter finishes, Escape cancels.",
+    text:"Type text, then click on the canvas to place it.",
+    measure:"Drag to measure distance and angle.",
+  };
+  function updateToolbar(){
+    const isText = tool === "text";
+    $("tp-text").style.display = isText ? "flex" : "none";
+    $("tp-hint").style.display = isText ? "none" : "flex";
+    const h = $("toolHint"); if (h) h.textContent = TOOL_HINT[tool] || TOOL_HINT.select;
+  }
   const toolsEl = $("tools");
   for (const [name, d] of TOOLS) {
     const el = document.createElement("div");
@@ -448,7 +519,7 @@
     el.dataset.tool = name;
     el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${d}"/></svg>`;
     el.title = name;
-    el.onclick = () => { tool = name; measureA = null; if (name!=="pen") penAnchors = []; drawing = null; document.querySelectorAll(".tool").forEach(t=>t.classList.toggle("active", t.dataset.tool===name)); $("canvas").classList.toggle("select", name==="select"); render(); };
+    el.onclick = () => { tool = name; measureA = null; if (name!=="pen") penAnchors = []; drawing = null; document.querySelectorAll(".tool").forEach(t=>t.classList.toggle("active", t.dataset.tool===name)); $("canvas").classList.toggle("select", name==="select"); updateToolbar(); render(); };
     toolsEl.appendChild(el);
   }
 
@@ -641,6 +712,8 @@
       penAnchors.push({ p:{x:m.x,y:m.y}, hIn:{x:m.x,y:m.y}, hOut:{x:m.x,y:m.y} });
       penDrag = true; drawing = penPreview(); render(); return;
     }
+    if (tool === "text"){ const str = ($("textIn").value||"").trim(); if (!str) return; const h = +$("textH").value || 8;
+      const shapes = engineTextShapes(str, m.x, m.y - h/2, h, doc.layers[activeLayer].index); doc.shapes.push(...shapes); selected = null; render(); refreshCounts(); return; }
     if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
@@ -702,6 +775,36 @@
   function fit(){ const r=canvas.getBoundingClientRect(); view.s=Math.min(r.width/(BED.w*1.15), r.height/(BED.h*1.15)); view.x=(r.width-BED.w*view.s)/2; view.y=(r.height-BED.h*view.s)/2; }
   canvas.addEventListener("wheel", e => { e.preventDefault(); const f=e.deltaY<0?1.1:1/1.1; view.s*=f; render(); }, { passive:false });
 
+  // ---- right-click context menu (options depend on what is under the cursor) ----
+  const ctx = $("ctxmenu");
+  function closeCtx(){ ctx.classList.remove("show"); }
+  document.addEventListener("click", closeCtx);
+  canvas.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    if (selected == null){ const hit = hitTest(px2mm(e.clientX, e.clientY)); if (hit != null){ selected = hit; render(); } }
+    if (selected == null || !doc.shapes[selected]){ closeCtx(); return; }
+    const sh = doc.shapes[selected];
+    const layerItems = doc.layers.map(L=>`<div class="mi" data-setlayer="${L.index}"><span class="swatch" style="background:${PALETTE[L.index%PALETTE.length]}"></span>${L.name}</div>`).join("");
+    ctx.innerHTML =
+      `<div class="mi has-sub"><span class="caret">&#9656;</span><span data-i18n="ctx.changelayer">Change layer</span><div class="sub">${layerItems}</div></div>`
+      + `<div class="mi" data-ctx="dupe" data-i18n="action.dupe">Duplicate</div>`
+      + `<div class="mi" data-ctx="front" data-i18n="ctx.front">Bring to front</div>`
+      + `<div class="mi" data-ctx="back" data-i18n="ctx.back">Send to back</div>`
+      + `<div class="sep"></div>`
+      + `<div class="mi" data-ctx="delete" data-i18n="action.delete">Delete</div>`;
+    ctx.querySelectorAll("[data-setlayer]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); sh.cut_index=+el.dataset.setlayer; snapshot(); render(); generate(); closeCtx(); });
+    ctx.querySelectorAll("[data-ctx]").forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); const a=el.dataset.ctx;
+      if(a==="dupe"){ const c=JSON.parse(JSON.stringify(sh)); moveShapeTo2(c,5,5); doc.shapes.push(c); selected=doc.shapes.length-1; }
+      else if(a==="delete"){ doc.shapes.splice(selected,1); selected=null; }
+      else if(a==="front"){ const c=doc.shapes.splice(selected,1)[0]; doc.shapes.push(c); selected=doc.shapes.length-1; }
+      else if(a==="back"){ const c=doc.shapes.splice(selected,1)[0]; doc.shapes.unshift(c); selected=0; }
+      snapshot(); render(); refreshCounts(); closeCtx();
+    });
+    ctx.style.left = Math.min(e.clientX, window.innerWidth-210)+"px";
+    ctx.style.top = Math.min(e.clientY, window.innerHeight-230)+"px";
+    ctx.classList.add("show");
+  });
+
   // ---- layers panel ----
   function renderLayers(){
     const host=$("layers"); host.innerHTML="";
@@ -709,19 +812,54 @@
       const col=PALETTE[L.index%PALETTE.length];
       const cls = L.mode==="Fill"?"fill":(L.mode==="Image"?"img":"line");
       const el=document.createElement("div"); el.className="row"+(i===activeLayer?" sel":"");
-      el.innerHTML=`<div class="lyr"><span class="sw" style="background:${col}"></span><span class="n">${String(L.index).padStart(2,"0")}</span></div>`
+      el.innerHTML=`<div class="lyr"><span class="sw" style="background:${col}"></span><span class="n">${L.name}</span></div>`
         +`<span class="badge ${cls}">${trMode(L.mode)}</span>`
         +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`
         +`<span class="sw-toggle"></span><span class="sw-toggle"></span>`;
-      el.onclick=()=>{ activeLayer=i; renderLayers(); renderPalette(); };
-      el.ondblclick=()=>openCutSettings(i);
+      el.onclick=()=>{ activeLayer=i; renderLayers(); };
       host.appendChild(el);
     });
     $("shapeCount").textContent=doc.shapes.length;
+    renderLayerProps();
   }
-  function renderPalette(){
-    const host=$("palette"); host.querySelectorAll(".sw").forEach(n=>n.remove());
-    doc.layers.forEach((L,i)=>{ const sw=document.createElement("span"); sw.className="sw"+(i===activeLayer?" active":""); sw.style.background=PALETTE[L.index%PALETTE.length]; sw.title=L.name; sw.onclick=()=>{activeLayer=i;renderLayers();renderPalette();}; host.appendChild(sw); });
+  // renderPalette is retired with the bottom palette bar; kept as a no-op so the
+  // many existing call sites stay valid.
+  function renderPalette(){}
+  // Inline editor for the active layer, so laser options are adjustable in place.
+  const LP_MODES=[["Line","outline"],["Fill","hatch"],["Concentric","offset"],["Image","bitmap"]];
+  function renderLayerProps(){
+    const host=$("lp"); if (!host) return; const L=doc.layers[activeLayer]; if (!L){ host.innerHTML=""; return; }
+    const seg = LP_MODES.map(([m,aka])=>`<button data-m="${m}" class="${L.mode===m?"active":""}">${trMode(m)}</button>`).join("");
+    const galvo = isGalvo();
+    host.innerHTML =
+      `<div class="f2 full"><label data-i18n="lp.name">Layer name</label><input id="lp_name" value="${L.name.replace(/"/g,"&quot;")}"></div>`
+      + `<div class="seg" id="lp_seg">${seg}</div>`
+      + `<div class="f2"><label data-i18n="lp.speed">Speed mm/s</label><input id="lp_speed" type="number" min="1" value="${L.speed_mm_s}"></div>`
+      + `<div class="f2"><label data-i18n="lp.power">Power max %</label><input id="lp_power" type="number" min="0" max="100" value="${L.power_max}"></div>`
+      + `<div class="f2"><label data-i18n="lp.pmin">Power min %</label><input id="lp_pmin" type="number" min="0" max="100" value="${L.power_min}"></div>`
+      + `<div class="f2"><label data-i18n="lp.passes">Passes</label><input id="lp_passes" type="number" min="1" value="${L.num_passes}"></div>`
+      + ((L.mode==="Fill"||L.mode==="Concentric")?`<div class="f2"><label data-i18n="lp.interval">Line interval mm</label><input id="lp_interval" type="number" step="0.05" min="0.01" value="${L.interval}"></div><div class="f2"><label data-i18n="lp.angle">Hatch angle&deg;</label><input id="lp_angle" type="number" value="${L.angle}"></div>`:"")
+      + (galvo?`<div class="f2"><label data-i18n="lp.freq">Frequency kHz</label><input id="lp_freq" type="number" value="${L.freq}"></div><div class="f2"><label data-i18n="lp.qpulse">Q-pulse ns</label><input id="lp_qpulse" type="number" value="${L.qpulse}"></div>`:"")
+      + `<div class="f2 full"><label><input type="checkbox" id="lp_air" style="width:auto" ${L.air_assist?"checked":""}> <span data-i18n="lp.air">Air assist</span></label></div>`;
+    const commit=()=>{ render(); generate(); renderLayers(); };
+    $("lp_seg").querySelectorAll("button").forEach(b=>b.onclick=()=>{ L.mode=b.dataset.m; snapshot(); commit(); });
+    const bind=(id,set)=>{ const e=$(id); if(e) e.oninput=()=>{ set(e); render(); generate(); const row=$("layers").children[activeLayer]; if(row){ const sp=row.querySelector(".sp"); if(sp) sp.innerHTML=`${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span>`; } }; };
+    const nm=$("lp_name"); if(nm) nm.oninput=()=>{ L.name=nm.value; const row=$("layers").children[activeLayer]; if(row){ const n=row.querySelector(".n"); if(n) n.textContent=L.name; } };
+    bind("lp_speed",e=>L.speed_mm_s=+e.value||0);
+    bind("lp_power",e=>L.power_max=+e.value||0);
+    bind("lp_pmin",e=>L.power_min=+e.value||0);
+    bind("lp_passes",e=>L.num_passes=Math.max(1,+e.value||1));
+    bind("lp_interval",e=>L.interval=+e.value||0.1);
+    bind("lp_angle",e=>L.angle=+e.value||0);
+    bind("lp_freq",e=>L.freq=+e.value||30);
+    bind("lp_qpulse",e=>L.qpulse=+e.value||200);
+    const air=$("lp_air"); if(air) air.onchange=()=>{ L.air_assist=air.checked; };
+  }
+  // Add a new colour-coded layer and select it.
+  function addLayer(){
+    const idx = doc.layers.reduce((m,l)=>Math.max(m,l.index),-1) + 1;
+    doc.layers.push(layer(idx, "Layer "+String(idx).padStart(2,"0"), 100, 30, "Line"));
+    activeLayer = doc.layers.length - 1; snapshot(); renderLayers();
   }
 
   // ---- cut settings modal ----
@@ -819,6 +957,9 @@
     const g = mc.ctrl === "galvo";
     $("galvoRow").style.display = g ? "flex" : "none";
     $("devstat").style.display = g ? "flex" : "none";
+    // Frame is a machine feature. Show it only when the profile keeps it (default
+    // on). A machine with no traverse-framing sets supportsFrame:false.
+    const fb = $("frameBtn"); if (fb) fb.parentElement.style.display = (mc.supportsFrame === false) ? "none" : "flex";
     fit(); layout(); generate();
   }
   $("machine").onchange = () => {
@@ -1048,10 +1189,13 @@
     else if (a==="intersect"){ booleanWith("intersect"); }
     else if (a==="concentric"){ concentricFill(); }
     else if (a==="arrange"){ openArrange(); return; }
+    else if (a==="prefs"){ $("prefBg").classList.add("show"); return; }
     else if (a==="undo"){ undo(); return; }
     else if (a==="redo"){ redo(); return; }
     render(); refreshCounts();
   });
+  $("addLayer").onclick = addLayer;
+  $("prefClose").onclick = $("prefCancel").onclick = () => $("prefBg").classList.remove("show");
   function moveShapeTo2(sh,dx,dy){ translateShape(sh,dx,dy); }
   // Tile the selection into a cols by rows grid. Gap is the mm space between copies.
   function arrayGrid(cols, rows, gapX, gapY){
@@ -1351,10 +1495,18 @@
   // boot
   function layout(){ const r=canvas.getBoundingClientRect(); canvas.setAttribute("viewBox",`0 0 ${r.width} ${r.height}`); render(); }
   window.addEventListener("resize", layout);
-  renderLayers(); renderPalette(); $("canvas").classList.toggle("select", tool==="select");
+  renderLayers(); renderPalette(); updateToolbar(); $("canvas").classList.toggle("select", tool==="select");
   const params = new URLSearchParams(location.search);
   const urlLang = params.get("lang");
-  if (urlLang && I18N[urlLang]) $("lang").value = urlLang;
+  // Default to the browser language, mapped to a shipped locale, unless a URL
+  // parameter overrides it. Language is a preference under Edit > Preferences.
+  const browserLang = (() => {
+    const tags = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || "en"]);
+    for (const t of tags){ if (!t) continue; if (I18N[t]) return t; const base = t.toLowerCase().split("-")[0]; const hit = Object.keys(I18N).find(k => k.toLowerCase().split("-")[0] === base); if (hit) return hit; }
+    return "en";
+  })();
+  const startLang = (urlLang && I18N[urlLang]) ? urlLang : browserLang;
+  if (I18N[startLang]) $("lang").value = startLang;
   applyLang($("lang").value);
   const urlTab = params.get("tab");
   if (urlTab) { const tb = document.querySelector(`.docktabs button[data-dock="${urlTab}"]`); if (tb) tb.click(); }
@@ -1367,7 +1519,7 @@
   fit(); layout();
 
   init().then(()=>{
-    ready=true; $("wasmok").textContent="WASM ready"; generate();
+    ready=true; generate();
     const act = params.get("act");
     if (act==="concentric"){ selected=0; concentricFill(); render(); refreshCounts(); }
     else if (act==="weld"){ doc.shapes.push(rect(70,45,70,45,0)); weldActive(); render(); refreshCounts(); }
@@ -1416,7 +1568,7 @@
       pr(0,"LINE");pr(8,"SCORE");pr(10,20);pr(20,100);pr(11,130);pr(21,120);
       pr(0,"ENDSEC");pr(0,"EOF");
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
-  }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
+  }).catch(e=>{ const g=$("gcode"); if (g) g.textContent=String(e); console.error(e); });
 </script>
 </body>
 </html>
