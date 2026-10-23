@@ -376,9 +376,36 @@ pub fn plan_galvo_project(
         let Some(setting) = project.cut_setting_for(shape) else {
             continue;
         };
+        // A Concentric layer insets the outline in interval steps, the true offset
+        // fill. The shared `geomops::concentric` runs the craft-pathops offset, the
+        // same code the browser editor uses. The outline itself marks first, then
+        // each inset ring.
+        if let Some(galvo) = &setting.galvo
+            && galvo.mode == FillMode::Concentric
+            && closed
+        {
+            let outline: Vec<(f64, f64)> = points.iter().map(|p| (p.x, p.y)).collect();
+            let interval = galvo.fill.line_interval_mm.max(0.01);
+            commands.extend(mark_polyline(
+                param,
+                &outline,
+                true,
+                setting.power_max,
+                frequency_hz,
+            ));
+            for ring in lasercraft_geomops::concentric(&outline, interval, 500) {
+                commands.extend(mark_polyline(
+                    param,
+                    &ring,
+                    true,
+                    setting.power_max,
+                    frequency_hz,
+                ));
+            }
+            continue;
+        }
         // A Fill layer hatches the shape interior with scan lines, clipped to the
-        // outline. Concentric fill still needs the shared polygon offset, so it
-        // falls through to the outline for now.
+        // outline.
         if let Some(galvo) = &setting.galvo
             && galvo.mode == FillMode::Fill
         {
@@ -880,6 +907,58 @@ mod tests {
             fill_cmds.len() > outline_cmds.len() * 3,
             "fill {} outline {}",
             fill_cmds.len(),
+            outline_cmds.len()
+        );
+    }
+
+    #[test]
+    fn concentric_galvo_insets_rings_beyond_the_outline() {
+        use lasercraft_laser_doc::{FillParams, GalvoSettings};
+        let param = GalvoParam {
+            field_size_mm: 110.0,
+            resolution_bits: 16,
+        };
+        let square = || Geometry::Polyline {
+            points: vec![
+                Point2 { x: -20.0, y: -20.0 },
+                Point2 { x: 20.0, y: -20.0 },
+                Point2 { x: 20.0, y: 20.0 },
+                Point2 { x: -20.0, y: 20.0 },
+            ],
+            closed: true,
+        };
+        let mut outline = Project::new();
+        outline.cut_settings.push(cut());
+        outline.shapes.push(Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: square(),
+        });
+        let outline_cmds = plan_galvo_project(&outline, &param, 30_000);
+
+        let mut conc_setting = cut();
+        conc_setting.galvo = Some(GalvoSettings {
+            mode: FillMode::Concentric,
+            fill: FillParams {
+                line_interval_mm: 2.0,
+                ..FillParams::default()
+            },
+            ..GalvoSettings::default()
+        });
+        let mut conc = Project::new();
+        conc.cut_settings.push(conc_setting);
+        conc.shapes.push(Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: square(),
+        });
+        let conc_cmds = plan_galvo_project(&conc, &param, 30_000);
+
+        // A 40 mm square inset by 2 mm adds several rings, each with its own marks.
+        assert!(
+            conc_cmds.len() > outline_cmds.len() * 3,
+            "concentric {} outline {}",
+            conc_cmds.len(),
             outline_cmds.len()
         );
     }

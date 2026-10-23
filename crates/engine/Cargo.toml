@@ -13,6 +13,7 @@ lasercraft-laser-doc = { workspace = true }
 lasercraft-motion = { workspace = true }
 lasercraft-raster = { workspace = true }
 lasercraft-toolpath = { workspace = true }
+lasercraft-geomops = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 

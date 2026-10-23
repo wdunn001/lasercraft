@@ -308,6 +308,7 @@ version = "0.1.0"
 dependencies = [
  "lasercraft-galvo",
  "lasercraft-gcode",
+ "lasercraft-geomops",
  "lasercraft-laser-doc",
  "lasercraft-motion",
  "lasercraft-raster",
