@@ -284,6 +284,10 @@
           <button class="btn" id="camReset" data-i18n="cam.reset">Reset</button>
         </div>
         <div class="stat" id="camStat" style="color:var(--muted)">The camera overlays the bed so you can place a design on the material. Calibrate by clicking the four bed corners on the image.</div>
+        <div style="height:1px;background:var(--line);margin:4px 0"></div>
+        <div style="font-size:12px;color:var(--muted)" data-i18n="pnc.title">Print and cut</div>
+        <div class="devrow"><button class="btn" id="regMarks" style="flex:1" data-i18n="pnc.add">Add registration marks</button></div>
+        <div class="stat" style="color:var(--muted)" data-i18n="pnc.note">Marks print at the design corners. Print the sheet, place it on the bed, then calibrate the camera on the printed marks to align the cut.</div>
       </div>
     </div>
   </div>
@@ -1532,6 +1536,28 @@
     const [a,bb,c,d,e,f,g,hh] = h;
     return `matrix3d(${a},${d},0,${g}, ${bb},${e},0,${hh}, 0,0,1,0, ${c},${f},0,1)`;
   }
+  // Place print-and-cut registration marks at the design corners. Each mark is a
+  // small circle with a crosshair, on a Registration layer. Print the sheet, then
+  // calibrate the camera on the printed marks so the cut lands on the print.
+  function addRegistrationMarks(){
+    let bb;
+    const real = doc.shapes.filter(sh => { const L = doc.layers.find(l => l.index === sh.cut_index); return !L || L.name !== "Registration"; });
+    if (real.length){
+      bb = real.reduce((a, sh) => { const b = bbox(sh); return { x0:Math.min(a.x0,b.x0), y0:Math.min(a.y0,b.y0), x1:Math.max(a.x1,b.x1), y1:Math.max(a.y1,b.y1) }; }, { x0:1e9, y0:1e9, x1:-1e9, y1:-1e9 });
+    } else {
+      bb = { x0:12, y0:12, x1:BED.w-12, y1:BED.h-12 };
+    }
+    const m = 6, r = 3, c = 4.5;
+    const corners = [ [bb.x0-m,bb.y0-m], [bb.x1+m,bb.y0-m], [bb.x1+m,bb.y1+m], [bb.x0-m,bb.y1+m] ];
+    const cut = layerIndexForName("Registration");
+    for (const [cx, cy] of corners){
+      doc.shapes.push(ellipse(cx, cy, r, r, cut));
+      doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points:[p(cx-c,cy), p(cx+c,cy)], closed:false } } });
+      doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points:[p(cx,cy-c), p(cx,cy+c)], closed:false } } });
+    }
+    selectOnly(null); renderLayers(); snapshot(); render(); refreshCounts();
+  }
+  $("regMarks").onclick = addRegistrationMarks;
   $("camEnable").onclick = enableCamera;
   $("camReset").onclick = () => { const v=$("cam"); v.style.transform="none"; positionCam(); camCalibrating=false; camPts=[]; $("camStat").textContent="Alignment reset."; };
   $("camCalib").onclick = () => { if (!camStream){ $("camStat").textContent="Enable the camera first."; return; } camCalibrating=true; camPts=[]; const v=$("cam"); v.style.transform="none"; v.style.left="0px"; v.style.top="0px"; const r=canvas.getBoundingClientRect(); v.style.width=r.width+"px"; v.style.height=r.height+"px"; $("camStat").textContent="Click bed corner 1 of 4 (bottom-left) on the image."; };
@@ -1685,6 +1711,7 @@
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
     else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
     else if (act==="pages"){ doc.shapes=[rect(30,30,80,50,0)]; addPage(); doc.shapes=[ellipse(90,90,40,30,1)]; addPage(); doc.shapes=[rect(20,20,40,40,2), ellipse(100,100,30,30,0)]; renderPageTabs(); render(); refreshCounts(); }
+    else if (act==="regmarks"){ doc.shapes=[rect(45,45,60,45,0), ellipse(75,67,15,12,2)]; addRegistrationMarks(); const tb=document.querySelector('.docktabs button[data-dock="camera"]'); if (tb) tb.click(); render(); refreshCounts(); }
     else if (act==="textfill"){ $("textIn").value="LaserCraft"; $("textFont").value="sans";
       doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"LaserCraft", x:14, y:92, h:24, gap:0, align:"left", font:"sans" } } },
         { kind:"Text", cut_index:1, geometry:{ Text:{ s:"Filled 2026", x:14, y:52, h:16, gap:0, align:"left", font:"sans" } } }];
