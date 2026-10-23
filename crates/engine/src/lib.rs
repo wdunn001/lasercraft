@@ -160,25 +160,46 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
                 // Line mode: compose the outline with lead-in, perforation,
                 // overcut, and lead-out when the layer asks for them.
                 let line = setting.galvo.as_ref().map(|g| &g.line);
+                // Kerf offset: shift a closed cut outward or inward by the beam-width
+                // compensation, so the finished part holds its drawn size. An offset
+                // that collapses falls back to the original outline.
+                let kerf = line.map(|l| l.kerf_offset_mm).unwrap_or(0.0);
+                let contours: Vec<Vec<Point>> = if closed && kerf.abs() > 1e-9 && path.len() >= 3 {
+                    let tuples: Vec<(f64, f64)> = path.iter().map(|p| (p.x, p.y)).collect();
+                    let rings = lasercraft_geomops::offset(&tuples, kerf);
+                    if rings.is_empty() {
+                        vec![path.clone()]
+                    } else {
+                        rings
+                            .into_iter()
+                            .map(|r| r.into_iter().map(|(x, y)| Point { x, y }).collect())
+                            .collect()
+                    }
+                } else {
+                    vec![path.clone()]
+                };
                 let mut segs = Vec::new();
-                if let Some(li) = line.and_then(|l| lead_in_segment(&path, l.lead_in_mm)) {
-                    segs.push(li);
-                }
-                match line {
-                    Some(l) if l.perforation => segs.extend(perforate_path(
-                        &path,
-                        closed,
-                        l.perforation_cut_mm,
-                        l.perforation_skip_mm,
-                    )),
-                    _ => segs.extend(follow_polyline(&path, closed)),
-                }
-                if let Some(l) = line {
-                    segs.extend(overcut_segments(&path, closed, l.overcut_mm));
-                }
-                if let Some(lo) = line.and_then(|l| lead_out_segment(&path, closed, l.lead_out_mm))
-                {
-                    segs.push(lo);
+                for contour in &contours {
+                    if let Some(li) = line.and_then(|l| lead_in_segment(contour, l.lead_in_mm)) {
+                        segs.push(li);
+                    }
+                    match line {
+                        Some(l) if l.perforation => segs.extend(perforate_path(
+                            contour,
+                            closed,
+                            l.perforation_cut_mm,
+                            l.perforation_skip_mm,
+                        )),
+                        _ => segs.extend(follow_polyline(contour, closed)),
+                    }
+                    if let Some(l) = line {
+                        segs.extend(overcut_segments(contour, closed, l.overcut_mm));
+                    }
+                    if let Some(lo) =
+                        line.and_then(|l| lead_out_segment(contour, closed, l.lead_out_mm))
+                    {
+                        segs.push(lo);
+                    }
                 }
                 segs
             }
