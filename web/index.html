@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -552,6 +552,35 @@
       </div>
       <input type="file" id="gdCorFile" accept=".cor,.bin" class="hidden" />
       <div class="mfoot"><span class="stat" id="gdNote" style="color:var(--muted);flex:1"></span><button class="btn" id="gdCancel" data-i18n="action.cancel">Cancel</button><button class="btn primary" id="gdOk" data-i18n="action.ok">OK</button></div>
+    </div>
+  </div>
+
+  <!-- rotary setup -->
+  <div class="modal-bg" id="rotBg">
+    <div class="modal" style="width:480px">
+      <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 data-i18n="rot.title">Rotary setup</h2><span class="spacer"></span><span class="btn" id="rotClose">&times;</span></div>
+      <div class="mbody">
+        <label class="mccap"><input type="checkbox" id="rot_enable"> <span data-i18n="rot.enable">Enable rotary</span></label>
+        <div class="f" style="margin-top:12px"><label data-i18n="rot.type">Rotary type</label>
+          <select id="rot_type" style="width:100%"><option value="chuck" data-i18n="rot.chuck">Chuck</option><option value="roller" data-i18n="rot.roller">Roller</option></select></div>
+        <div class="f" style="margin-top:12px"><label data-i18n="rot.axis">Rotary axis</label>
+          <select id="rot_axis" style="width:100%"><option value="Y">Y</option><option value="Z">Z</option><option value="A">A</option><option value="X">X</option></select></div>
+        <div class="grid3" style="margin-top:12px">
+          <div class="f"><label data-i18n="rot.steps">Steps per rotation</label><input id="rot_steps" type="number" value="5000" style="width:100%"></div>
+          <div class="f"><label data-i18n="rot.diam">Object diameter mm</label><input id="rot_diam" type="number" step="0.1" value="50" style="width:100%"></div>
+          <div class="f"><label data-i18n="rot.circ">Circumference mm</label><input id="rot_circ" type="number" step="0.1" value="157.08" style="width:100%" readonly></div>
+        </div>
+        <div class="grid3" style="margin-top:12px">
+          <div class="f"><label data-i18n="rot.minspeed">Min speed</label><input id="rot_minspeed" type="number" value="500" style="width:100%"></div>
+          <div class="f"><label data-i18n="rot.maxspeed">Max speed</label><input id="rot_maxspeed" type="number" value="3000" style="width:100%"></div>
+          <div class="f"><label data-i18n="rot.accel">Accel time ms</label><input id="rot_accel" type="number" value="100" style="width:100%"></div>
+        </div>
+        <div class="mccaps" style="margin-top:12px">
+          <label class="mccap"><input type="checkbox" id="rot_reverse"> <span data-i18n="rot.reverse">Reverse rotary direction</span></label>
+          <label class="mccap"><input type="checkbox" id="rot_return" checked> <span data-i18n="rot.return">Return to starting point</span></label>
+        </div>
+      </div>
+      <div class="mfoot"><span class="stat" style="color:var(--muted);flex:1" data-i18n="rot.note">Rotary replaces one linear axis with the turntable.</span><button class="btn" id="rotCancel" data-i18n="action.cancel">Cancel</button><button class="btn primary" id="rotOk" data-i18n="action.ok">OK</button></div>
     </div>
   </div>
 
@@ -2175,6 +2204,29 @@
   $("gdClose").onclick = $("gdCancel").onclick = () => $("gdBg").classList.remove("show");
   $("gdOk").onclick = () => { saveGalvoSettings(); $("gdBg").classList.remove("show"); };
 
+  // ---- rotary setup (stored on the current machine) ----
+  function openRotary(){
+    const mc = currentMachine(); const r = mc.rotary || {};
+    $("rot_enable").checked = !!r.enable; $("rot_type").value = r.type || "chuck"; $("rot_axis").value = r.axis || "Y";
+    $("rot_steps").value = r.steps!=null?r.steps:5000; $("rot_diam").value = r.diam!=null?r.diam:50; $("rot_circ").value = (Math.PI*(+$("rot_diam").value||50)).toFixed(2);
+    $("rot_minspeed").value = r.minspeed!=null?r.minspeed:500; $("rot_maxspeed").value = r.maxspeed!=null?r.maxspeed:3000; $("rot_accel").value = r.accel!=null?r.accel:100;
+    $("rot_reverse").checked = !!r.reverse; $("rot_return").checked = r.return!==false;
+    localizeIn($("rotBg")); $("rotBg").classList.add("show");
+  }
+  $("rot_diam") && ($("rot_diam").oninput = () => { $("rot_circ").value = (Math.PI*(+$("rot_diam").value||0)).toFixed(2); });
+  $("rotOk") && ($("rotOk").onclick = () => {
+    const r = { enable:$("rot_enable").checked, type:$("rot_type").value, axis:$("rot_axis").value, steps:+$("rot_steps").value||5000,
+      diam:+$("rot_diam").value||50, circ:+$("rot_circ").value||0, minspeed:+$("rot_minspeed").value||500, maxspeed:+$("rot_maxspeed").value||3000,
+      accel:+$("rot_accel").value||100, reverse:$("rot_reverse").checked, return:$("rot_return").checked };
+    const idx = +$("machine").value; const base = allMachines()[idx]; const custom = customMachines();
+    if (idx >= BUILTIN_COUNT){ custom[idx-BUILTIN_COUNT].rotary = r; }
+    else { const copy = JSON.parse(JSON.stringify(base)); copy.rotary = r; custom.push(copy); }
+    try { localStorage.setItem("lc_machines", JSON.stringify(custom)); } catch(e){}
+    const sel = idx >= BUILTIN_COUNT ? idx : (BUILTIN_COUNT + custom.length - 1);
+    $("rotBg").classList.remove("show"); populateMachines(String(sel)); applyMachine(allMachines()[sel]);
+  });
+  $("rotClose") && ($("rotClose").onclick = $("rotCancel").onclick = () => $("rotBg").classList.remove("show"));
+
   // ---- export to engine project JSON ----
   // Expand a Text object into polyline shapes the engine understands. Every other
   // shape passes through unchanged.
@@ -2612,6 +2664,7 @@
     else if (a==="chamfer"){ applyCornerMod(false); return; }
     else if (a==="lock"){ lockSelection(); return; }
     else if (a==="unlock"){ unlockSelection(); return; }
+    else if (a==="rotary"){ openRotary(); return; }
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
     else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
@@ -3108,6 +3161,10 @@
   Object.assign(I18N.de, { "tool.hint.trim":"Auf ein Segment klicken, um es bis zur nächsten Kreuzung zu stutzen.","tool.hint.extend":"In die Nähe eines offenen Endes klicken, um es zur nächsten Form zu verlängern." });
   Object.assign(I18N.fr, { "tool.hint.trim":"Cliquez sur un segment pour le rogner jusqu'au croisement le plus proche.","tool.hint.extend":"Cliquez près d'une extrémité ouverte pour l'étendre à la forme la plus proche." });
   Object.assign(I18N["pt-BR"], { "tool.hint.trim":"Clique em um segmento para apará-lo até o cruzamento mais próximo.","tool.hint.extend":"Clique perto de uma extremidade aberta para estendê-la à forma mais próxima." });
+  Object.assign(I18N.es, { "action.rotary":"Configuración rotativa…","rot.title":"Configuración rotativa","rot.enable":"Activar rotativo","rot.type":"Tipo de rotativo","rot.chuck":"Mandril","rot.roller":"Rodillo","rot.axis":"Eje rotativo","rot.steps":"Pasos por rotación","rot.diam":"Diámetro del objeto mm","rot.circ":"Circunferencia mm","rot.minspeed":"Velocidad mín","rot.maxspeed":"Velocidad máx","rot.accel":"Tiempo de acel. ms","rot.reverse":"Invertir dirección rotativa","rot.return":"Volver al punto de inicio","rot.note":"El rotativo reemplaza un eje lineal por el plato giratorio." });
+  Object.assign(I18N.de, { "action.rotary":"Rotationseinrichtung…","rot.title":"Rotationseinrichtung","rot.enable":"Rotation aktivieren","rot.type":"Rotationstyp","rot.chuck":"Futter","rot.roller":"Rolle","rot.axis":"Rotationsachse","rot.steps":"Schritte pro Umdrehung","rot.diam":"Objektdurchmesser mm","rot.circ":"Umfang mm","rot.minspeed":"Min. Geschwindigkeit","rot.maxspeed":"Max. Geschwindigkeit","rot.accel":"Beschl.-Zeit ms","rot.reverse":"Rotationsrichtung umkehren","rot.return":"Zum Startpunkt zurück","rot.note":"Die Rotation ersetzt eine Linearachse durch den Drehteller." });
+  Object.assign(I18N.fr, { "action.rotary":"Configuration rotative…","rot.title":"Configuration rotative","rot.enable":"Activer le rotatif","rot.type":"Type de rotatif","rot.chuck":"Mandrin","rot.roller":"Rouleau","rot.axis":"Axe rotatif","rot.steps":"Pas par rotation","rot.diam":"Diamètre de l'objet mm","rot.circ":"Circonférence mm","rot.minspeed":"Vitesse min","rot.maxspeed":"Vitesse max","rot.accel":"Temps d'accél. ms","rot.reverse":"Inverser le sens rotatif","rot.return":"Retour au point de départ","rot.note":"Le rotatif remplace un axe linéaire par le plateau." });
+  Object.assign(I18N["pt-BR"], { "action.rotary":"Configuração rotativa…","rot.title":"Configuração rotativa","rot.enable":"Ativar rotativo","rot.type":"Tipo de rotativo","rot.chuck":"Mandril","rot.roller":"Rolo","rot.axis":"Eixo rotativo","rot.steps":"Passos por rotação","rot.diam":"Diâmetro do objeto mm","rot.circ":"Circunferência mm","rot.minspeed":"Velocidade mín","rot.maxspeed":"Velocidade máx","rot.accel":"Tempo de acel. ms","rot.reverse":"Inverter direção rotativa","rot.return":"Voltar ao ponto inicial","rot.note":"O rotativo substitui um eixo linear pelo prato giratório." });
   Object.assign(I18N.es, { "tool.sides":"Lados","tool.points":"Puntas" }); Object.assign(I18N.de, { "tool.sides":"Seiten","tool.points":"Spitzen" });
   Object.assign(I18N.fr, { "tool.sides":"Côtés","tool.points":"Pointes" }); Object.assign(I18N["pt-BR"], { "tool.sides":"Lados","tool.points":"Pontas" });
   Object.assign(I18N.de, { "action.fillet":"Ecken abrunden (Verrundung)…","action.chamfer":"Ecken fasen…","mod.filletamt":"Verrundungsradius mm","mod.chamferamt":"Fasenabstand mm" });
@@ -3188,6 +3245,7 @@
     else if (act==="preview"){ generate(); openPreview(); }
     else if (act==="cutsettings"){ openCutSettings(0); }
     else if (act==="galvosettings"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); }
+    else if (act==="rotary"){ openRotary(); }
     else if (act==="fillet"){ doc.shapes=[rect(40,30,70,50,0)]; sel=new Set([0]); selected=0; const g=doc.shapes[0].geometry.Polyline; g.points=cornerMod(g.points,true,12,true,8).map(q=>p(q.x,q.y)); render(); refreshCounts(); }
     else if (act==="shapes"){ doc.shapes=[roundedRect(20,70,50,35,8,0), regPolygon(110,88,22,22,6,0), slotShape(20,25,70,20,1)]; selectOnly(null); render(); refreshCounts(); }
     else if (act==="trim"){ doc.shapes=[rect(50,45,60,40,0), { kind:"Path", cut_index:1, geometry:{ Polyline:{ points:[p(20,65),p(140,65)], closed:false } } }]; render(); trimAt({x:80,y:65}); }
