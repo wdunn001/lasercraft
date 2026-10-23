@@ -40,7 +40,7 @@ because every item ships at once.
 
 - Document/File: core open/save/import/export, LightBurn .lbrn import, HPGL (.plt) import Done. G-code (.gc/.nc) import, PDF and Adobe Illustrator (.ai, PDF inside) import Done. LightBurn's remaining import formats are Ruida .rd (binary) and Snapmaker .sc. (LightBurn does not import Gerber or STL/3D.) Templates, bundles, print: Gap.
 - Drawing: primary shapes, rounded rect, slot, regular N-gon, star, Code 128, Code 39, QR code (byte mode, versions 1 to 10, decoder-verified) Done; other 1D/2D symbologies (Data Matrix, EAN/UPC) Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
-- Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend, mirror-across-line Done. Nesting, dock, two-point rotate: Gap.
+- Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend, mirror-across-line, nesting (shelf pack) Done. Dock, two-point rotate: Gap.
 - Node editing: insert/delete/move, trim, extend, break-at-node, convert-to-curve, convert-to-line Done; optimize/warp/deform: Gap.
 - Text: core + alignment + fonts + variable text (serial, date/time, CSV merge) + text-on-path Done; bending: Gap; bar code Partial (Code 128).
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs/bridges, perforation, lead-in/out, overcut, kerf offset (all applied in the G-code path) Done; sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
