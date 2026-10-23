@@ -115,6 +115,7 @@
   .gcode { position: relative; flex: 1; min-height: 80px; overflow: auto; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
   .gchdr { position: sticky; top: -10px; margin: -10px -10px 6px; padding: 6px 8px; display: flex; justify-content: flex-end; background: var(--field); border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; }
   .btn.sm { padding: 3px 10px; font-size: 11px; }
+  .devpos { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; color: var(--muted); align-self: center; }
   .gcode pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; line-height: 1.5; color: #cdd3e0; white-space: pre; }
   .stat { display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); }
   .stat b { color: var(--ink); }
@@ -167,6 +168,8 @@
   .toolbar { display: flex; align-items: center; gap: 10px; padding: 4px 12px; background: var(--panel); border-bottom: 1px solid var(--line); min-height: 32px; }
   .toolbar .tgrp { display: flex; align-items: center; gap: 8px; }
   .toolbar .tplabel { color: var(--muted); font-size: 12px; }
+  .toolbar .tpcheck { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 12px; cursor: pointer; }
+  .toolbar .tpcheck input { width: auto; }
   .dropdown .sep { height: 1px; background: var(--line); margin: 4px 2px; }
   .lyr-head { display: flex; align-items: center; justify-content: flex-end; padding: 2px 2px 6px; }
   .lyr-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -228,6 +231,11 @@
       <button class="btn" id="addText" data-i18n="text.place">Place</button>
     </span>
     <span class="tgrp" id="tp-hint"><span class="tplabel" id="toolHint" data-i18n="tool.hint.select">Select and move. Drag a handle to scale or rotate.</span></span>
+    <span class="tgrp" id="tp-draw" style="display:none">
+      <label class="tpcheck"><input type="checkbox" id="snapChk"> <span data-i18n="tool.snap">Snap to grid</span></label>
+      <input id="gridMM" type="number" min="0.5" step="0.5" value="10" title="grid mm" style="width:62px" />
+      <span class="tplabel" data-i18n="tool.gridmm">mm</span>
+    </span>
   </div>
 
   <div class="work">
@@ -248,6 +256,7 @@
     <div class="dock">
       <div class="docktabs">
         <button class="active" data-dock="design" data-i18n="tab.layers">Layers</button>
+        <button data-dock="props" data-i18n="tab.props">Properties</button>
         <button data-dock="move" data-i18n="tab.move">Move</button>
         <button data-dock="camera" data-i18n="tab.camera">Camera</button>
       </div>
@@ -271,13 +280,44 @@
             <button class="btn" id="connectBtn" style="flex:1" data-i18n="galvo.connect">Connect galvo (WebUSB)</button>
             <button class="btn" id="sendBtn" disabled data-i18n="galvo.send">Send</button>
           </div>
+          <div class="devrow" id="serialRow"><button class="btn" id="connectSerial" style="flex:1" data-i18n="dev.connect">Connect (USB serial)</button></div>
           <div class="stat" id="devstat" style="display:none" data-i18n="galvo.notconnected">Galvo not connected. Plug in the board and click Connect.</div>
           <div class="devrow"><button class="btn" id="frameBtn" style="flex:1" data-i18n="action.frame">Frame</button><button class="btn primary" id="genBtn" style="flex:1" data-i18n="action.generate">Generate</button></div>
+          <div class="devrow" id="jobRow" style="display:none">
+            <button class="btn primary" id="runBtn" style="flex:2" data-i18n="dev.run">&#9654; Run job</button>
+            <button class="btn" id="pauseBtn" style="flex:1" data-i18n="dev.pause">Pause</button>
+            <button class="btn danger" id="stopBtn" style="flex:1" data-i18n="dev.stop">Stop</button>
+          </div>
+          <div class="devrow" id="jogRow" style="display:none">
+            <button class="btn sm" id="homeBtn" title="Home ($H)" data-i18n="dev.home">Home</button>
+            <button class="btn sm" id="originBtn" title="Set job origin here" data-i18n="dev.setorigin">Set origin</button>
+            <button class="btn sm" id="unlockBtn" title="Unlock ($X)" data-i18n="dev.unlock">Unlock</button>
+            <span class="spacer"></span>
+            <span class="devpos" id="devpos">&mdash;</span>
+          </div>
           <button class="btn" id="matBtn" style="width:100%" data-i18n="mat.open">Material Library&hellip;</button>
           <div class="gcode"><div class="gchdr"><button class="btn sm" id="copyBtn" data-i18n="action.copy">Copy</button></div><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
           <div class="stat"><span><span data-i18n="stat.lines">Lines</span> <b id="lineCount">0</b></span><span><span data-i18n="stat.shapes">Shapes</span> <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
       </div>
+      </div>
+
+      <div id="propsPane" class="dpane" style="display:none;padding:16px;overflow:auto">
+        <div id="propsEmpty" class="stat" style="color:var(--muted)" data-i18n="props.empty">Select an object to edit its position, size and rotation.</div>
+        <div id="propsBody" style="display:none">
+          <div class="lp">
+            <div class="f2"><label data-i18n="props.x">X mm</label><input id="pr_x" type="number" step="0.1"></div>
+            <div class="f2"><label data-i18n="props.y">Y mm</label><input id="pr_y" type="number" step="0.1"></div>
+            <div class="f2"><label data-i18n="props.w">Width mm</label><input id="pr_w" type="number" step="0.1"></div>
+            <div class="f2"><label data-i18n="props.h">Height mm</label><input id="pr_h" type="number" step="0.1"></div>
+            <div class="f2 full"><label><input type="checkbox" id="pr_lock" checked style="width:auto"> <span data-i18n="props.lock">Lock aspect ratio</span></label></div>
+            <div class="f2"><label data-i18n="props.rot">Rotate &deg;</label><input id="pr_rot" type="number" step="1" value="0"></div>
+          </div>
+          <div class="moveacts" style="margin-top:14px">
+            <button class="btn" id="pr_fliph" data-i18n="props.fliph">Flip horizontal</button>
+            <button class="btn" id="pr_flipv" data-i18n="props.flipv">Flip vertical</button>
+          </div>
+        </div>
       </div>
 
       <div id="movePane" class="dpane" style="display:none;padding:16px;overflow:auto">
@@ -400,6 +440,11 @@
         <div class="f"><label data-i18n="mc.name">Name</label><input id="mc_name" style="width:100%" placeholder="My laser"></div>
         <div class="f" style="margin-top:12px"><label data-i18n="mc.ctrl">Controller</label><select id="mc_ctrl" style="width:100%"><option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option><option value="grbl-lpc">GRBL-LPC</option><option value="marlin">Marlin</option><option value="smoothie">Smoothie</option><option value="reprap">RepRapFirmware</option><option value="linuxcnc">LinuxCNC</option><option value="galvo">EZCAD2 / JCZFiber (galvo)</option></select></div>
         <div class="grid3" style="margin-top:12px"><div class="f"><label data-i18n="mc.w">Width mm</label><input id="mc_w" type="number" value="400" style="width:100%"></div><div class="f"><label data-i18n="mc.h">Height mm</label><input id="mc_h" type="number" value="400" style="width:100%"></div><div></div></div>
+        <div class="grid3" style="margin-top:12px">
+          <div class="f"><label data-i18n="mc.origin">Origin corner</label><select id="mc_origin" style="width:100%"><option value="FL">Front-left</option><option value="FR">Front-right</option><option value="RL">Rear-left</option><option value="RR">Rear-right</option></select></div>
+          <div class="f"><label data-i18n="mc.start">Job start</label><select id="mc_start" style="width:100%"><option value="abs">Absolute coords</option><option value="current">Current position</option></select></div>
+          <div class="f"><label data-i18n="mc.baud">Baud</label><select id="mc_baud" style="width:100%"><option>115200</option><option>250000</option><option>57600</option><option>38400</option><option>9600</option></select></div>
+        </div>
         <div class="f" style="margin-top:12px"><label data-i18n="mc.features">Features</label>
           <div class="mccaps">
             <label class="mccap"><input type="checkbox" id="mc_frame" checked> <span data-i18n="mc.cap.frame">Frame (traverse outline)</span></label>
@@ -470,6 +515,8 @@
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
   let curFlavor = "grbl";                        // controller dialect, set by the machine
   let curAir = true;                             // machine has a controllable air assist
+  let curStart = "abs";                          // job start: absolute coords or current position
+  let curOrigin = "FL";                          // which bed corner is machine zero
   const SVGNS = "http://www.w3.org/2000/svg";
   const $ = id => document.getElementById(id);
 
@@ -500,6 +547,13 @@
     return { kind: "Ellipse", cut_index: cut, geometry: { Polyline: { points: pts, closed: true } } };
   }
   function p(x,y){ return { x:+x.toFixed(3), y:+y.toFixed(3) }; }
+  let snapOn = false, gridMM = 10;
+  const DRAW_TOOLS = { rect:1, ellipse:1, poly:1, line:1, pen:1 };
+  // Snap a point to the grid, but only while a drawing tool is active and snap is on.
+  function snapForTool(pt){
+    if (!snapOn || !DRAW_TOOLS[tool] || !(gridMM > 0)) return pt;
+    return { x: +(Math.round(pt.x/gridMM)*gridMM).toFixed(3), y: +(Math.round(pt.y/gridMM)*gridMM).toFixed(3) };
+  }
 
   // A single-stroke engraving font (grid x 0..5, y up 0..7). Each glyph is a list
   // of open strokes. This is how laser tools mark text: thin centre-line paths.
@@ -607,6 +661,8 @@
       $("addText").style.display = "";
     }
     const h = $("toolHint"); if (h) h.textContent = tr("tool.hint." + tool, TOOL_HINT[tool] || TOOL_HINT.select);
+    // The grid-snap options belong to the drawing tools.
+    const dp = $("tp-draw"); if (dp) dp.style.display = (!showText && DRAW_TOOLS[tool]) ? "flex" : "none";
   }
   const toolsEl = $("tools");
   function setTool(name){
@@ -684,6 +740,7 @@
     canvas.innerHTML = s;
     if (typeof positionCam === "function") positionCam();
     if (typeof updateToolbar === "function") updateToolbar();
+    if (typeof renderProps === "function") renderProps();
   }
   function shapePoints(sh){ return sh.geometry.Polyline ? sh.geometry.Polyline.points : []; }
   // Editable control points for the node tool. Each entry references the live
@@ -758,6 +815,49 @@
   function translateShape(sh, dx, dy){ eachPoint(sh, q => { q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); }); }
   function rotateShapeAbout(sh, cx, cy, th){ const cs=Math.cos(th), sn=Math.sin(th); eachPoint(sh, q => { const x=q.x-cx, y=q.y-cy; q.x=+(cx+x*cs-y*sn).toFixed(3); q.y=+(cy+x*sn+y*cs).toFixed(3); }); }
   function scaleShapeAbout(sh, ox, oy, sx, sy){ eachPoint(sh, q => { q.x=+(ox+(q.x-ox)*sx).toFixed(3); q.y=+(oy+(q.y-oy)*sy).toFixed(3); }); }
+  // Union box over the whole selection, in mm.
+  function selBBox(){
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9, any=false;
+    for (const i of sel){ const sh=doc.shapes[i]; if(!sh) continue; const b=bbox(sh); x0=Math.min(x0,b.x0); y0=Math.min(y0,b.y0); x1=Math.max(x1,b.x1); y1=Math.max(y1,b.y1); any=true; }
+    return any ? {x0,y0,x1,y1} : null;
+  }
+  // Numeric properties panel for the current selection: position, size, rotation,
+  // flips. Rotation is relative to the angle shown, reset to 0 when the selection
+  // changes, so a typed value turns the selection by that much about its centre.
+  let propsRot = 0, lastSelSig = "";
+  function eachSel(fn){ for (const i of sel){ const sh=doc.shapes[i]; if (sh) fn(sh); } }
+  function renderProps(){
+    const pane = $("propsPane"); if (!pane || pane.style.display === "none") return;
+    const sig = [...sel].sort((a,b)=>a-b).join(","); if (sig !== lastSelSig){ lastSelSig = sig; propsRot = 0; }
+    const b = selBBox();
+    $("propsEmpty").style.display = b ? "none" : "";
+    $("propsBody").style.display = b ? "" : "none";
+    if (!b) return;
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#propsBody")) return; // don't fight live typing
+    $("pr_x").value = (+b.x0).toFixed(2); $("pr_y").value = (+b.y0).toFixed(2);
+    $("pr_w").value = (b.x1-b.x0).toFixed(2); $("pr_h").value = (b.y1-b.y0).toFixed(2);
+    $("pr_rot").value = propsRot;
+  }
+  function propsCommit(){ propsRot = +$("pr_rot").value || 0; snapshot(); render(); generate(); renderProps(); }
+  function propsMove(){
+    const b = selBBox(); if (!b) return; const dx=(+$("pr_x").value)-b.x0, dy=(+$("pr_y").value)-b.y0;
+    if (dx||dy){ eachSel(sh=>translateShape(sh,dx,dy)); propsCommit(); }
+  }
+  function propsResize(fromW){
+    const b = selBBox(); if (!b) return; const w=b.x1-b.x0, h=b.y1-b.y0;
+    let nw=+$("pr_w").value, nh=+$("pr_h").value;
+    if ($("pr_lock").checked){ if (fromW && w>0){ nh = h*(nw/w); } else if (!fromW && h>0){ nw = w*(nh/h); } }
+    const sx = w>0 ? nw/w : 1, sy = h>0 ? nh/h : 1;
+    if (sx!==1 || sy!==1){ eachSel(sh=>scaleShapeAbout(sh,b.x0,b.y0,sx,sy)); propsCommit(); }
+  }
+  function propsRotate(){
+    const b = selBBox(); if (!b) return; const nv=+$("pr_rot").value||0; const d=(nv-propsRot)*Math.PI/180;
+    if (d){ const cx=(b.x0+b.x1)/2, cy=(b.y0+b.y1)/2; eachSel(sh=>rotateShapeAbout(sh,cx,cy,d)); propsRot=nv; snapshot(); render(); generate(); }
+  }
+  function propsFlip(horiz){
+    const b = selBBox(); if (!b) return; const cx=(b.x0+b.x1)/2, cy=(b.y0+b.y1)/2;
+    eachSel(sh=>scaleShapeAbout(sh, cx, cy, horiz?-1:1, horiz?1:-1)); propsCommit();
+  }
   // The transform handles around the selected shape's box, in mm. Four corners
   // scale both axes about the opposite corner, four edges scale one axis about the
   // opposite edge, and a stem above the box rotates about the centre.
@@ -879,7 +979,7 @@
   }
   canvas.addEventListener("mousedown", e => {
     if (camCalibrating){ handleCalibClick(e); return; }
-    const m = px2mm(e.clientX, e.clientY); start = m;
+    const m = snapForTool(px2mm(e.clientX, e.clientY)); start = m;
     if (tool === "pen"){
       const r = canvas.getBoundingClientRect();
       if (penAnchors.length >= 2){ const d0 = mm2px(penAnchors[0].p); if (Math.hypot(d0.x-(e.clientX-r.left), d0.y-(e.clientY-r.top)) < 8){ finishPen(true); return; } }
@@ -914,7 +1014,7 @@
     }
   });
   canvas.addEventListener("mousemove", e => {
-    const m = px2mm(e.clientX, e.clientY);
+    const m = snapForTool(px2mm(e.clientX, e.clientY));
     $("readout").textContent = `x ${m.x.toFixed(1)}  y ${m.y.toFixed(1)} mm`;
     if (tool==="pen" && penDrag && penAnchors.length){ const a = penAnchors[penAnchors.length-1]; a.hOut={x:m.x,y:m.y}; a.hIn={x:2*a.p.x-m.x,y:2*a.p.y-m.y}; drawing=penPreview(); render(); return; }
     if (tool==="measure" && measureA){ drawing = measureOverlay(measureA, m); render(); return; }
@@ -1365,12 +1465,17 @@
     BED = { w: mc.w, h: mc.h };
     curFlavor = mc.ctrl;
     curAir = mc.air !== false;
+    curStart = mc.start || "abs"; curOrigin = mc.origin || "FL";
+    SERIAL.baud = mc.baud || 115200;
     const g = mc.ctrl === "galvo";
+    // Galvo talks over WebUSB; every other controller streams G-code over serial.
     $("galvoRow").style.display = g ? "flex" : "none";
+    $("serialRow").style.display = g ? "none" : "flex";
     $("devstat").style.display = g ? "flex" : "none";
     // Frame is a machine feature. Show the button only when the profile keeps it
     // (default on). Hide only the button, never its row-mate Generate.
     const fb = $("frameBtn"); if (fb) fb.style.display = (mc.frame === false) ? "none" : "";
+    updateDeviceButtons();
     fit(); layout(); generate();
   }
   const BUILTIN_COUNT = BUILTIN_MACHINES.length;
@@ -1381,6 +1486,7 @@
     const mc = editing ? allMachines()[mcEditIdx] : { name:"", ctrl:"grbl", w:400, h:400, frame:true, air:true };
     $("mc_name").value = mc.name; $("mc_ctrl").value = mc.ctrl; $("mc_w").value = mc.w; $("mc_h").value = mc.h;
     $("mc_frame").checked = mc.frame !== false; $("mc_air").checked = mc.air !== false;
+    $("mc_origin").value = mc.origin || "FL"; $("mc_start").value = mc.start || "abs"; $("mc_baud").value = String(mc.baud || 115200);
     $("mcTitle").textContent = tr(editing ? "mc.edit" : "mc.add", editing ? "Edit machine" : "Add machine");
     $("mcOk").textContent = editing ? tr("mc.update", "Save") : tr("mc.save", "Add");
     // Delete is offered for custom machines only; built-ins are read-only presets.
@@ -1393,7 +1499,7 @@
   };
   $("editMachine").onclick = () => openMachineDialog(+$("machine").value || 0);
   $("mcOk").onclick = () => {
-    const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked };
+    const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked, origin: $("mc_origin").value, start: $("mc_start").value, baud: +$("mc_baud").value || 115200 };
     const custom = customMachines();
     let selIdx;
     if (mcEditIdx != null && mcEditIdx >= BUILTIN_COUNT){ custom[mcEditIdx - BUILTIN_COUNT] = mc; selIdx = mcEditIdx; }
@@ -1597,9 +1703,20 @@
   $("textH").addEventListener("input", () => { const t = selText(); if (t){ t.h = +$("textH").value || 8; t.gap = t.h*0.28; render(); generate(); } });
   $("textAlign").addEventListener("change", () => { const t = selText(); if (t){ t.align = $("textAlign").value; render(); generate(); } });
   $("textFont").addEventListener("change", () => { const t = selText(); if (t){ t.font = $("textFont").value; t._sig = null; render(); generate(); } });
+  // Properties tab numeric fields.
+  $("pr_x") && ($("pr_x").onchange = propsMove);
+  $("pr_y") && ($("pr_y").onchange = propsMove);
+  $("pr_w") && ($("pr_w").onchange = () => propsResize(true));
+  $("pr_h") && ($("pr_h").onchange = () => propsResize(false));
+  $("pr_rot") && ($("pr_rot").onchange = propsRotate);
+  $("pr_fliph") && ($("pr_fliph").onclick = () => propsFlip(true));
+  $("pr_flipv") && ($("pr_flipv").onclick = () => propsFlip(false));
+  // Grid-snap tool option.
+  $("snapChk") && ($("snapChk").onchange = () => { snapOn = $("snapChk").checked; });
+  $("gridMM") && ($("gridMM").onchange = () => { gridMM = +$("gridMM").value || 10; });
 
   $("genBtn").onclick = generate;
-  $("frameBtn").onclick = () => { if(!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":curFlavor); } catch(e){ $("gcode").textContent=String(e); } };
+  $("frameBtn").onclick = runFrame;
   $("copyBtn").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("gcode").textContent);
 
   // ---- galvo output + real WebUSB connection ----
@@ -1673,6 +1790,135 @@
   }
   $("connectBtn") && ($("connectBtn").onclick = connectGalvo);
   $("sendBtn") && ($("sendBtn").onclick = sendGalvo);
+
+  // ---- GRBL / G-code controller over WebSerial ----
+  // A line-based streamer: send one line, wait for GRBL's "ok" or "error" before
+  // the next. Slower than character-counting but simple and safe, which is what a
+  // beam-firing device wants. Framing runs beam-off; a real run asks for an
+  // explicit confirmation first.
+  const SERIAL = { port:null, writer:null, reader:null, baud:115200, running:false, paused:false, okq:[], rx:"" };
+  function serialConnected(){ return !!SERIAL.port; }
+  function updateDeviceButtons(){
+    const g = isGalvo(); const on = serialConnected();
+    $("connectSerial").textContent = on ? tr("dev.disconnect","Disconnect") : tr("dev.connect","Connect (USB serial)");
+    $("jobRow").style.display = (!g && on) ? "flex" : "none";
+    $("jogRow").style.display = (!g && on) ? "flex" : "none";
+    const busy = SERIAL.running;
+    const rb = $("runBtn"); if (rb) rb.disabled = busy;
+    const pb = $("pauseBtn"); if (pb) pb.textContent = SERIAL.paused ? tr("dev.resume","Resume") : tr("dev.pause","Pause");
+  }
+  async function connectSerial(){
+    if (serialConnected()){ await disconnectSerial(); return; }
+    if (!("serial" in navigator)){ setDev(tr("dev.noserial","WebSerial is not available. Use Chrome or Edge over HTTPS.")); $("devstat").style.display="flex"; return; }
+    try {
+      const port = await navigator.serial.requestPort();
+      await port.open({ baudRate: SERIAL.baud });
+      SERIAL.port = port; SERIAL.writer = port.writable.getWriter(); SERIAL.okq = []; SERIAL.rx = "";
+      serialReadLoop();
+      $("devstat").style.display = "flex";
+      setDev(tr("dev.connected","Connected over serial at ") + SERIAL.baud + " baud.");
+      // Wake GRBL and ask for a status report.
+      await rawWrite("\r\n\r\n"); setTimeout(()=>rawWrite("?"), 400);
+      updateDeviceButtons();
+    } catch(e){ setDev(tr("dev.connfail","Serial connect failed: ") + e.message); $("devstat").style.display="flex"; }
+  }
+  async function disconnectSerial(){
+    SERIAL.running = false; SERIAL.paused = false;
+    try { if (SERIAL.reader){ await SERIAL.reader.cancel(); } } catch(e){}
+    try { if (SERIAL.writer){ SERIAL.writer.releaseLock(); } } catch(e){}
+    try { if (SERIAL.port){ await SERIAL.port.close(); } } catch(e){}
+    SERIAL.port = null; SERIAL.writer = null; SERIAL.reader = null; SERIAL.okq = [];
+    setDev(tr("dev.disconnected","Disconnected.")); updateDeviceButtons();
+  }
+  async function serialReadLoop(){
+    try {
+      SERIAL.reader = SERIAL.port.readable.getReader();
+      const dec = new TextDecoder();
+      while (true){
+        const { value, done } = await SERIAL.reader.read();
+        if (done) break;
+        SERIAL.rx += dec.decode(value);
+        let nl;
+        while ((nl = SERIAL.rx.indexOf("\n")) >= 0){
+          const line = SERIAL.rx.slice(0, nl).trim(); SERIAL.rx = SERIAL.rx.slice(nl + 1);
+          handleGrblLine(line);
+        }
+      }
+    } catch(e){ /* reader cancelled on disconnect */ } finally { try { SERIAL.reader && SERIAL.reader.releaseLock(); } catch(e){} }
+  }
+  function handleGrblLine(line){
+    if (!line) return;
+    if (line === "ok" || line.startsWith("error") || line.startsWith("ALARM")){
+      const w = SERIAL.okq.shift(); if (w) w(line);
+      if (line.startsWith("ALARM")) setDev("GRBL " + line + " — click Unlock ($X) to clear.");
+      return;
+    }
+    // Status report: <Idle|MPos:0.000,0.000,0.000|...>
+    const m = line.match(/MPos:(-?[\d.]+),(-?[\d.]+)/) || line.match(/WPos:(-?[\d.]+),(-?[\d.]+)/);
+    if (m){ const pos = $("devpos"); if (pos) pos.textContent = `X ${(+m[1]).toFixed(1)}  Y ${(+m[2]).toFixed(1)}`; }
+  }
+  async function rawWrite(s){ if (SERIAL.writer) await SERIAL.writer.write(new TextEncoder().encode(s)); }
+  async function rawByte(b){ if (SERIAL.writer) await SERIAL.writer.write(new Uint8Array([b])); }
+  function sendLine(line){
+    return new Promise(async (resolve) => {
+      SERIAL.okq.push(resolve);
+      try { await SERIAL.writer.write(new TextEncoder().encode(line + "\n")); }
+      catch(e){ const i = SERIAL.okq.indexOf(resolve); if (i>=0) SERIAL.okq.splice(i,1); resolve("error:write"); }
+    });
+  }
+  async function streamGcode(text, label){
+    const lines = text.split("\n").map(l => l.replace(/;.*/, "").trim()).filter(Boolean);
+    SERIAL.running = true; SERIAL.paused = false; updateDeviceButtons();
+    for (let i = 0; i < lines.length; i++){
+      if (!SERIAL.running) break;
+      while (SERIAL.paused && SERIAL.running) await new Promise(r => setTimeout(r, 120));
+      if (!SERIAL.running) break;
+      await sendLine(lines[i]);
+      if ((i & 7) === 0 || i === lines.length - 1) setDev(`${label} ${i + 1}/${lines.length}`);
+    }
+    const done = SERIAL.running; SERIAL.running = false; updateDeviceButtons();
+    if (done){ setDev(`${label} ${tr("dev.complete","complete")}.`); await rawWrite("?"); }
+  }
+  async function runFrame(){
+    if (!ready) return;
+    let frameG;
+    try { frameG = generate_frame(JSON.stringify(toProject()), "hull", isGalvo() ? "grbl" : curFlavor); }
+    catch(e){ $("gcode").textContent = String(e); return; }
+    $("gcode").textContent = frameG;
+    if (isGalvo() || !serialConnected()) return;   // preview only without a serial machine
+    if (SERIAL.running){ setDev(tr("dev.busy","A job is already running.")); return; }
+    // Frame with the beam off: M5 ensures the laser cannot fire while tracing.
+    await streamGcode("M5\n" + frameG + "\nM5", tr("dev.framing","Framing"));
+  }
+  async function runJob(){
+    if (!serialConnected()){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; }
+    if (SERIAL.running){ setDev(tr("dev.busy","A job is already running.")); return; }
+    const g = $("gcode").textContent;
+    if (!g || !g.trim() || isGalvo()){ setDev(tr("dev.gennext","Generate G-code first.")); return; }
+    if (!confirm(tr("dev.runconfirm","Run this job on the laser now? The beam will fire. Make sure the lid is closed, the area is clear, and you can reach Stop."))) return;
+    // "Current position" start treats the head's current spot as work zero.
+    const prefix = curStart === "current" ? "G92 X0 Y0\n" : "";
+    await streamGcode(prefix + g, tr("dev.running2","Running"));
+  }
+  async function pauseResume(){
+    if (!serialConnected() || !SERIAL.running) return;
+    SERIAL.paused = !SERIAL.paused;
+    await rawByte(SERIAL.paused ? 0x21 : 0x7E);   // '!' feed hold / '~' cycle start
+    setDev(SERIAL.paused ? tr("dev.paused","Paused.") : tr("dev.resumed","Resumed."));
+    updateDeviceButtons();
+  }
+  async function stopJob(){
+    SERIAL.running = false; SERIAL.paused = false; SERIAL.okq = [];
+    await rawByte(0x18);   // GRBL soft reset: halts motion and clears the planner
+    setDev(tr("dev.stopped","Stopped.")); updateDeviceButtons(); setTimeout(()=>rawWrite("?"), 300);
+  }
+  $("connectSerial") && ($("connectSerial").onclick = connectSerial);
+  $("runBtn") && ($("runBtn").onclick = runJob);
+  $("pauseBtn") && ($("pauseBtn").onclick = pauseResume);
+  $("stopBtn") && ($("stopBtn").onclick = stopJob);
+  $("homeBtn") && ($("homeBtn").onclick = () => serialConnected() && sendLine("$H"));
+  $("unlockBtn") && ($("unlockBtn").onclick = () => serialConnected() && sendLine("$X"));
+  $("originBtn") && ($("originBtn").onclick = () => serialConnected() && sendLine("G92 X0 Y0"));
 
   // menus
   document.querySelectorAll(".menubar .m").forEach(m => m.onclick = e => { if (e.target.dataset.act) return; document.querySelectorAll(".menubar .m").forEach(x=>x.classList.toggle("open", x===m && !m.classList.contains("open"))); e.stopPropagation(); });
@@ -1882,8 +2128,10 @@
   document.querySelectorAll(".docktabs button").forEach(b => b.onclick = () => {
     document.querySelectorAll(".docktabs button").forEach(x => x.classList.toggle("active", x === b));
     $("designPane").style.display = b.dataset.dock === "design" ? "flex" : "none";
+    $("propsPane").style.display = b.dataset.dock === "props" ? "flex" : "none";
     $("movePane").style.display = b.dataset.dock === "move" ? "flex" : "none";
     $("cameraPane").style.display = b.dataset.dock === "camera" ? "flex" : "none";
+    if (b.dataset.dock === "props") renderProps();
   });
 
   // ---- Camera overlay + 4-corner alignment ----
@@ -2043,6 +2291,10 @@
   Object.assign(I18N.de, { "mat.import":"Importieren…","mat.export":"Exportieren","mat.addmat":"Material hinzufügen","mat.apply":"Anwenden","mat.addfinish":"+ Finish","mat.empty":"Noch keine Materialien. Fügen Sie eines hinzu oder importieren Sie eine Bibliothek.","mat.newname":"Materialname","mat.delconfirm":"Dieses Material und seine Finishes löschen?","mat.importerr":"Datei konnte nicht gelesen werden: ","mat.importnone":"Keine Presets in der Datei gefunden.","action.rename":"Umbenennen","action.edit":"Bearbeiten","fx.title":"Finish","fx.add":"Finish hinzufügen","fx.edit":"Finish bearbeiten","fx.name":"Finish-Name","fx.mode":"Modus","fx.note":"Erwartete Wirkung / Notiz","fx.untitled":"Finish" });
   Object.assign(I18N.fr, { "mat.import":"Importer…","mat.export":"Exporter","mat.addmat":"Ajouter un matériau","mat.apply":"Appliquer","mat.addfinish":"+ Finition","mat.empty":"Aucun matériau pour l'instant. Ajoutez-en un ou importez une bibliothèque.","mat.newname":"Nom du matériau","mat.delconfirm":"Supprimer ce matériau et ses finitions ?","mat.importerr":"Impossible de lire le fichier : ","mat.importnone":"Aucun préréglage trouvé dans le fichier.","action.rename":"Renommer","action.edit":"Modifier","fx.title":"Finition","fx.add":"Ajouter une finition","fx.edit":"Modifier la finition","fx.name":"Nom de la finition","fx.mode":"Mode","fx.note":"Effet attendu / note","fx.untitled":"Finition" });
   Object.assign(I18N["pt-BR"], { "mat.import":"Importar…","mat.export":"Exportar","mat.addmat":"Adicionar material","mat.apply":"Aplicar","mat.addfinish":"+ Acabamento","mat.empty":"Ainda não há materiais. Adicione um ou importe uma biblioteca.","mat.newname":"Nome do material","mat.delconfirm":"Excluir este material e seus acabamentos?","mat.importerr":"Não foi possível ler o arquivo: ","mat.importnone":"Nenhuma predefinição encontrada no arquivo.","action.rename":"Renomear","action.edit":"Editar","fx.title":"Acabamento","fx.add":"Adicionar acabamento","fx.edit":"Editar acabamento","fx.name":"Nome do acabamento","fx.mode":"Modo","fx.note":"Efeito esperado / nota","fx.untitled":"Acabamento" });
+  Object.assign(I18N.es, { "tab.props":"Propiedades","props.empty":"Seleccione un objeto para editar su posición, tamaño y rotación.","props.x":"X mm","props.y":"Y mm","props.w":"Ancho mm","props.h":"Alto mm","props.lock":"Bloquear proporción","props.rot":"Rotar °","props.fliph":"Voltear horizontal","props.flipv":"Voltear vertical","tool.snap":"Ajustar a la cuadrícula","tool.gridmm":"mm","mc.origin":"Esquina de origen","mc.start":"Inicio del trabajo","mc.baud":"Baudios","dev.connect":"Conectar (USB serie)","dev.disconnect":"Desconectar","dev.run":"▶ Ejecutar trabajo","dev.pause":"Pausar","dev.resume":"Reanudar","dev.stop":"Detener","dev.home":"Origen","dev.setorigin":"Fijar origen","dev.unlock":"Desbloquear","dev.noserial":"WebSerial no disponible. Use Chrome o Edge por HTTPS.","dev.connected":"Conectado por serie a ","dev.connfail":"Error de conexión serie: ","dev.disconnected":"Desconectado.","dev.framing":"Encuadrando","dev.running2":"Ejecutando","dev.complete":"completo","dev.busy":"Ya hay un trabajo en marcha.","dev.connectfirst":"Conecte una máquina primero.","dev.gennext":"Genere el G-code primero.","dev.runconfirm":"¿Ejecutar este trabajo ahora? El haz se disparará. Asegúrese de que la tapa esté cerrada, el área despejada y pueda alcanzar Detener.","dev.paused":"En pausa.","dev.resumed":"Reanudado.","dev.stopped":"Detenido." });
+  Object.assign(I18N.de, { "tab.props":"Eigenschaften","props.empty":"Wählen Sie ein Objekt, um Position, Größe und Drehung zu bearbeiten.","props.x":"X mm","props.y":"Y mm","props.w":"Breite mm","props.h":"Höhe mm","props.lock":"Seitenverhältnis sperren","props.rot":"Drehen °","props.fliph":"Horizontal spiegeln","props.flipv":"Vertikal spiegeln","tool.snap":"Am Raster einrasten","tool.gridmm":"mm","mc.origin":"Nullpunkt-Ecke","mc.start":"Jobstart","mc.baud":"Baud","dev.connect":"Verbinden (USB seriell)","dev.disconnect":"Trennen","dev.run":"▶ Job starten","dev.pause":"Pause","dev.resume":"Fortsetzen","dev.stop":"Stopp","dev.home":"Referenzfahrt","dev.setorigin":"Nullpunkt setzen","dev.unlock":"Entsperren","dev.noserial":"WebSerial nicht verfügbar. Chrome oder Edge über HTTPS verwenden.","dev.connected":"Seriell verbunden mit ","dev.connfail":"Serielle Verbindung fehlgeschlagen: ","dev.disconnected":"Getrennt.","dev.framing":"Rahmen","dev.running2":"Läuft","dev.complete":"fertig","dev.busy":"Es läuft bereits ein Job.","dev.connectfirst":"Zuerst eine Maschine verbinden.","dev.gennext":"Zuerst G-Code erzeugen.","dev.runconfirm":"Diesen Job jetzt am Laser starten? Der Strahl feuert. Deckel geschlossen, Bereich frei, und Sie erreichen Stopp?","dev.paused":"Pausiert.","dev.resumed":"Fortgesetzt.","dev.stopped":"Gestoppt." });
+  Object.assign(I18N.fr, { "tab.props":"Propriétés","props.empty":"Sélectionnez un objet pour modifier sa position, sa taille et sa rotation.","props.x":"X mm","props.y":"Y mm","props.w":"Largeur mm","props.h":"Hauteur mm","props.lock":"Verrouiller les proportions","props.rot":"Pivoter °","props.fliph":"Miroir horizontal","props.flipv":"Miroir vertical","tool.snap":"Aligner sur la grille","tool.gridmm":"mm","mc.origin":"Coin d'origine","mc.start":"Départ du travail","mc.baud":"Bauds","dev.connect":"Connecter (USB série)","dev.disconnect":"Déconnecter","dev.run":"▶ Lancer le travail","dev.pause":"Pause","dev.resume":"Reprendre","dev.stop":"Arrêter","dev.home":"Origine machine","dev.setorigin":"Définir l'origine","dev.unlock":"Déverrouiller","dev.noserial":"WebSerial indisponible. Utilisez Chrome ou Edge en HTTPS.","dev.connected":"Connecté en série à ","dev.connfail":"Échec de la connexion série : ","dev.disconnected":"Déconnecté.","dev.framing":"Cadrage","dev.running2":"En cours","dev.complete":"terminé","dev.busy":"Un travail est déjà en cours.","dev.connectfirst":"Connectez d'abord une machine.","dev.gennext":"Générez d'abord le G-code.","dev.runconfirm":"Lancer ce travail maintenant ? Le faisceau va tirer. Capot fermé, zone dégagée, et vous pouvez atteindre Arrêter ?","dev.paused":"En pause.","dev.resumed":"Repris.","dev.stopped":"Arrêté." });
+  Object.assign(I18N["pt-BR"], { "tab.props":"Propriedades","props.empty":"Selecione um objeto para editar posição, tamanho e rotação.","props.x":"X mm","props.y":"Y mm","props.w":"Largura mm","props.h":"Altura mm","props.lock":"Travar proporção","props.rot":"Girar °","props.fliph":"Espelhar horizontal","props.flipv":"Espelhar vertical","tool.snap":"Ajustar à grade","tool.gridmm":"mm","mc.origin":"Canto de origem","mc.start":"Início do trabalho","mc.baud":"Baud","dev.connect":"Conectar (USB serial)","dev.disconnect":"Desconectar","dev.run":"▶ Executar trabalho","dev.pause":"Pausar","dev.resume":"Retomar","dev.stop":"Parar","dev.home":"Referência","dev.setorigin":"Definir origem","dev.unlock":"Desbloquear","dev.noserial":"WebSerial indisponível. Use Chrome ou Edge por HTTPS.","dev.connected":"Conectado por serial a ","dev.connfail":"Falha na conexão serial: ","dev.disconnected":"Desconectado.","dev.framing":"Enquadrando","dev.running2":"Executando","dev.complete":"concluído","dev.busy":"Já há um trabalho em execução.","dev.connectfirst":"Conecte uma máquina primeiro.","dev.gennext":"Gere o G-code primeiro.","dev.runconfirm":"Executar este trabalho agora? O feixe vai disparar. Tampa fechada, área livre e você alcança Parar?","dev.paused":"Pausado.","dev.resumed":"Retomado.","dev.stopped":"Parado." });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
