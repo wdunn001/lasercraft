@@ -46,7 +46,7 @@ because every item ships at once.
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs, perforation (applied in the G-code path), lead-in/out, overcut, ramp Done; kerf offset is stored but not yet applied (needs polygon offset); sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
 - Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI) Done; bidirectional, overscan, fill grouping, flood fill: Gap (engine work).
-- Image/art: trace + dither import Done; adjust image, dither-mode picker, mask, convert-to-bitmap, 3D depth map: Gap.
+- Image/art: trace + dither import, dither-mode picker, adjust image (brightness/contrast/gamma), 3D depth map Done; mask, convert-to-bitmap: Gap.
 - Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position, GRBL console Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); macros, file list, bridge: Gap.
 - Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
 

@@ -682,6 +682,12 @@
           </select>
         </div>
         <div class="grid3" style="margin-top:14px">
+          <div class="f"><label data-i18n="prefs.imgbright">Brightness</label><input id="imgBright" type="number" step="5" value="0" style="width:100%"></div>
+          <div class="f"><label data-i18n="prefs.imgcontrast">Contrast</label><input id="imgContrast" type="number" step="5" value="0" style="width:100%"></div>
+          <div class="f"><label data-i18n="prefs.imggamma">Gamma</label><input id="imgGamma" type="number" step="0.05" min="0.1" value="1" style="width:100%"></div>
+        </div>
+        <div class="stat" style="color:var(--muted);margin-top:4px" data-i18n="prefs.imgadjnote">Brightness and contrast run from -100 to 100. These shape the image before dithering or depth banding.</div>
+        <div class="grid3" style="margin-top:14px">
           <div class="f"><label data-i18n="prefs.depthlevels">Depth levels</label><input id="depthLevels" type="number" min="2" max="10" value="5" style="width:100%"></div>
           <div class="f" style="grid-column:span 2"><label data-i18n="prefs.depthinvert">Depth direction</label><label class="mccap" style="padding-top:6px"><input type="checkbox" id="depthInvert" style="width:auto"> <span data-i18n="prefs.depthinvertlbl">Darker cuts deeper (invert)</span></label></div>
         </div>
@@ -711,6 +717,21 @@
   let curOrigin = "FL";                          // which bed corner is machine zero
   let ditherMode = "floyd";                      // image dithering algorithm (set in Preferences)
   let depthLevels = 5, depthInvert = false;      // depth-engrave bands and direction (Preferences)
+  let imgBright = 0, imgContrast = 0, imgGamma = 1;   // image adjust applied before dither/depth
+  // Shape a 0..255 grayscale buffer in place: brightness shift, contrast around
+  // mid-grey, then gamma. Matches LightBurn's image adjust controls.
+  function applyImageAdjust(gray){
+    const b = imgBright, c = Math.max(-100, Math.min(100, imgContrast));
+    const cf = (259 * (c + 255)) / (255 * (259 - c));      // standard contrast factor
+    const g = imgGamma > 0 ? imgGamma : 1;
+    const invg = 1 / g;
+    for (let i = 0; i < gray.length; i++){
+      let v = gray[i] + b;
+      v = cf * (v - 128) + 128;
+      v = 255 * Math.pow(Math.max(0, Math.min(255, v)) / 255, invg);
+      gray[i] = Math.max(0, Math.min(255, v));
+    }
+  }
   let dispUnits = "mm";                          // display units for lengths (mm or in); model stays mm
   const mm2u = v => dispUnits==="in" ? v/25.4 : v;   // mm -> display unit
   const u2mm = v => dispUnits==="in" ? v*25.4 : v;   // display unit -> mm
@@ -2874,6 +2895,9 @@
   $("addLayer").onclick = addLayer;
   $("prefClose").onclick = $("prefCancel").onclick = () => $("prefBg").classList.remove("show");
   $("dmSel") && ($("dmSel").value = ditherMode, $("dmSel").onchange = () => { ditherMode = $("dmSel").value; });
+  $("imgBright") && ($("imgBright").onchange = () => { imgBright = +$("imgBright").value || 0; });
+  $("imgContrast") && ($("imgContrast").onchange = () => { imgContrast = +$("imgContrast").value || 0; });
+  $("imgGamma") && ($("imgGamma").onchange = () => { const g = +$("imgGamma").value; imgGamma = g > 0 ? g : 1; });
   $("depthLevels") && ($("depthLevels").onchange = () => { depthLevels = +$("depthLevels").value || 5; });
   $("depthInvert") && ($("depthInvert").onchange = () => { depthInvert = $("depthInvert").checked; });
   $("unitSel") && ($("unitSel").value = dispUnits, $("unitSel").onchange = () => { dispUnits = $("unitSel").value; lastSelSig = ""; renderProps(); render(); });
@@ -2976,6 +3000,7 @@
     const data = ctx.getImageData(0, 0, w, h).data;
     const gray = new Float32Array(w * h);
     for (let i = 0; i < w * h; i++) gray[i] = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2];
+    applyImageAdjust(gray);
     const mode = ditherMode;
     if (mode === "threshold" || mode === "ordered"){
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
@@ -3015,6 +3040,9 @@
     const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
     const ctx = cv.getContext("2d"); ctx.drawImage(img, 0, 0, w, h);
     const data = ctx.getImageData(0, 0, w, h).data;
+    const gray = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) gray[i] = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2];
+    applyImageAdjust(gray);
     const N = Math.max(2, Math.min(10, depthLevels|0));
     const bw = Math.min(BED.w * 0.8, 100), px = bw / w;
     const bx = (BED.w - bw) / 2, by0 = (BED.h - h*px) / 2;
@@ -3035,7 +3063,7 @@
       const yy = by0 + (h - 1 - y) * px;
       let run = -1, runD = 0;
       for (let x = 0; x <= w; x++){
-        const b = x < w ? (0.299*data[(y*w+x)*4] + 0.587*data[(y*w+x)*4+1] + 0.114*data[(y*w+x)*4+2]) : -1;
+        const b = x < w ? gray[y*w+x] : -1;
         const d = x < w ? depthOf(b) : 0;
         if (d !== runD){
           if (runD > 0 && run >= 0) added.push({ kind:"Path", cut_index:bandLayer[runD], geometry:{ Polyline:{ points:[p(bx+run*px, yy), p(bx+x*px, yy)], closed:false } } });
@@ -3404,10 +3432,10 @@
   Object.assign(I18N.de, { "layer.taken":"belegt","layer.colortaken":"Eine andere Ebene nutzt diese Farbe bereits." });
   Object.assign(I18N.fr, { "layer.taken":"utilisée","layer.colortaken":"Un autre calque utilise déjà cette couleur." });
   Object.assign(I18N["pt-BR"], { "layer.taken":"em uso","layer.colortaken":"Outra camada já usa essa cor." });
-  Object.assign(I18N.es, { "action.depth":"Grabado en profundidad (textura)…","prefs.depthlevels":"Niveles de profundidad","prefs.depthinvert":"Dirección de profundidad","prefs.depthinvertlbl":"Lo más oscuro corta más profundo (invertir)" });
-  Object.assign(I18N.de, { "action.depth":"Tiefengravur (Textur)…","prefs.depthlevels":"Tiefenstufen","prefs.depthinvert":"Tiefenrichtung","prefs.depthinvertlbl":"Dunkler schneidet tiefer (umkehren)" });
-  Object.assign(I18N.fr, { "action.depth":"Gravure en profondeur (texture)…","prefs.depthlevels":"Niveaux de profondeur","prefs.depthinvert":"Sens de la profondeur","prefs.depthinvertlbl":"Le plus foncé coupe plus profond (inverser)" });
-  Object.assign(I18N["pt-BR"], { "action.depth":"Gravação em profundidade (textura)…","prefs.depthlevels":"Níveis de profundidade","prefs.depthinvert":"Direção da profundidade","prefs.depthinvertlbl":"Mais escuro corta mais fundo (inverter)" });
+  Object.assign(I18N.es, { "action.depth":"Grabado en profundidad (textura)…","prefs.depthlevels":"Niveles de profundidad","prefs.imgbright":"Brillo","prefs.imgcontrast":"Contraste","prefs.imggamma":"Gamma","prefs.imgadjnote":"El brillo y el contraste van de -100 a 100. Ajustan la imagen antes del tramado o el bandeado de profundidad.","prefs.depthinvert":"Dirección de profundidad","prefs.depthinvertlbl":"Lo más oscuro corta más profundo (invertir)" });
+  Object.assign(I18N.de, { "action.depth":"Tiefengravur (Textur)…","prefs.depthlevels":"Tiefenstufen","prefs.imgbright":"Helligkeit","prefs.imgcontrast":"Kontrast","prefs.imggamma":"Gamma","prefs.imgadjnote":"Helligkeit und Kontrast reichen von -100 bis 100. Sie formen das Bild vor dem Dithering oder der Tiefenstaffelung.","prefs.depthinvert":"Tiefenrichtung","prefs.depthinvertlbl":"Dunkler schneidet tiefer (umkehren)" });
+  Object.assign(I18N.fr, { "action.depth":"Gravure en profondeur (texture)…","prefs.depthlevels":"Niveaux de profondeur","prefs.imgbright":"Luminosité","prefs.imgcontrast":"Contraste","prefs.imggamma":"Gamma","prefs.imgadjnote":"La luminosité et le contraste vont de -100 à 100. Ils façonnent l'image avant le tramage ou l'étagement de profondeur.","prefs.depthinvert":"Sens de la profondeur","prefs.depthinvertlbl":"Le plus foncé coupe plus profond (inverser)" });
+  Object.assign(I18N["pt-BR"], { "action.depth":"Gravação em profundidade (textura)…","prefs.depthlevels":"Níveis de profundidade","prefs.imgbright":"Brilho","prefs.imgcontrast":"Contraste","prefs.imggamma":"Gama","prefs.imgadjnote":"Brilho e contraste vão de -100 a 100. Moldam a imagem antes do pontilhado ou do bandeamento de profundidade.","prefs.depthinvert":"Direção da profundidade","prefs.depthinvertlbl":"Mais escuro corta mais fundo (inverter)" });
   Object.assign(I18N.es, { "action.fillet":"Redondear esquinas (empalme)…","action.chamfer":"Chaflán de esquinas…","mod.filletamt":"Radio de empalme mm","mod.chamferamt":"Distancia de chaflán mm","panel.cutsettings":"Ajustes de corte" });
   Object.assign(I18N.de, { "panel.cutsettings":"Schnitteinstellungen" }); Object.assign(I18N.fr, { "panel.cutsettings":"Réglages de coupe" }); Object.assign(I18N["pt-BR"], { "panel.cutsettings":"Ajustes de corte" });
   Object.assign(I18N.es, { "tool.hint.rrect":"Arrastre para dibujar un rectángulo redondeado.","tool.hint.ngon":"Arrastre para dibujar un polígono regular.","tool.hint.slot":"Arrastre para dibujar una ranura." });
@@ -3509,6 +3537,7 @@
     else if (act==="rotary"){ openRotary(); }
     else if (act==="lbrn"){ const xml=`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/><speed Value="15"/><maxPower Value="80"/></CutSetting><CutSetting type="Scan"><index Value="1"/><name Value="Engrave"/><speed Value="200"/><maxPower Value="40"/></CutSetting><Shape Type="Rect" CutIndex="0" W="60" H="40"><XForm>1 0 0 1 80 60</XForm></Shape><Shape Type="Ellipse" CutIndex="1" Rx="20" Ry="15"><XForm>1 0 0 1 45 100</XForm></Shape><Shape Type="Path" CutIndex="0"><XForm>1 0 0 1 0 0</XForm><VertList>V10 20V40 20V40 55V10 55</VertList><PrimList>LineClosed</PrimList></Shape><Shape Type="Group"><XForm>1 0 0 1 120 30</XForm><Children><Shape Type="Rect" CutIndex="1" W="22" H="22"><XForm>1 0 0 1 0 0</XForm></Shape></Children></Shape></LightBurnProject>`; doc.shapes=[]; importLbrn(xml); }
     else if (act==="serial"){ doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"SN-%N", x:20, y:95, h:9, gap:9*0.28, align:"left", font:"mark" } } }]; selectOnly(0); doSerialize(1,10,1,4); }
+    else if (act==="prefs"){ $("prefBg").classList.add("show"); }
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
