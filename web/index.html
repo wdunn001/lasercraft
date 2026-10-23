@@ -188,6 +188,7 @@
       <span class="tplabel" data-i18n="text.add">Add Text</span>
       <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:200px" />
       <input id="textH" type="number" value="8" step="1" title="height mm" style="width:58px" />
+      <select id="textFont" title="Font"><option value="mark">Mark (single-stroke)</option><option value="sans">Sans (filled)</option></select>
       <select id="textAlign" title="Alignment"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
       <button class="btn" id="addText" data-i18n="text.place">Place</button>
     </span>
@@ -391,7 +392,11 @@
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf, export_dxf, svg_path_to_paths } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf, export_dxf, svg_path_to_paths, text_outline_paths } from "./pkg/lasercraft_wasm.js";
+
+  // Filled-text font, loaded once from a served asset so the wasm stays small.
+  let FONT_BYTES = null;
+  fetch("text-sans.ttf").then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b){ FONT_BYTES = new Uint8Array(b); if (typeof render === "function") render(); } }).catch(() => {});
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
@@ -524,6 +529,7 @@
       if (document.activeElement !== $("textIn")) $("textIn").value = t.s;
       if (document.activeElement !== $("textH")) $("textH").value = t.h;
       if ($("textAlign")) $("textAlign").value = t.align || "left";
+      if ($("textFont")) $("textFont").value = t.font || "mark";
       if (lbl) lbl.textContent = "Edit Text";
       $("addText").style.display = "none";
     } else {
@@ -631,10 +637,13 @@
   // text is cheap and only an edit to the string, height or spacing regenerates.
   function textPolys(t){
     if (!ready) return [];
+    const font = t.font || "mark";
     const gap = (t.gap != null ? t.gap : (t.h||8) * 0.28);
-    const sig = (t.s||"")+"|"+(t.h||8)+"|"+gap+"|"+(t.align||"left");
+    const sig = (t.s||"")+"|"+(t.h||8)+"|"+gap+"|"+(t.align||"left")+"|"+font+"|"+(FONT_BYTES?"1":"0");
     if (t._sig !== sig){
-      let base = []; try { base = JSON.parse(text_to_paths(t.s||"", t.h||8, 0, 0, gap)); } catch(e){ base = []; }
+      let base = [];
+      if (font === "sans" && FONT_BYTES){ try { base = JSON.parse(text_outline_paths(FONT_BYTES, t.s||"", t.h||8, 0, 0)); } catch(e){ base = []; } t._closed = true; }
+      else { try { base = JSON.parse(text_to_paths(t.s||"", t.h||8, 0, 0, gap)); } catch(e){ base = []; } t._closed = false; }
       let w = 0; for (const pl of base) for (const a of pl) if (a[0] > w) w = a[0];
       t._base = base; t._w = w; t._sig = sig;
     }
@@ -644,7 +653,7 @@
   // The SVG path for a shape, in screen pixels. Handles polylines, cubic paths and text.
   function shapeD(sh){
     const g = sh.geometry;
-    if (g.Text){ const polys = textPolys(g.Text); if (!polys.length) return ""; return polys.map(pl => pl.map(mm2px).map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ")).join(" "); }
+    if (g.Text){ const polys = textPolys(g.Text); if (!polys.length) return ""; const z = g.Text._closed ? " Z" : ""; return polys.map(pl => pl.map(mm2px).map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ")+z).join(" "); }
     if (g.Polyline){ const pts = g.Polyline.points.map(mm2px); if (!pts.length) return ""; return pts.map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ") + (g.Polyline.closed?" Z":""); }
     if (g.Path){ const P = g.Path; const s0 = mm2px(P.start); let d = "M "+s0.x.toFixed(1)+" "+s0.y.toFixed(1);
       for (const seg of P.segments){
@@ -1067,7 +1076,8 @@
   // shape passes through unchanged.
   function expandShape(sh){
     if (sh.geometry && sh.geometry.Text){
-      return textPolys(sh.geometry.Text).filter(pl => pl.length >= 2).map(pl => ({ kind:"Path", cut_index:sh.cut_index, geometry:{ Polyline:{ points: pl.map(q=>p(q.x,q.y)), closed:false } } }));
+      const closed = !!sh.geometry.Text._closed;
+      return textPolys(sh.geometry.Text).filter(pl => pl.length >= 2).map(pl => ({ kind:"Path", cut_index:sh.cut_index, geometry:{ Polyline:{ points: pl.map(q=>p(q.x,q.y)), closed } } }));
     }
     return [sh];
   }
@@ -1210,8 +1220,8 @@
   // Create an editable Text object at (x, y) from the current bar settings.
   function placeText(x, y){
     const str = ($("textIn").value||"").trim(); if (!str) return;
-    const h = +$("textH").value || 8; const al = $("textAlign") ? $("textAlign").value : "left";
-    doc.shapes.push({ kind:"Text", cut_index:doc.layers[activeLayer].index, geometry:{ Text:{ s:str, x, y:y - h/2, h, gap:h*0.28, align:al } } });
+    const h = +$("textH").value || 8; const al = $("textAlign") ? $("textAlign").value : "left"; const fn = $("textFont") ? $("textFont").value : "mark";
+    doc.shapes.push({ kind:"Text", cut_index:doc.layers[activeLayer].index, geometry:{ Text:{ s:str, x, y:y - h/2, h, gap:h*0.28, align:al, font:fn } } });
     selectOnly(doc.shapes.length - 1); snapshot(); render(); refreshCounts(); updateToolbar();
   }
   $("addText").onclick = () => placeText(20, BED.h/2);
@@ -1220,6 +1230,7 @@
   $("textIn").addEventListener("input", () => { const t = selText(); if (t){ t.s = $("textIn").value; render(); generate(); refreshCounts(); } });
   $("textH").addEventListener("input", () => { const t = selText(); if (t){ t.h = +$("textH").value || 8; t.gap = t.h*0.28; render(); generate(); } });
   $("textAlign").addEventListener("change", () => { const t = selText(); if (t){ t.align = $("textAlign").value; render(); generate(); } });
+  $("textFont").addEventListener("change", () => { const t = selText(); if (t){ t.font = $("textFont").value; t._sig = null; render(); generate(); } });
 
   $("genBtn").onclick = generate;
   $("frameBtn").onclick = () => { if(!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":$("flavor").value); } catch(e){ $("gcode").textContent=String(e); } };
@@ -1674,6 +1685,10 @@
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
     else if (act==="multi"){ doc.shapes=[ rect(18,20,34,26,0), rect(60,20,34,26,0), ellipse(118,80,20,20,1), rect(18,72,34,26,2) ]; sel=new Set([0,1,2]); selected=null; render(); refreshCounts(); }
     else if (act==="pages"){ doc.shapes=[rect(30,30,80,50,0)]; addPage(); doc.shapes=[ellipse(90,90,40,30,1)]; addPage(); doc.shapes=[rect(20,20,40,40,2), ellipse(100,100,30,30,0)]; renderPageTabs(); render(); refreshCounts(); }
+    else if (act==="textfill"){ $("textIn").value="LaserCraft"; $("textFont").value="sans";
+      doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"LaserCraft", x:14, y:92, h:24, gap:0, align:"left", font:"sans" } } },
+        { kind:"Text", cut_index:1, geometry:{ Text:{ s:"Filled 2026", x:14, y:52, h:16, gap:0, align:"left", font:"sans" } } }];
+      selected=0; render(); refreshCounts(); }
     else if (act==="textobj"){ $("textIn").value="Hello 2026"; $("textH").value=16;
       doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"Hello 2026", x:18, y:95, h:16, gap:16*0.28, align:"left" } } },
         { kind:"Text", cut_index:1, geometry:{ Text:{ s:"centered label", x:75, y:55, h:11, gap:11*0.28, align:"center" } } },

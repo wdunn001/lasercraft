@@ -255,6 +255,18 @@ pub fn svg_path_to_paths(d: &str) -> Result<String, JsError> {
     serde_json::to_string(&paths).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
+/// Lay text out into filled glyph outlines from a font file.
+///
+/// `font` is the raw bytes of a TrueType or OpenType font, passed from the page. The
+/// result is a JSON array of closed contours, each an array of `[x, y]` pairs in
+/// millimetres, which the page lays on the active layer. This is filled text, the
+/// companion to the single-stroke `text_to_paths`.
+#[wasm_bindgen]
+pub fn text_outline_paths(font: &[u8], text: &str, height_mm: f64, x: f64, y: f64) -> Result<String, JsError> {
+    let out = lasercraft_text::glyph_outlines(font, text, height_mm, x, y);
+    serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
 /// Build a material-test grid project from `spec` and return it as project JSON.
 #[wasm_bindgen]
 pub fn material_test_project(spec_json: &str) -> Result<String, JsError> {
