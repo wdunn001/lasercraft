@@ -332,6 +332,147 @@ pub fn hatch_fill_angled(
     out
 }
 
+/// Dash a traced outline for perforation (LightBurn "Perforation Mode").
+///
+/// The outline is walked as one continuous path and broken into `cut_mm` dashes
+/// separated by `skip_mm` gaps. The dash phase carries across segment corners so
+/// the pattern stays even around the shape. A non-positive cut or skip length
+/// returns the solid outline unchanged.
+pub fn perforate_path(points: &[Point], closed: bool, cut_mm: f64, skip_mm: f64) -> Vec<Segment> {
+    let solid = follow_polyline(points, closed);
+    if cut_mm <= 0.0 || skip_mm <= 0.0 {
+        return solid;
+    }
+    let mut out = Vec::new();
+    let mut cutting = true;
+    let mut remaining = cut_mm;
+    for seg in &solid {
+        let (dx, dy) = (seg.end.x - seg.start.x, seg.end.y - seg.start.y);
+        let len = dx.hypot(dy);
+        if len <= f64::EPSILON {
+            continue;
+        }
+        let (ux, uy) = (dx / len, dy / len);
+        let mut pos = 0.0;
+        let mut cur = seg.start;
+        while pos < len - 1e-9 {
+            let step = remaining.min(len - pos);
+            let next = Point {
+                x: cur.x + ux * step,
+                y: cur.y + uy * step,
+            };
+            if cutting {
+                out.push(Segment {
+                    start: cur,
+                    end: next,
+                });
+            }
+            cur = next;
+            pos += step;
+            remaining -= step;
+            if remaining <= 1e-9 {
+                cutting = !cutting;
+                remaining = if cutting { cut_mm } else { skip_mm };
+            }
+        }
+    }
+    out
+}
+
+/// Continue cutting past the start of a closed outline by `overcut_mm`
+/// (LightBurn "Overcut"), so controller lag does not leave the start corner
+/// open. Returns the extra segments to append after the outline is traced. An
+/// open path or a non-positive distance yields nothing.
+pub fn overcut_segments(points: &[Point], closed: bool, overcut_mm: f64) -> Vec<Segment> {
+    if !closed || overcut_mm <= 0.0 || points.len() < 2 {
+        return Vec::new();
+    }
+    let n = points.len();
+    let mut out = Vec::new();
+    let mut remaining = overcut_mm;
+    let mut cur = points[0];
+    // After closing, the head sits at points[0]; continue onto points[1], [2], ...
+    let mut i = 1usize;
+    let mut guard = 0usize;
+    while remaining > 1e-9 && guard < 4 * n + 4 {
+        guard += 1;
+        let target = points[i % n];
+        let (dx, dy) = (target.x - cur.x, target.y - cur.y);
+        let len = dx.hypot(dy);
+        if len <= f64::EPSILON {
+            i += 1;
+            continue;
+        }
+        let step = remaining.min(len);
+        let (ux, uy) = (dx / len, dy / len);
+        let next = Point {
+            x: cur.x + ux * step,
+            y: cur.y + uy * step,
+        };
+        out.push(Segment {
+            start: cur,
+            end: next,
+        });
+        cur = next;
+        remaining -= step;
+        if step >= len - 1e-9 {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// A lead-in segment that approaches the outline start along the reverse of the
+/// first edge's direction (LightBurn "Lead In", line type). It cuts from a point
+/// `len_mm` away into the start vertex, so the pierce sits off the final contour.
+/// Returns `None` for a degenerate path or a non-positive length.
+pub fn lead_in_segment(points: &[Point], len_mm: f64) -> Option<Segment> {
+    if len_mm <= 0.0 || points.len() < 2 {
+        return None;
+    }
+    let (a, b) = (points[0], points[1]);
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let d = dx.hypot(dy);
+    if d <= f64::EPSILON {
+        return None;
+    }
+    let (ux, uy) = (dx / d, dy / d);
+    Some(Segment {
+        start: Point {
+            x: a.x - ux * len_mm,
+            y: a.y - uy * len_mm,
+        },
+        end: a,
+    })
+}
+
+/// A lead-out segment continuing past the outline end along the last edge's
+/// direction (LightBurn "Lead Out"). For a closed path the cut ends at the first
+/// vertex arriving along the closing edge, so the lead extends from there.
+pub fn lead_out_segment(points: &[Point], closed: bool, len_mm: f64) -> Option<Segment> {
+    if len_mm <= 0.0 || points.len() < 2 {
+        return None;
+    }
+    let (a, b) = if closed {
+        (*points.last()?, points[0])
+    } else {
+        (points[points.len() - 2], points[points.len() - 1])
+    };
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let d = dx.hypot(dy);
+    if d <= f64::EPSILON {
+        return None;
+    }
+    let (ux, uy) = (dx / d, dy / d);
+    Some(Segment {
+        start: b,
+        end: Point {
+            x: b.x + ux * len_mm,
+            y: b.y + uy * len_mm,
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,5 +651,78 @@ mod tests {
     fn follow_degenerate_polyline_yields_nothing() {
         assert!(follow_polyline(&[Point { x: 1.0, y: 1.0 }], true).is_empty());
         assert!(follow_polyline(&[], false).is_empty());
+    }
+
+    #[test]
+    fn perforate_dashes_a_straight_run() {
+        // A 10 mm line with 1 mm cut and 1 mm skip gives dashes at
+        // 0..1, 2..3, 4..5, 6..7, 8..9: five dashes.
+        let line = [Point { x: 0.0, y: 0.0 }, Point { x: 10.0, y: 0.0 }];
+        let dashes = perforate_path(&line, false, 1.0, 1.0);
+        assert_eq!(dashes.len(), 5);
+        assert!((dashes[0].start.x - 0.0).abs() < 1e-9);
+        assert!((dashes[0].end.x - 1.0).abs() < 1e-9);
+        assert!((dashes[1].start.x - 2.0).abs() < 1e-9);
+        // Total cut length is five dashes of 1 mm each.
+        let cut: f64 = dashes.iter().map(|s| (s.end.x - s.start.x).abs()).sum();
+        assert!((cut - 5.0).abs() < 1e-9, "cut {cut}");
+    }
+
+    #[test]
+    fn perforate_passes_solid_through_on_bad_params() {
+        let line = [Point { x: 0.0, y: 0.0 }, Point { x: 10.0, y: 0.0 }];
+        assert_eq!(perforate_path(&line, false, 0.0, 1.0).len(), 1);
+        assert_eq!(perforate_path(&line, false, 1.0, 0.0).len(), 1);
+    }
+
+    #[test]
+    fn overcut_extends_past_the_start() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        // After closing to (0,0) the head continues onto the first edge toward
+        // (10,0); a 3 mm overcut lands at (3,0).
+        let extra = overcut_segments(&square, true, 3.0);
+        let total: f64 = extra
+            .iter()
+            .map(|s| (s.end.x - s.start.x).hypot(s.end.y - s.start.y))
+            .sum();
+        assert!((total - 3.0).abs() < 1e-9, "total {total}");
+        let last = extra.last().expect("a segment");
+        assert!((last.end.x - 3.0).abs() < 1e-9 && last.end.y.abs() < 1e-9);
+    }
+
+    #[test]
+    fn overcut_skips_open_paths() {
+        let line = [Point { x: 0.0, y: 0.0 }, Point { x: 10.0, y: 0.0 }];
+        assert!(overcut_segments(&line, false, 3.0).is_empty());
+        assert!(overcut_segments(&line, true, 0.0).is_empty());
+    }
+
+    #[test]
+    fn lead_in_approaches_the_start_from_outside() {
+        let square = [
+            Point { x: 2.0, y: 0.0 },
+            Point { x: 12.0, y: 0.0 },
+            Point { x: 12.0, y: 10.0 },
+        ];
+        // First edge heads +x, so the lead-in starts 2 mm back at (0,0) and ends
+        // at the start vertex (2,0).
+        let li = lead_in_segment(&square, 2.0).expect("a lead-in");
+        assert!((li.start.x - 0.0).abs() < 1e-9 && li.start.y.abs() < 1e-9);
+        assert!((li.end.x - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn lead_out_continues_past_the_end() {
+        let line = [Point { x: 0.0, y: 0.0 }, Point { x: 10.0, y: 0.0 }];
+        // Open path: lead-out continues +x past (10,0) by 2 mm to (12,0).
+        let lo = lead_out_segment(&line, false, 2.0).expect("a lead-out");
+        assert!((lo.start.x - 10.0).abs() < 1e-9);
+        assert!((lo.end.x - 12.0).abs() < 1e-9 && lo.end.y.abs() < 1e-9);
+        assert!(lead_in_segment(&line, 0.0).is_none());
     }
 }

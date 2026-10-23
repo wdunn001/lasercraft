@@ -43,7 +43,7 @@ because every item ships at once.
 - Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
 - Node editing: insert/delete/move, trim, extend Done; convert-curve/break/optimize/warp/deform: Gap.
 - Text: core + alignment + fonts Done; variable text, text-on-path, bending, bar code: Gap.
-- Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, kerf, tabs, perforation, ramp Done; lead-in/out, overcut, sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
+- Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs, perforation (applied in the G-code path), lead-in/out, overcut, ramp Done; kerf offset is stored but not yet applied (needs polygon offset); sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
 - Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI) Done; bidirectional, overscan, fill grouping, flood fill: Gap (engine work).
 - Image/art: trace + dither import Done; adjust image, dither-mode picker, mask, convert-to-bitmap, 3D depth map: Gap.

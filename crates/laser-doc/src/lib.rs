@@ -251,6 +251,18 @@ pub struct LineParams {
     pub perforation_cut_mm: f64,
     /// The skipped gap of a perforation dash in millimetres.
     pub perforation_skip_mm: f64,
+    /// Continue cutting past a closed outline's start, in millimetres, so
+    /// controller lag does not leave the corner open. LightBurn "Overcut".
+    #[serde(default)]
+    pub overcut_mm: f64,
+    /// Approach the outline start with a cut of this length, in millimetres, so
+    /// the pierce sits off the final contour. LightBurn "Lead In".
+    #[serde(default)]
+    pub lead_in_mm: f64,
+    /// Continue past the outline end with a cut of this length, in millimetres.
+    /// LightBurn "Lead Out".
+    #[serde(default)]
+    pub lead_out_mm: f64,
 }
 
 impl Default for LineParams {
@@ -260,6 +272,9 @@ impl Default for LineParams {
             perforation: false,
             perforation_cut_mm: 0.1,
             perforation_skip_mm: 0.1,
+            overcut_mm: 0.0,
+            lead_in_mm: 0.0,
+            lead_out_mm: 0.0,
         }
     }
 }

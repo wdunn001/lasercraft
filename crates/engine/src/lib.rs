@@ -20,7 +20,8 @@ use lasercraft_laser_doc::{CutSetting, FillMode, Geometry, Point2, Project, Shap
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
 use lasercraft_toolpath::{
-    BBox, Point, follow_polyline, hatch_fill_angled, line_fill, wobble_path,
+    BBox, Point, follow_polyline, hatch_fill_angled, lead_in_segment, lead_out_segment, line_fill,
+    overcut_segments, perforate_path, wobble_path,
 };
 
 /// Errors the engine can return while executing a command.
@@ -155,7 +156,32 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
                 g.fill.hatch_angle_deg,
                 g.fill.cross_hatch,
             ),
-            _ => follow_polyline(&path, closed),
+            _ => {
+                // Line mode: compose the outline with lead-in, perforation,
+                // overcut, and lead-out when the layer asks for them.
+                let line = setting.galvo.as_ref().map(|g| &g.line);
+                let mut segs = Vec::new();
+                if let Some(li) = line.and_then(|l| lead_in_segment(&path, l.lead_in_mm)) {
+                    segs.push(li);
+                }
+                match line {
+                    Some(l) if l.perforation => segs.extend(perforate_path(
+                        &path,
+                        closed,
+                        l.perforation_cut_mm,
+                        l.perforation_skip_mm,
+                    )),
+                    _ => segs.extend(follow_polyline(&path, closed)),
+                }
+                if let Some(l) = line {
+                    segs.extend(overcut_segments(&path, closed, l.overcut_mm));
+                }
+                if let Some(lo) = line.and_then(|l| lead_out_segment(&path, closed, l.lead_out_mm))
+                {
+                    segs.push(lo);
+                }
+                segs
+            }
         };
         if segments.is_empty() {
             continue;
