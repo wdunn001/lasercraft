@@ -438,6 +438,7 @@
     ["poly","M12 3l9 7-3 11H6L3 10z"],
     ["line","M4 20L20 4"],
     ["pen","M4 20l7-2 8-8-5-5-8 8z"],
+    ["measure","M3 17L17 3l4 4L7 21z M7 13l2 2 M11 9l2 2 M15 5l2 2"],
   ];
   const toolsEl = $("tools");
   for (const [name, d] of TOOLS) {
@@ -446,7 +447,7 @@
     el.dataset.tool = name;
     el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${d}"/></svg>`;
     el.title = name;
-    el.onclick = () => { tool = name; document.querySelectorAll(".tool").forEach(t=>t.classList.toggle("active", t.dataset.tool===name)); $("canvas").classList.toggle("select", name==="select"); };
+    el.onclick = () => { tool = name; measureA = null; if (name!=="pen") penAnchors = []; drawing = null; document.querySelectorAll(".tool").forEach(t=>t.classList.toggle("active", t.dataset.tool===name)); $("canvas").classList.toggle("select", name==="select"); render(); };
     toolsEl.appendChild(el);
   }
 
@@ -580,7 +581,19 @@
 
   // ---- interaction ----
   let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null, xform = null;
-  let penAnchors = [], penDrag = false;
+  let penAnchors = [], penDrag = false, measureA = null;
+  // The ruler overlay between two mm points: a dashed line with a distance and
+  // angle label at the midpoint. Angle is measured from the positive x axis.
+  function measureOverlay(a, b){
+    const pa = mm2px(a), pb = mm2px(b), dx = b.x-a.x, dy = b.y-a.y;
+    const dist = Math.hypot(dx, dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
+    const mx = (pa.x+pb.x)/2, my = (pa.y+pb.y)/2;
+    const label = `${dist.toFixed(2)} mm   ${ang.toFixed(1)}&#176;`;
+    return `<line x1="${pa.x}" y1="${pa.y}" x2="${pb.x}" y2="${pb.y}" stroke="#28c08a" stroke-width="1.5" stroke-dasharray="5 3"/>`
+      + `<circle cx="${pa.x}" cy="${pa.y}" r="3" fill="#28c08a"/><circle cx="${pb.x}" cy="${pb.y}" r="3" fill="#28c08a"/>`
+      + `<rect x="${mx-44}" y="${my-22}" width="88" height="17" rx="3" fill="#0b0e14" stroke="#28c08a"/>`
+      + `<text x="${mx}" y="${my-9}" fill="#8affc8" font-size="11" text-anchor="middle" font-family="monospace">${label}</text>`;
+  }
   function penPreview(){
     if (!penAnchors.length) return null;
     const A = penAnchors, m = q => mm2px(q);
@@ -627,6 +640,7 @@
       penAnchors.push({ p:{x:m.x,y:m.y}, hIn:{x:m.x,y:m.y}, hOut:{x:m.x,y:m.y} });
       penDrag = true; drawing = penPreview(); render(); return;
     }
+    if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
       if (dragNode == null) { selected = hitTest(m); }   // no node hit: pick a shape to edit
@@ -646,6 +660,7 @@
     const m = px2mm(e.clientX, e.clientY);
     $("readout").textContent = `x ${m.x.toFixed(1)}  y ${m.y.toFixed(1)} mm`;
     if (tool==="pen" && penDrag && penAnchors.length){ const a = penAnchors[penAnchors.length-1]; a.hOut={x:m.x,y:m.y}; a.hIn={x:2*a.p.x-m.x,y:2*a.p.y-m.y}; drawing=penPreview(); render(); return; }
+    if (tool==="measure" && measureA){ drawing = measureOverlay(measureA, m); render(); return; }
     if (xform && selected!=null){
       const sh2 = JSON.parse(JSON.stringify(xform.orig)), h = xform.h;
       if (h.kind==="rotate"){ const ang = Math.atan2(m.y-xform.cy, m.x-xform.cx) - xform.startAng; rotateShapeAbout(sh2, xform.cx, xform.cy, ang); }
@@ -668,6 +683,7 @@
   });
   window.addEventListener("mouseup", e => {
     if (xform){ xform=null; start=null; dragShape=null; render(); refreshCounts(); return; }
+    if (tool==="measure"){ measureA=null; start=null; return; }
     if (tool==="pen"){ penDrag=false; start=null; return; }
     if (!start){ return; }
     const m = px2mm(e.clientX, e.clientY);
@@ -1307,6 +1323,7 @@
     else if (act==="text"){ doc.shapes=[...engineTextShapes("LaserCraft 2026", 12, 95, 13, 0), ...engineTextShapes("SN-0042 / 19.5mm", 12, 60, 10, 1), ...engineTextShapes("ABCDEFG HIJKLM", 12, 30, 9, 2)]; selected=null; render(); refreshCounts(); }
     else if (act==="nodes"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:25,y:35}, segments:[{Cubic:{c1:{x:40,y:80},c2:{x:95,y:80},to:{x:120,y:35}}},{Cubic:{c1:{x:95,y:-5},c2:{x:40,y:-5},to:{x:25,y:35}}}], closed:true } } }]; selected=0; const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); render(); refreshCounts(); }
     else if (act==="offset"){ doc.shapes=[{ kind:"Rect", cut_index:0, geometry:{ Polyline:{ points:[p(60,60),p(100,60),p(100,95),p(60,95)], closed:true } } }]; selected=0; offsetSelected(6); offsetSelected(-6); openArrange(); }
+    else if (act==="measure"){ const tb=document.querySelector('.tool[data-tool="measure"]'); if (tb) tb.click(); drawing = measureOverlay(p(30,40), p(110,95)); render(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
