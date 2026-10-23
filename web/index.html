@@ -342,7 +342,7 @@
         <div class="posrow">
           <div class="pos"><span>X</span><b id="posX">0.0</b></div>
           <div class="pos"><span>Y</span><b id="posY">0.0</b></div>
-          <div class="pos"><span>Z</span><b id="posZ">0.0</b></div>
+          <div class="pos" id="posZwrap"><span>Z</span><b id="posZ">0.0</b></div>
         </div>
         <svg id="jog" width="280" height="280" viewBox="0 0 280 280" style="display:block;margin:16px auto"></svg>
         <div class="chips" id="distChips"></div>
@@ -548,6 +548,7 @@
           <div class="f"><label data-i18n="mc.origin">Origin corner</label><select id="mc_origin" style="width:100%"><option value="FL">Front-left</option><option value="FR">Front-right</option><option value="RL">Rear-left</option><option value="RR">Rear-right</option></select></div>
           <div class="f"><label data-i18n="mc.start">Job start</label><select id="mc_start" style="width:100%"><option value="abs">Absolute coords</option><option value="current">Current position</option></select></div>
           <div class="f"><label data-i18n="mc.baud">Baud</label><select id="mc_baud" style="width:100%"><option>115200</option><option>250000</option><option>57600</option><option>38400</option><option>9600</option></select></div>
+          <div class="f"><label data-i18n="mc.axes">Axes</label><select id="mc_axes" style="width:100%"><option value="2">X, Y</option><option value="3">X, Y, Z</option></select></div>
         </div>
         <div class="f" style="margin-top:12px"><label data-i18n="mc.features">Features</label>
           <div class="mccaps">
@@ -630,6 +631,7 @@
   let curStart = "abs";                          // job start: absolute coords or current position
   let curOrigin = "FL";                          // which bed corner is machine zero
   let ditherMode = "floyd";                      // image dithering algorithm (set in Preferences)
+  let curAxes = 2;                               // number of jog axes the machine exposes
   const SVGNS = "http://www.w3.org/2000/svg";
   const $ = id => document.getElementById(id);
 
@@ -1774,6 +1776,10 @@
     curAir = mc.air !== false;
     curStart = mc.start || "abs"; curOrigin = mc.origin || "FL";
     SERIAL.baud = mc.baud || 115200;
+    // Jog axes: the Move tab shows its Z row only when the machine has a Z axis.
+    curAxes = mc.axes || 2;
+    const zw = $("posZwrap"); if (zw) zw.style.display = curAxes >= 3 ? "" : "none";
+    const mt = document.querySelector('.docktabs button[data-dock="move"]'); if (mt) mt.style.display = curAxes >= 2 ? "" : "none";
     const g = mc.ctrl === "galvo";
     // Galvo talks over WebUSB; every other controller streams G-code over serial.
     $("galvoRow").style.display = g ? "flex" : "none";
@@ -1793,7 +1799,7 @@
     const mc = editing ? allMachines()[mcEditIdx] : { name:"", ctrl:"grbl", w:400, h:400, frame:true, air:true };
     $("mc_name").value = mc.name; $("mc_ctrl").value = mc.ctrl; $("mc_w").value = mc.w; $("mc_h").value = mc.h;
     $("mc_frame").checked = mc.frame !== false; $("mc_air").checked = mc.air !== false;
-    $("mc_origin").value = mc.origin || "FL"; $("mc_start").value = mc.start || "abs"; $("mc_baud").value = String(mc.baud || 115200);
+    $("mc_origin").value = mc.origin || "FL"; $("mc_start").value = mc.start || "abs"; $("mc_baud").value = String(mc.baud || 115200); $("mc_axes").value = String(mc.axes || 2);
     $("mcTitle").textContent = tr(editing ? "mc.edit" : "mc.add", editing ? "Edit machine" : "Add machine");
     $("mcOk").textContent = editing ? tr("mc.update", "Save") : tr("mc.save", "Add");
     // Delete is offered for custom machines only; built-ins are read-only presets.
@@ -1810,7 +1816,7 @@
   };
   $("editMachine").onclick = () => openMachineDialog(+$("machine").value || 0);
   $("mcOk").onclick = () => {
-    const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked, origin: $("mc_origin").value, start: $("mc_start").value, baud: +$("mc_baud").value || 115200 };
+    const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked, origin: $("mc_origin").value, start: $("mc_start").value, baud: +$("mc_baud").value || 115200, axes: +$("mc_axes").value || 2 };
     const custom = customMachines();
     let selIdx;
     if (mcEditIdx != null && mcEditIdx >= BUILTIN_COUNT){ custom[mcEditIdx - BUILTIN_COUNT] = mc; selIdx = mcEditIdx; }
@@ -2772,6 +2778,7 @@
   Object.assign(I18N.de, { "gd.title":"Galvo-Geräteeinstellungen","gd.basic":"Galvo und Allgemein","gd.ports":"Ports und Laser","gd.addl":"Zusätzlich","gd.ext":"Erweiterungen","gd.open":"Galvo-Geräteeinstellungen…","gd.loadcor":"COR-Datei laden…","gd.builtinnote":"Beim Speichern einer integrierten Maschine entsteht eine benutzerdefinierte Kopie." });
   Object.assign(I18N.fr, { "gd.title":"Réglages du périphérique galvo","gd.basic":"Galvo et base","gd.ports":"Ports et laser","gd.addl":"Supplémentaire","gd.ext":"Extensions","gd.open":"Réglages du périphérique galvo…","gd.loadcor":"Charger le fichier COR…","gd.builtinnote":"Enregistrer une machine intégrée crée une copie personnalisée." });
   Object.assign(I18N["pt-BR"], { "gd.title":"Configurações do dispositivo galvo","gd.basic":"Galvo e básico","gd.ports":"Portas e laser","gd.addl":"Adicional","gd.ext":"Extensões","gd.open":"Configurações do dispositivo galvo…","gd.loadcor":"Carregar arquivo COR…","gd.builtinnote":"Salvar uma máquina integrada cria uma cópia personalizada." });
+  Object.assign(I18N.es, { "mc.axes":"Ejes" }); Object.assign(I18N.de, { "mc.axes":"Achsen" }); Object.assign(I18N.fr, { "mc.axes":"Axes" }); Object.assign(I18N["pt-BR"], { "mc.axes":"Eixos" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
