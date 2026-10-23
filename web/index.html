@@ -98,6 +98,8 @@
   .cp-grid { display: grid; grid-template-columns: repeat(6, 22px); gap: 6px; }
   .cp-sw { width: 22px; height: 22px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; padding: 0; }
   .cp-sw:hover { border-color: var(--ink); }
+  .cp-sw.taken { opacity: .28; cursor: not-allowed; position: relative; }
+  .cp-sw.taken::after { content: "\2715"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; }
   .cp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
   .cp-custom { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
   .cp-custom input[type=color] { width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; }
@@ -1337,8 +1339,9 @@
   // native picker for any custom colour; "reset" drops back to the palette default.
   function openColorPicker(anchor, L){
     closeColorPicker();
+    const used = layerColorsInUse(L);   // colours other layers already own
     const pop = document.createElement("div"); pop.className="colorpop"; pop.id="colorpop";
-    const sw = PALETTE.map(c=>`<button class="cp-sw" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("");
+    const sw = PALETTE.map(c=>{ const taken = used.has(c.toLowerCase()); return `<button class="cp-sw${taken?" taken":""}" data-c="${c}"${taken?" disabled":""} style="background:${c}" title="${c}${taken?" ("+tr("layer.taken","in use")+")":""}"></button>`; }).join("");
     pop.innerHTML = `<div class="cp-grid">${sw}</div>`
       + `<div class="cp-row"><label class="cp-custom"><input type="color" id="cp_custom" value="${layerColor(L)}"><span data-i18n="layer.custom">Custom…</span></label>`
       + `<button class="btn sm" id="cp_reset" data-i18n="layer.resetcolor">Default</button></div>`;
@@ -1346,10 +1349,11 @@
     const r = anchor.getBoundingClientRect();
     pop.style.left = Math.min(r.left, innerWidth - pop.offsetWidth - 8) + "px";
     pop.style.top = (r.bottom + 6) + "px";
-    const apply = (c)=>{ if (c) L.color = c; else delete L.color; closeColorPicker(); renderLayers(); render(); generate(); };
-    pop.querySelectorAll(".cp-sw").forEach(b=>b.onclick=()=>apply(b.dataset.c));
-    pop.querySelector("#cp_custom").oninput = (e)=>{ L.color = e.target.value; renderLayers(); render(); };
-    pop.querySelector("#cp_custom").onchange = (e)=>apply(e.target.value);
+    // Reject a colour already used by another layer; a colour is the layer's identity.
+    const apply = (c)=>{ if (c){ if (used.has(c.toLowerCase())){ return; } L.color = c; } else { delete L.color; if (used.has(layerColor(L).toLowerCase())){ const free=firstFreeColor(); if (free) L.color=free; } } closeColorPicker(); renderLayers(); render(); generate(); };
+    pop.querySelectorAll(".cp-sw:not(.taken)").forEach(b=>b.onclick=()=>apply(b.dataset.c));
+    pop.querySelector("#cp_custom").oninput = (e)=>{ if (!used.has(e.target.value.toLowerCase())){ L.color = e.target.value; renderLayers(); render(); } };
+    pop.querySelector("#cp_custom").onchange = (e)=>{ if (used.has(e.target.value.toLowerCase())){ alert(tr("layer.colortaken","Another layer already uses that colour.")); return; } apply(e.target.value); };
     pop.querySelector("#cp_reset").onclick = ()=>apply(null);
     localizeIn(pop);
     setTimeout(()=>document.addEventListener("mousedown", colorPickerAway), 0);
@@ -1395,10 +1399,16 @@
     const tabs=$("lp_tabs"); if(tabs) tabs.onchange=()=>{ L.tabs=tabs.checked; snapshot(); commit(); };
     const edit=$("lp_edit"); if(edit) edit.onclick=()=>openCutSettings(activeLayer);
   }
-  // Add a new colour-coded layer and select it.
+  // The set of colours already claimed by layers. A colour is a layer's cut
+  // identity, so no two layers may share one.
+  function layerColorsInUse(except){ const s=new Set(); doc.layers.forEach(L=>{ if (L!==except) s.add(layerColor(L).toLowerCase()); }); return s; }
+  function firstFreeColor(){ const used = layerColorsInUse(null); for (const c of PALETTE){ if (!used.has(c.toLowerCase())) return c; } return null; }
+  // Add a new colour-coded layer with the first unclaimed palette colour.
   function addLayer(){
     const idx = doc.layers.reduce((m,l)=>Math.max(m,l.index),-1) + 1;
-    doc.layers.push(layer(idx, "Layer "+String(idx).padStart(2,"0"), 100, 30, "Line"));
+    const L = layer(idx, "Layer "+String(idx).padStart(2,"0"), 100, 30, "Line");
+    const free = firstFreeColor(); if (free) L.color = free;   // keep each layer's colour unique
+    doc.layers.push(L);
     activeLayer = doc.layers.length - 1; snapshot(); renderLayers();
   }
   // ---- full Cut Settings Editor (the detailed per-layer dialog) ----
@@ -2779,6 +2789,10 @@
   Object.assign(I18N.fr, { "gd.title":"Réglages du périphérique galvo","gd.basic":"Galvo et base","gd.ports":"Ports et laser","gd.addl":"Supplémentaire","gd.ext":"Extensions","gd.open":"Réglages du périphérique galvo…","gd.loadcor":"Charger le fichier COR…","gd.builtinnote":"Enregistrer une machine intégrée crée une copie personnalisée." });
   Object.assign(I18N["pt-BR"], { "gd.title":"Configurações do dispositivo galvo","gd.basic":"Galvo e básico","gd.ports":"Portas e laser","gd.addl":"Adicional","gd.ext":"Extensões","gd.open":"Configurações do dispositivo galvo…","gd.loadcor":"Carregar arquivo COR…","gd.builtinnote":"Salvar uma máquina integrada cria uma cópia personalizada." });
   Object.assign(I18N.es, { "mc.axes":"Ejes" }); Object.assign(I18N.de, { "mc.axes":"Achsen" }); Object.assign(I18N.fr, { "mc.axes":"Axes" }); Object.assign(I18N["pt-BR"], { "mc.axes":"Eixos" });
+  Object.assign(I18N.es, { "layer.taken":"en uso","layer.colortaken":"Otra capa ya usa ese color." });
+  Object.assign(I18N.de, { "layer.taken":"belegt","layer.colortaken":"Eine andere Ebene nutzt diese Farbe bereits." });
+  Object.assign(I18N.fr, { "layer.taken":"utilisée","layer.colortaken":"Un autre calque utilise déjà cette couleur." });
+  Object.assign(I18N["pt-BR"], { "layer.taken":"em uso","layer.colortaken":"Outra camada já usa essa cor." });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
