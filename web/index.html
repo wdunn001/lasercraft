@@ -76,10 +76,18 @@
   .dock { background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .dock .section { border-bottom: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
   .collapsehead { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
-  .collapsehead .chev { font-size: 10px; color: var(--muted); display: inline-block; transition: transform .15s; }
-  .collapsible.collapsed > .collapse-body { display: none; }
+  .collapsehead .chev { font-size: 10px; color: var(--muted); display: inline-block; transition: transform .22s ease-in-out; }
+  .collapse-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; max-height: 2400px; opacity: 1; transition: max-height .26s ease-in-out, opacity .2s ease-in-out; }
+  .collapsible.collapsed > .collapse-body { max-height: 0; opacity: 0; }
   .collapsible.collapsed .chev { transform: rotate(-90deg); }
-  .collapse-body { display: flex; flex-direction: column; min-height: 0; }
+  /* Left tool strip: collapsible, colour-coded groups. */
+  .toolgrp { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden; max-height: 600px; opacity: 1; transition: max-height .24s ease-in-out, opacity .18s ease-in-out; }
+  .toolgrp.collapsed { max-height: 0; opacity: 0; margin: 0; }
+  .toolhdr { display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding: 3px 0; }
+  .toolhdr .tsw { width: 22px; height: 5px; border-radius: 3px; opacity: .9; }
+  .toolhdr .tsw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .toolhdr .tchev { font-size: 8px; color: var(--muted); line-height: 1; transition: transform .22s ease-in-out; }
+  .toolhdr.collapsed .tchev { transform: rotate(-90deg); }
   .dock h3 { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); padding: 11px 14px 7px; display: flex; align-items: center; }
   .dock h3 .mini { margin-left: auto; display: flex; gap: 4px; }
   .dock h3 .mini span { width: 22px; height: 22px; border: 1px solid var(--line); background: var(--field); border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer; font-size: 12px; }
@@ -95,7 +103,7 @@
   .row.sel { background: #223046; }
   .row.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--sel); }
   .lyr { display: flex; align-items: center; gap: 8px; }
-  .lyr .sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(255,255,255,.15); cursor: pointer; }
+  .lyr .sw { width: 13px; height: 13px; flex: 0 0 auto; border-radius: 3px; border: 1px solid rgba(255,255,255,.15); cursor: pointer; }
   .lyr .sw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
   .lyr .n { font-weight: 600; }
   .lyr-rename { font: inherit; font-weight: 600; width: 100%; background: var(--field); color: var(--ink); border: 1px solid var(--accent); border-radius: 5px; padding: 1px 5px; }
@@ -349,7 +357,7 @@
             </div>
           </div>
           <button class="btn" id="matBtn" style="width:100%" data-i18n="mat.open">Material Library&hellip;</button>
-          <div class="gcode"><div class="gchdr"><button class="btn sm" id="copyBtn" data-i18n="action.copy">Copy</button></div><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div>
+          <div class="gcode collapsible" id="gcodeSection"><div class="gchdr collapsehead"><span class="chev">&#9662;</span> <span data-i18n="panel.gcode">G-code</span><span style="flex:1"></span><button class="btn sm" id="copyBtn" data-i18n="action.copy">Copy</button></div><div class="collapse-body"><pre id="gcode">Draw something, pick a layer, then Generate.</pre></div></div>
           <div class="stat"><span><span data-i18n="stat.lines">Lines</span> <b id="lineCount">0</b></span><span><span data-i18n="stat.shapes">Shapes</span> <b id="shapeCount">0</b></span><span id="galvo"></span></div>
         </div>
       </div>
@@ -995,19 +1003,47 @@
     document.querySelectorAll(".tool").forEach(t=>{ const on = t.dataset.tool===name; t.classList.toggle("active", on); t.style.background = on ? (t.dataset.gcolor||"") : ""; t.style.borderColor = on ? (t.dataset.gcolor||"") : ""; });
     $("canvas").classList.toggle("select", name==="select"); updateToolbar(); render();
   }
+  // Restore any saved group colours and collapsed state.
+  let toolGroupPrefs = {}; try { toolGroupPrefs = JSON.parse(localStorage.getItem("lc_toolgroups") || "{}"); } catch(e){}
+  TOOL_GROUPS.forEach((g, gi) => { if (toolGroupPrefs["c"+gi]) g.color = toolGroupPrefs["c"+gi]; });
+  function saveToolGroups(){ const o = {}; TOOL_GROUPS.forEach((g, gi) => { o["c"+gi] = g.color; o["x"+gi] = document.querySelector(`.toolgrp[data-group="${gi}"]`).classList.contains("collapsed"); }); try { localStorage.setItem("lc_toolgroups", JSON.stringify(o)); } catch(e){} }
   TOOL_GROUPS.forEach((g, gi) => {
-    if (gi > 0){ const sep = document.createElement("div"); sep.className = "toolsep"; sep.style.background = g.color; sep.title = g.name; toolsEl.appendChild(sep); }
+    const hdr = document.createElement("div"); hdr.className = "toolhdr"; hdr.dataset.group = gi; hdr.title = g.name;
+    hdr.innerHTML = `<span class="tsw" style="background:${g.color}"></span><span class="tchev">&#9662;</span>`;
+    const wrap = document.createElement("div"); wrap.className = "toolgrp"; wrap.dataset.group = gi;
     for (const [name, d] of g.tools){
       const el = document.createElement("div");
       el.className = "tool" + (name===tool?" active":"");
-      el.dataset.tool = name; el.dataset.gcolor = g.color;
+      el.dataset.tool = name; el.dataset.group = gi;
       el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${d}"/></svg>`;
       el.title = name + " · " + g.name;
       if (name===tool){ el.style.background = g.color; el.style.borderColor = g.color; }
       el.onclick = () => { if (name==="image"){ $("imgFile").click(); return; } setTool(name); };
-      toolsEl.appendChild(el);
+      wrap.appendChild(el);
     }
+    // Clicking the colour swatch opens the picker; clicking elsewhere collapses.
+    hdr.querySelector(".tsw").onclick = (e) => { e.stopPropagation(); openToolGroupColor(e.currentTarget, gi); };
+    hdr.onclick = () => { const col = wrap.classList.toggle("collapsed"); hdr.classList.toggle("collapsed", col); saveToolGroups(); };
+    toolsEl.appendChild(hdr); toolsEl.appendChild(wrap);
+    if (toolGroupPrefs["x"+gi]){ wrap.classList.add("collapsed"); hdr.classList.add("collapsed"); }
   });
+  // Recolour a whole tool group from the shared palette.
+  function openToolGroupColor(anchor, gi){
+    closeColorPicker();
+    const g = TOOL_GROUPS[gi];
+    const sw = PALETTE.map(c => `<button class="cp-sw" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("");
+    const pop = document.createElement("div"); pop.className = "colorpop"; pop.id = "colorpop";
+    pop.innerHTML = `<div class="cp-grid">${sw}</div><div class="cp-row"><label class="cp-custom"><input type="color" id="cp_gcustom" value="${g.color}"><span data-i18n="layer.custom">Custom…</span></label></div>`;
+    document.body.appendChild(pop);
+    const r = anchor.getBoundingClientRect();
+    pop.style.left = Math.min(r.right + 6, innerWidth - pop.offsetWidth - 8) + "px";
+    pop.style.top = Math.min(r.top, innerHeight - pop.offsetHeight - 8) + "px";
+    const apply = (c) => { g.color = c; document.querySelector(`.toolhdr[data-group="${gi}"] .tsw`).style.background = c; if (TOOL_GROUPS[gi].tools.some(t => t[0] === tool)){ const el = document.querySelector(`.tool[data-group="${gi}"].active`); if (el){ el.style.background = c; el.style.borderColor = c; } } saveToolGroups(); closeColorPicker(); };
+    pop.querySelectorAll(".cp-sw").forEach(b => b.onclick = () => apply(b.dataset.c));
+    pop.querySelector("#cp_gcustom").onchange = (e) => apply(e.target.value);
+    localizeIn(pop);
+    setTimeout(() => document.addEventListener("mousedown", colorPickerAway), 0);
+  }
 
   // ---- canvas ----
   const canvas = $("canvas");
@@ -3164,7 +3200,7 @@
 
   $("genBtn").onclick = generate;
   $("frameBtn").onclick = runFrame;
-  $("copyBtn").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("gcode").textContent);
+  $("copyBtn").onclick = (e) => { e.stopPropagation(); if (navigator.clipboard) navigator.clipboard.writeText($("gcode").textContent); };
 
   // ---- galvo output + real WebUSB connection ----
   function isGalvo(){ return curFlavor==="galvo"; }
@@ -4199,8 +4235,8 @@
   // ---- i18n: translate the UI chrome (shipped catalog translations) ----
   const I18N = {
     en: {},
-    es: { "menu.file":"Archivo","menu.edit":"Edición","action.new":"Nuevo","action.import":"Importar SVG…","action.export":"Exportar GCode…","action.delete":"Eliminar selección","action.dupe":"Duplicar","action.frame":"Encuadrar","action.generate":"Generar","text.add":"Añadir texto","text.ph":"texto a marcar…","label.est":"Est.","panel.layers":"Cortes / Capas","panel.laser":"Láser","col.layer":"Capa","col.mode":"Modo","col.spd":"Vel / Pot","col.out":"Salida","col.show":"Ver","galvo.connect":"Conectar galvo (WebUSB)","galvo.send":"Enviar" },
-    de: { "menu.file":"Datei","menu.edit":"Bearbeiten","action.new":"Neu","action.import":"SVG importieren…","action.export":"GCode exportieren…","action.delete":"Auswahl löschen","action.dupe":"Duplizieren","action.frame":"Rahmen","action.generate":"Erzeugen","text.add":"Text hinzufügen","text.ph":"Text zum Markieren…","label.est":"Gesch.","panel.layers":"Schnitte / Ebenen","panel.laser":"Laser","col.layer":"Ebene","col.mode":"Modus","col.spd":"Geschw. / Leist.","col.out":"Aus","col.show":"Zeig","galvo.connect":"Galvo verbinden (WebUSB)","galvo.send":"Senden" },
+    es: { "menu.file":"Archivo","menu.edit":"Edición","action.new":"Nuevo","action.import":"Importar SVG…","action.export":"Exportar GCode…","action.delete":"Eliminar selección","action.dupe":"Duplicar","action.frame":"Encuadrar","action.generate":"Generar","text.add":"Añadir texto","text.ph":"texto a marcar…","label.est":"Est.","panel.layers":"Cortes / Capas","panel.laser":"Láser","panel.gcode":"Código G","col.layer":"Capa","col.mode":"Modo","col.spd":"Vel / Pot","col.out":"Salida","col.show":"Ver","galvo.connect":"Conectar galvo (WebUSB)","galvo.send":"Enviar" },
+    de: { "menu.file":"Datei","menu.edit":"Bearbeiten","action.new":"Neu","action.import":"SVG importieren…","action.export":"GCode exportieren…","action.delete":"Auswahl löschen","action.dupe":"Duplizieren","action.frame":"Rahmen","action.generate":"Erzeugen","text.add":"Text hinzufügen","text.ph":"Text zum Markieren…","label.est":"Gesch.","panel.layers":"Schnitte / Ebenen","panel.laser":"Laser","panel.gcode":"Código G","panel.gcode":"G-code","panel.gcode":"G-Code","col.layer":"Ebene","col.mode":"Modus","col.spd":"Geschw. / Leist.","col.out":"Aus","col.show":"Zeig","galvo.connect":"Galvo verbinden (WebUSB)","galvo.send":"Senden" },
     fr: { "menu.file":"Fichier","menu.edit":"Édition","action.new":"Nouveau","action.import":"Importer SVG…","action.export":"Exporter GCode…","action.delete":"Supprimer la sélection","action.dupe":"Dupliquer","action.frame":"Cadrer","action.generate":"Générer","text.add":"Ajouter du texte","text.ph":"texte à marquer…","label.est":"Est.","panel.layers":"Coupes / Calques","panel.laser":"Laser","col.layer":"Calque","col.mode":"Mode","col.spd":"Vit. / Puis.","col.out":"Sortie","col.show":"Voir","galvo.connect":"Connecter galvo (WebUSB)","galvo.send":"Envoyer" },
     "pt-BR": { "menu.file":"Arquivo","menu.edit":"Editar","action.new":"Novo","action.import":"Importar SVG…","action.export":"Exportar GCode…","action.delete":"Excluir seleção","action.dupe":"Duplicar","action.frame":"Enquadrar","action.generate":"Gerar","text.add":"Adicionar texto","text.ph":"texto para marcar…","label.est":"Est.","panel.layers":"Cortes / Camadas","panel.laser":"Laser","col.layer":"Camada","col.mode":"Modo","col.spd":"Vel / Pot","col.out":"Saída","col.show":"Ver","galvo.connect":"Conectar galvo (WebUSB)","galvo.send":"Enviar" },
   };
