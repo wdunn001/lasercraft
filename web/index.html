@@ -479,6 +479,13 @@
         const bb = bbox(sh);
         const a=mm2px(p(bb.x0,bb.y1)), b=mm2px(p(bb.x1,bb.y0));
         s += `<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="none" stroke="#3b82f6" stroke-dasharray="4 3"/>`;
+        if (tool === "select"){
+          const cxp = (a.x+b.x)/2;
+          transformHandles(sh).forEach(h => { const d = mm2px(h);
+            if (h.kind==="rotate"){ s += `<line x1="${cxp}" y1="${a.y}" x2="${d.x}" y2="${d.y}" stroke="#3b82f6" stroke-width="1"/><circle cx="${d.x}" cy="${d.y}" r="5" fill="#28c08a" stroke="#fff" stroke-width="1.2"/>`; }
+            else s += `<rect x="${d.x-4}" y="${d.y-4}" width="8" height="8" fill="#fff" stroke="#3b82f6" stroke-width="1.4"/>`;
+          });
+        }
       }
     });
     // node-edit handles on the selected shape
@@ -546,9 +553,33 @@
   }
   function translateShape(sh, dx, dy){ eachPoint(sh, q => { q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); }); }
   function rotateShapeAbout(sh, cx, cy, th){ const cs=Math.cos(th), sn=Math.sin(th); eachPoint(sh, q => { const x=q.x-cx, y=q.y-cy; q.x=+(cx+x*cs-y*sn).toFixed(3); q.y=+(cy+x*sn+y*cs).toFixed(3); }); }
+  function scaleShapeAbout(sh, ox, oy, sx, sy){ eachPoint(sh, q => { q.x=+(ox+(q.x-ox)*sx).toFixed(3); q.y=+(oy+(q.y-oy)*sy).toFixed(3); }); }
+  // The transform handles around the selected shape's box, in mm. Four corners
+  // scale both axes about the opposite corner, four edges scale one axis about the
+  // opposite edge, and a stem above the box rotates about the centre.
+  function transformHandles(sh){
+    const bb = bbox(sh), cx=(bb.x0+bb.x1)/2, cy=(bb.y0+bb.y1)/2, m = 14/view.s;
+    return [
+      { kind:"corner", x:bb.x0, y:bb.y0, ax:bb.x1, ay:bb.y1 },
+      { kind:"corner", x:bb.x1, y:bb.y0, ax:bb.x0, ay:bb.y1 },
+      { kind:"corner", x:bb.x1, y:bb.y1, ax:bb.x0, ay:bb.y0 },
+      { kind:"corner", x:bb.x0, y:bb.y1, ax:bb.x1, ay:bb.y0 },
+      { kind:"edge", axis:"x", x:bb.x0, y:cy, ax:bb.x1, ay:cy },
+      { kind:"edge", axis:"x", x:bb.x1, y:cy, ax:bb.x0, ay:cy },
+      { kind:"edge", axis:"y", x:cx, y:bb.y0, ax:cx, ay:bb.y1 },
+      { kind:"edge", axis:"y", x:cx, y:bb.y1, ax:cx, ay:bb.y0 },
+      { kind:"rotate", x:cx, y:bb.y1 + m, cx, cy },
+    ];
+  }
+  function hitHandle(px, py){
+    if (selected == null || !doc.shapes[selected] || tool !== "select") return null;
+    const r = canvas.getBoundingClientRect();
+    for (const h of transformHandles(doc.shapes[selected])){ const d = mm2px(h); if (Math.hypot(d.x-(px-r.left), d.y-(py-r.top)) < 9) return h; }
+    return null;
+  }
 
   // ---- interaction ----
-  let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null;
+  let drawing = null, start = null, dragShape = null, dragOff = null, dragNode = null, xform = null;
   let penAnchors = [], penDrag = false;
   function penPreview(){
     if (!penAnchors.length) return null;
@@ -602,6 +633,10 @@
       render(); return;
     }
     if (tool === "select") {
+      const h = hitHandle(e.clientX, e.clientY);
+      if (h){ const orig = JSON.parse(JSON.stringify(doc.shapes[selected])); const bb=bbox(orig);
+        xform = { h, orig, cx:(bb.x0+bb.x1)/2, cy:(bb.y0+bb.y1)/2, startAng: Math.atan2(m.y-(bb.y0+bb.y1)/2, m.x-(bb.x0+bb.x1)/2) };
+        render(); return; }
       selected = hitTest(m); dragShape = selected;
       if (selected!=null){ const bb=bbox(doc.shapes[selected]); dragOff = { x: m.x-bb.x0, y: m.y-bb.y0 }; }
       render();
@@ -611,6 +646,18 @@
     const m = px2mm(e.clientX, e.clientY);
     $("readout").textContent = `x ${m.x.toFixed(1)}  y ${m.y.toFixed(1)} mm`;
     if (tool==="pen" && penDrag && penAnchors.length){ const a = penAnchors[penAnchors.length-1]; a.hOut={x:m.x,y:m.y}; a.hIn={x:2*a.p.x-m.x,y:2*a.p.y-m.y}; drawing=penPreview(); render(); return; }
+    if (xform && selected!=null){
+      const sh2 = JSON.parse(JSON.stringify(xform.orig)), h = xform.h;
+      if (h.kind==="rotate"){ const ang = Math.atan2(m.y-xform.cy, m.x-xform.cx) - xform.startAng; rotateShapeAbout(sh2, xform.cx, xform.cy, ang); }
+      else { let sx=1, sy=1;
+        if (h.kind==="corner"){ const dx=h.x-h.ax, dy=h.y-h.ay; if (Math.abs(dx)>1e-6) sx=(m.x-h.ax)/dx; if (Math.abs(dy)>1e-6) sy=(m.y-h.ay)/dy; }
+        else if (h.axis==="x"){ const dx=h.x-h.ax; if (Math.abs(dx)>1e-6) sx=(m.x-h.ax)/dx; }
+        else { const dy=h.y-h.ay; if (Math.abs(dy)>1e-6) sy=(m.y-h.ay)/dy; }
+        const clamp = v => (Math.abs(v)<0.02 ? (v<0?-0.02:0.02) : v);
+        scaleShapeAbout(sh2, h.ax, h.ay, clamp(sx), clamp(sy));
+      }
+      doc.shapes[selected] = sh2; render(); return;
+    }
     if (!start) return;
     if (tool==="node" && dragNode!=null && doc.shapes[selected]){ const hs=nodeHandles(doc.shapes[selected]); const h=hs[dragNode]; if (h){ h.p.x=+m.x.toFixed(3); h.p.y=+m.y.toFixed(3); } render(); return; }
     if (tool==="select" && dragShape!=null){ moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y); render(); return; }
@@ -620,6 +667,7 @@
       render(); }
   });
   window.addEventListener("mouseup", e => {
+    if (xform){ xform=null; start=null; dragShape=null; render(); refreshCounts(); return; }
     if (tool==="pen"){ penDrag=false; start=null; return; }
     if (!start){ return; }
     const m = px2mm(e.clientX, e.clientY);
