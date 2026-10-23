@@ -17,3 +17,4 @@ Thumbs.db
 
 # Generated wasm bindings for the web app
 web/pkg/
+web/lc-*.png
