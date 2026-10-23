@@ -38,8 +38,8 @@ because every item ships at once.
 
 ## By area (condensed)
 
-- Document/File: core open/save/import/export Done. Many import formats (AI/PDF/HPGL/Gerber/3D) Gap. Templates, bundles, print: Gap.
-- Drawing: primary shapes Done; star Done; triangle/pentagon/octagon/bar-code Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
+- Document/File: core open/save/import/export, LightBurn .lbrn import Done. Many import formats (AI/PDF/HPGL/Gerber/3D) Gap. Templates, bundles, print: Gap.
+- Drawing: primary shapes, rounded rect, slot, regular N-gon, star Done; bar code Partial (Code 128; QR and the other 26 symbologies Gap); tabs tool Partial (per-layer tabs done, manual placement Gap).
 - Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
 - Node editing: insert/delete/move, trim, extend Done; convert-curve/break/optimize/warp/deform: Gap.
 - Text: core + alignment + fonts Done; variable text, text-on-path, bending, bar code: Gap.
