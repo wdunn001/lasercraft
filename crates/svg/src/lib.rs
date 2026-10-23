@@ -11,10 +11,10 @@
 //! SVG is the universal vector interchange format, so importing its path data is
 //! how real art enters LaserCraft. This crate parses the `d` attribute of an SVG
 //! path into [`BezierPath`] subpaths. It handles the move, line, horizontal,
-//! vertical, cubic, quadratic, and close commands in both absolute and relative
-//! forms. Quadratics are elevated to cubics. Smooth shorthands (`S`, `T`), arcs
-//! (`A`), transforms, and units are later work. Unknown commands return an error
-//! rather than silently dropping geometry.
+//! vertical, cubic, quadratic, smooth cubic (`S`), smooth quadratic (`T`), arc
+//! (`A`) and close commands in both absolute and relative forms. Quadratics and
+//! arcs are elevated to cubics. Transforms and units are later work. Unknown
+//! commands return an error rather than silently dropping geometry.
 
 use lasercraft_laser_doc::{BezierPath, PathSeg, Point2};
 
@@ -30,6 +30,10 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
     let mut point = Point2 { x: 0.0, y: 0.0 };
     let mut start = Point2 { x: 0.0, y: 0.0 };
     let mut last_command = 0u8;
+    // The previous curve's trailing control point, reflected by a smooth command.
+    // `cubic_ctrl` feeds `S`, `quad_ctrl` feeds `T`. A non-curve command clears both.
+    let mut cubic_ctrl: Option<Point2> = None;
+    let mut quad_ctrl: Option<Point2> = None;
 
     loop {
         skip_separators(bytes, &mut pos);
@@ -64,11 +68,15 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                     segments: Vec::new(),
                     closed: false,
                 });
+                cubic_ctrl = None;
+                quad_ctrl = None;
             }
             b'L' => {
                 let (x, y) = read_pair(bytes, &mut pos)?;
                 point = resolve(absolute, point, x, y);
                 push_seg(&mut current, PathSeg::Line { to: point })?;
+                cubic_ctrl = None;
+                quad_ctrl = None;
             }
             b'H' => {
                 let x = read_number(bytes, &mut pos)?;
@@ -77,6 +85,8 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                     y: point.y,
                 };
                 push_seg(&mut current, PathSeg::Line { to: point })?;
+                cubic_ctrl = None;
+                quad_ctrl = None;
             }
             b'V' => {
                 let y = read_number(bytes, &mut pos)?;
@@ -85,6 +95,8 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                     y: if absolute { y } else { point.y + y },
                 };
                 push_seg(&mut current, PathSeg::Line { to: point })?;
+                cubic_ctrl = None;
+                quad_ctrl = None;
             }
             b'C' => {
                 let (c1x, c1y) = read_pair(bytes, &mut pos)?;
@@ -94,6 +106,26 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                 let c2 = resolve(absolute, point, c2x, c2y);
                 point = resolve(absolute, point, x, y);
                 push_seg(&mut current, PathSeg::Cubic { c1, c2, to: point })?;
+                cubic_ctrl = Some(c2);
+                quad_ctrl = None;
+            }
+            b'S' => {
+                let (c2x, c2y) = read_pair(bytes, &mut pos)?;
+                let (x, y) = read_pair(bytes, &mut pos)?;
+                // The first control point reflects the previous cubic's second
+                // control about the current point, or is the point itself.
+                let c1 = match cubic_ctrl {
+                    Some(prev) => Point2 {
+                        x: 2.0 * point.x - prev.x,
+                        y: 2.0 * point.y - prev.y,
+                    },
+                    None => point,
+                };
+                let c2 = resolve(absolute, point, c2x, c2y);
+                point = resolve(absolute, point, x, y);
+                push_seg(&mut current, PathSeg::Cubic { c1, c2, to: point })?;
+                cubic_ctrl = Some(c2);
+                quad_ctrl = None;
             }
             b'Q' => {
                 let (qx, qy) = read_pair(bytes, &mut pos)?;
@@ -111,6 +143,32 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                 };
                 point = end;
                 push_seg(&mut current, PathSeg::Cubic { c1, c2, to: point })?;
+                quad_ctrl = Some(q);
+                cubic_ctrl = None;
+            }
+            b'T' => {
+                let (x, y) = read_pair(bytes, &mut pos)?;
+                // The quadratic control reflects the previous one about the point.
+                let q = match quad_ctrl {
+                    Some(prev) => Point2 {
+                        x: 2.0 * point.x - prev.x,
+                        y: 2.0 * point.y - prev.y,
+                    },
+                    None => point,
+                };
+                let end = resolve(absolute, point, x, y);
+                let c1 = Point2 {
+                    x: point.x + 2.0 / 3.0 * (q.x - point.x),
+                    y: point.y + 2.0 / 3.0 * (q.y - point.y),
+                };
+                let c2 = Point2 {
+                    x: end.x + 2.0 / 3.0 * (q.x - end.x),
+                    y: end.y + 2.0 / 3.0 * (q.y - end.y),
+                };
+                point = end;
+                push_seg(&mut current, PathSeg::Cubic { c1, c2, to: point })?;
+                quad_ctrl = Some(q);
+                cubic_ctrl = None;
             }
             b'A' => {
                 let rx = read_number(bytes, &mut pos)?;
@@ -124,6 +182,8 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                     push_seg(&mut current, PathSeg::Cubic { c1, c2, to })?;
                 }
                 point = end;
+                cubic_ctrl = None;
+                quad_ctrl = None;
             }
             b'Z' => {
                 if let Some(path) = current.as_mut() {
@@ -133,6 +193,8 @@ pub fn parse_path_data(data: &str) -> Result<Vec<BezierPath>, &'static str> {
                     paths.push(path);
                 }
                 point = start;
+                cubic_ctrl = None;
+                quad_ctrl = None;
             }
             _ => return Err("unsupported SVG path command"),
         }
@@ -421,6 +483,37 @@ mod tests {
     #[test]
     fn rejects_segment_before_move() {
         assert!(parse_path_data("L10 10").is_err());
+    }
+
+    #[test]
+    fn smooth_cubic_reflects_the_previous_control() {
+        // The cubic ends at (10,0) with its second control at (10,-5). The S then
+        // reflects that control about the end point, so c1 = (10,5).
+        let paths = parse_path_data("M0 0 C5 -5 10 -5 10 0 S20 5 20 0").unwrap_or_default();
+        assert_eq!(paths.len(), 1);
+        if let Some(path) = paths.first() {
+            assert_eq!(path.segments.len(), 2);
+            assert!(
+                matches!(path.segments.get(1), Some(PathSeg::Cubic { .. })),
+                "second segment is not a cubic"
+            );
+            if let Some(PathSeg::Cubic { c1, .. }) = path.segments.get(1) {
+                assert!(
+                    (c1.x - 10.0).abs() < 1e-9 && (c1.y - 5.0).abs() < 1e-9,
+                    "reflected c1 {c1:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn smooth_quadratic_reflects_the_previous_control() {
+        // Two Ts after a Q trace a smooth wave, each reflecting the prior control.
+        let paths = parse_path_data("M0 0 Q5 10 10 0 T20 0").unwrap_or_default();
+        assert_eq!(paths.len(), 1);
+        if let Some(path) = paths.first() {
+            assert_eq!(path.segments.len(), 2);
+        }
     }
 
     #[test]
