@@ -22,7 +22,7 @@ because every item ships at once.
 | 10 | Offset shapes | Done | |
 | 11 | Grid array and circular array | Done | Arrange dialog. |
 | 12 | Cuts/Layers window + colour palette | Done | Layers with colour picker, output/show toggles, cut-order reorder. |
-| 13 | Cut settings editor: Line/Fill/Image/Offset-fill | Done | Line/Fill/Concentric/Image modes. |
+| 13 | Cut settings editor: Line/Fill/Image/Offset-fill | Done | Full editor (double-click a layer) with perforation, wobble, tabs, ramp, timings. |
 | 14 | Speed, max/min power, passes | Done | |
 | 15 | Scan angle, line interval, cross-hatch | Partial | Angle + interval done; cross-hatch: Gap. |
 | 16 | Image dithering modes | Done | Floyd-Steinberg, Atkinson, Jarvis, Stucki, Ordered, Threshold, picked in Preferences. |
@@ -47,8 +47,14 @@ because every item ships at once.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
 - Fill/scan: interval, angle Done; cross-hatch, bidirectional, overscan, DPI, fill grouping, flood fill: Gap.
 - Image/art: trace + dither import Done; adjust image, dither-mode picker, mask, convert-to-bitmap, 3D depth map: Gap.
-- Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position Done; console, macros, file list, bridge, full device-settings pages: Gap.
-- Coordinate/work area: bed, origin corner, grid snap Done; units mm/inch, guidelines, snap distances, alignment guides: Gap.
+- Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); console, macros, file list, bridge: Gap.
+- Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating) Done; units mm/inch, guidelines, snap distances, alignment guides: Gap.
+
+## Beyond LightBurn
+
+- Depth / heat-map engrave: a grayscale image drives cut depth, banded into
+  multi-pass cut layers (lighter carves deeper), for fiber-laser relief and texture.
+  Direction and level count set in Preferences.
 - Camera: overlay, 4-corner align, print-and-cut marks Done; lens calibration wizard, head-mounted, LiDAR: Gap.
 - Rotary: Gap.
 - Advanced: preview Done; settings/prefs Partial (language done); hotkeys, bundles, center finder, cylinder correction, taper, dual laser: Gap.
