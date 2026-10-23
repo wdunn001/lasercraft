@@ -231,7 +231,7 @@ pub fn offset_fill(bbox: &BBox, interval_mm: f64) -> Vec<Segment> {
 /// rule. Alternate lines reverse so the head does not fly back. A polygon with
 /// fewer than three points, or a non-positive interval, yields nothing. The line
 /// count is capped against a runaway.
-pub fn hatch_fill(polygon: &[Point], interval_mm: f64) -> Vec<Segment> {
+pub fn hatch_fill(polygon: &[Point], interval_mm: f64, bidirectional: bool) -> Vec<Segment> {
     let mut segments = Vec::new();
     if polygon.len() < 3 || interval_mm <= 0.0 {
         return segments;
@@ -280,7 +280,11 @@ pub fn hatch_fill(polygon: &[Point], interval_mm: f64) -> Vec<Segment> {
                 end: Point { x: end_x, y },
             });
         }
-        leftward = !leftward;
+        // Unidirectional scanning keeps every line going the same way, with a
+        // rapid return between them. Bidirectional alternates for less travel.
+        if bidirectional {
+            leftward = !leftward;
+        }
         y += interval_mm;
     }
     segments
@@ -295,6 +299,7 @@ pub fn hatch_fill_angled(
     interval_mm: f64,
     angle_deg: f64,
     cross_hatch: bool,
+    bidirectional: bool,
 ) -> Vec<Segment> {
     if polygon.len() < 3 || interval_mm <= 0.0 {
         return Vec::new();
@@ -317,7 +322,7 @@ pub fn hatch_fill_angled(
     let one = |deg: f64| -> Vec<Segment> {
         let th = deg.to_radians();
         let turned: Vec<Point> = polygon.iter().map(|p| rot(p, -th)).collect();
-        hatch_fill(&turned, interval_mm)
+        hatch_fill(&turned, interval_mm, bidirectional)
             .into_iter()
             .map(|s| Segment {
                 start: rot(&s.start, th),
@@ -611,7 +616,7 @@ mod tests {
             Point { x: 10.0, y: 10.0 },
             Point { x: 0.0, y: 10.0 },
         ];
-        let lines = hatch_fill(&square, 1.0);
+        let lines = hatch_fill(&square, 1.0, true);
         // Scan lines centred at y = 0.5 through 9.5 is ten lines.
         assert_eq!(lines.len(), 10);
         for seg in &lines {
@@ -632,7 +637,7 @@ mod tests {
             Point { x: 10.0, y: 10.0 },
             Point { x: 0.0, y: 10.0 },
         ];
-        let lines = hatch_fill_angled(&square, 1.0, 90.0, false);
+        let lines = hatch_fill_angled(&square, 1.0, 90.0, false, true);
         assert_eq!(lines.len(), 10);
         // Every line now runs vertically: equal x on both ends.
         for seg in &lines {
@@ -648,9 +653,29 @@ mod tests {
             Point { x: 10.0, y: 10.0 },
             Point { x: 0.0, y: 10.0 },
         ];
-        let single = hatch_fill_angled(&square, 1.0, 0.0, false);
-        let crossed = hatch_fill_angled(&square, 1.0, 0.0, true);
+        let single = hatch_fill_angled(&square, 1.0, 0.0, false, true);
+        let crossed = hatch_fill_angled(&square, 1.0, 0.0, true, true);
         assert_eq!(crossed.len(), single.len() * 2);
+    }
+
+    #[test]
+    fn unidirectional_scans_every_line_the_same_way() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        // Bidirectional alternates, so some lines run right to left.
+        let bi = hatch_fill(&square, 1.0, true);
+        assert!(bi.iter().any(|s| s.start.x > s.end.x), "no reversed line");
+        // Unidirectional keeps every line left to right.
+        let uni = hatch_fill(&square, 1.0, false);
+        assert!(
+            uni.iter().all(|s| s.start.x <= s.end.x),
+            "a line ran backwards"
+        );
+        assert_eq!(bi.len(), uni.len());
     }
 
     #[test]
@@ -660,7 +685,7 @@ mod tests {
             Point { x: 10.0, y: 0.0 },
             Point { x: 5.0, y: 10.0 },
         ];
-        let lines = hatch_fill(&tri, 2.0);
+        let lines = hatch_fill(&tri, 2.0, true);
         assert!(!lines.is_empty());
         let width = |s: &Segment| (s.start.x - s.end.x).abs();
         let first = lines.first().map(width).unwrap_or(0.0);
@@ -672,14 +697,14 @@ mod tests {
     #[test]
     fn hatch_fill_rejects_degenerate_input() {
         let two = [Point { x: 0.0, y: 0.0 }, Point { x: 1.0, y: 1.0 }];
-        assert!(hatch_fill(&two, 1.0).is_empty());
+        assert!(hatch_fill(&two, 1.0, true).is_empty());
         let square = [
             Point { x: 0.0, y: 0.0 },
             Point { x: 10.0, y: 0.0 },
             Point { x: 10.0, y: 10.0 },
             Point { x: 0.0, y: 10.0 },
         ];
-        assert!(hatch_fill(&square, 0.0).is_empty());
+        assert!(hatch_fill(&square, 0.0, true).is_empty());
     }
 
     fn unit_box() -> BBox {

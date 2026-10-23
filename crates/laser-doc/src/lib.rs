@@ -226,6 +226,15 @@ pub struct FillParams {
     /// so the head is at speed before it enters. LightBurn "Overscanning".
     #[serde(default)]
     pub overscan_mm: f64,
+    /// Scan both directions, alternating line by line. Off scans one direction
+    /// only, with a rapid return. LightBurn "Bi-directional scanning".
+    #[serde(default = "default_true")]
+    pub bidirectional: bool,
+}
+
+/// Serde default for a flag that should load as `true` on older projects.
+fn default_true() -> bool {
+    true
 }
 
 impl Default for FillParams {
@@ -241,6 +250,7 @@ impl Default for FillParams {
             ramp_outer_edge: false,
             cross_hatch: false,
             overscan_mm: 0.0,
+            bidirectional: true,
         }
     }
 }

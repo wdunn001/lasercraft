@@ -501,6 +501,7 @@
             <label class="mccap"><input type="checkbox" id="cs_dotadj"> <span data-i18n="cs.dotadjust">Dot-width adjust</span></label>
             <label class="mccap"><input type="checkbox" id="cs_crosshatch"> <span data-i18n="cs.crosshatch">Cross-hatch</span></label>
             <div class="f"><label data-i18n="cs.overscan">Overscan mm</label><input id="cs_overscan" type="number" step="0.5" min="0" style="width:100%"></div>
+            <label class="mccap"><input type="checkbox" id="cs_bidir"> <span data-i18n="cs.bidir">Bi-directional</span></label>
           </div>
         </div>
         <hr class="csrule">
@@ -1717,7 +1718,7 @@
     $("cs_speed").value = L.speed_mm_s; $("cs_passes").value = L.num_passes; $("cs_power").value = L.power_max; $("cs_pmin").value = L.power_min;
     $("cs_air").checked = !!L.air_assist; $("cs_freq").value = L.freq; $("cs_qpulse").value = L.qpulse;
     $("cs_interval").value = L.interval; $("cs_dpi").value = L.interval>0 ? Math.round(25.4/L.interval) : 0; $("cs_angle").value = L.angle; $("cs_angleinc").value = L.angleInc||0;
-    $("cs_autorotate").checked = !!L.autoRotate; $("cs_ramp").value = L.ramp||0; $("cs_dotadj").checked = !!L.dotAdjust; $("cs_crosshatch").checked = !!L.crosshatch; $("cs_overscan").value = L.fillOverscan||0;
+    $("cs_autorotate").checked = !!L.autoRotate; $("cs_ramp").value = L.ramp||0; $("cs_dotadj").checked = !!L.dotAdjust; $("cs_crosshatch").checked = !!L.crosshatch; $("cs_overscan").value = L.fillOverscan||0; $("cs_bidir").checked = L.bidir!==false;
     $("cs_kerf").value = L.kerf||0; $("cs_perf").checked = !!L.perf; $("cs_perfcut").value = L.perfCut||0.1; $("cs_perfskip").value = L.perfSkip||0.1;
     $("cs_overcut").value = L.overcut||0; $("cs_leadin").value = L.leadIn||0; $("cs_leadout").value = L.leadOut||0;
     $("cs_wobble").checked = !!L.wobble; $("cs_wobstep").value = L.wobStep||0.05; $("cs_wobsize").value = L.wobSize||0.1;
@@ -1736,7 +1737,7 @@
     L.speed_mm_s = Math.max(1, n("cs_speed",100)); L.num_passes = Math.max(1,n("cs_passes",1)); L.power_max = n("cs_power",0); L.power_min = n("cs_pmin",0);
     L.air_assist = csC("cs_air"); L.freq = n("cs_freq",30); L.qpulse = n("cs_qpulse",200);
     L.interval = n("cs_interval",0.1); L.angle = n("cs_angle",0); L.angleInc = n("cs_angleinc",0);
-    L.autoRotate = csC("cs_autorotate"); L.ramp = n("cs_ramp",0); L.dotAdjust = csC("cs_dotadj"); L.crosshatch = csC("cs_crosshatch"); L.fillOverscan = n("cs_overscan",0);
+    L.autoRotate = csC("cs_autorotate"); L.ramp = n("cs_ramp",0); L.dotAdjust = csC("cs_dotadj"); L.crosshatch = csC("cs_crosshatch"); L.fillOverscan = n("cs_overscan",0); L.bidir = csC("cs_bidir");
     L.kerf = n("cs_kerf",0); L.perf = csC("cs_perf"); L.perfCut = n("cs_perfcut",0.1); L.perfSkip = n("cs_perfskip",0.1);
     L.overcut = n("cs_overcut",0); L.leadIn = n("cs_leadin",0); L.leadOut = n("cs_leadout",0);
     L.wobble = csC("cs_wobble"); L.wobStep = n("cs_wobstep",0.05); L.wobSize = n("cs_wobsize",0.1);
@@ -2310,7 +2311,7 @@
         index:L.index, name:L.name, speed_mm_s:L.speed_mm_s, power_min:L.power_min, power_max:L.power_max,
         num_passes:L.num_passes, air_assist:L.air_assist,
         galvo: { mode:L.mode, frequency_khz:L.freq, q_pulse_width_ns:L.qpulse, global_passes:1,
-          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:L.angleInc||0, auto_rotate:!!L.autoRotate, dot_width_adjust:!!L.dotAdjust, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:!!L.rampOuter, cross_hatch:!!L.crosshatch, overscan_mm:L.fillOverscan||0 },
+          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:L.angleInc||0, auto_rotate:!!L.autoRotate, dot_width_adjust:!!L.dotAdjust, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:!!L.rampOuter, cross_hatch:!!L.crosshatch, overscan_mm:L.fillOverscan||0, bidirectional:L.bidir!==false },
           line:{ kerf_offset_mm:L.kerf||0, perforation:!!L.perf, perforation_cut_mm:L.perfCut||0.1, perforation_skip_mm:L.perfSkip||0.1, overcut_mm:L.overcut||0, lead_in_mm:L.leadIn||0, lead_out_mm:L.leadOut||0 },
           tabs:{ enabled:!!L.tabs, automatic:true, size_mm:L.tabSize||0.5, spacing_mm:L.tabSpacing||50, tabs_per_shape:L.tabsPerShape||1, skip_inner_shapes:!!L.tabSkipInner, cut_power_pct:L.tabPower||0 },
           wobble:{ enabled:!!L.wobble, step_mm:L.wobStep||0.05, size_mm:L.wobSize||0.1 },
@@ -3725,8 +3726,8 @@
   Object.assign(I18N.fr, { "lbrn.bad":"Ce fichier n'est pas un XML LightBurn valide.","lbrn.none":"Aucune forme importable trouvée dans le fichier LightBurn." });
   Object.assign(I18N["pt-BR"], { "lbrn.bad":"O arquivo não é um XML válido do LightBurn.","lbrn.none":"Nenhuma forma importável encontrada no arquivo do LightBurn." });
   Object.assign(I18N.es, { "cs.dpi":"Líneas por pulgada","action.reverse":"Invertir dirección del trazado" }); Object.assign(I18N.de, { "cs.dpi":"Linien pro Zoll","action.reverse":"Pfadrichtung umkehren" }); Object.assign(I18N.fr, { "cs.dpi":"Lignes par pouce","action.reverse":"Inverser le sens du tracé" }); Object.assign(I18N["pt-BR"], { "cs.dpi":"Linhas por polegada","action.reverse":"Inverter direção do traçado" });
-  Object.assign(I18N.es, { "cs.crosshatch":"Entramado cruzado","cs.overscan":"Sobrebarrido mm" }); Object.assign(I18N.de, { "cs.crosshatch":"Kreuzschraffur","cs.overscan":"Überlauf mm" });
-  Object.assign(I18N.fr, { "cs.crosshatch":"Hachures croisées","cs.overscan":"Surbalayage mm" }); Object.assign(I18N["pt-BR"], { "cs.crosshatch":"Hachura cruzada","cs.overscan":"Varredura extra mm" });
+  Object.assign(I18N.es, { "cs.crosshatch":"Entramado cruzado","cs.overscan":"Sobrebarrido mm","cs.bidir":"Bidireccional" }); Object.assign(I18N.de, { "cs.crosshatch":"Kreuzschraffur","cs.overscan":"Überlauf mm","cs.bidir":"Bidirektional" });
+  Object.assign(I18N.fr, { "cs.crosshatch":"Hachures croisées","cs.overscan":"Surbalayage mm","cs.bidir":"Bidirectionnel" }); Object.assign(I18N["pt-BR"], { "cs.crosshatch":"Hachura cruzada","cs.overscan":"Varredura extra mm","cs.bidir":"Bidirecional" });
   Object.assign(I18N.es, { "gd.ioports":"Puertos IO","gd.addport":"+ Añadir puerto","gd.noports":"Ningún puerto asignado. Añada uno.","gd.removeport":"Quitar" });
   Object.assign(I18N.de, { "gd.ioports":"IO-Ports","gd.addport":"+ Port hinzufügen","gd.noports":"Keine Ports zugeordnet. Fügen Sie einen hinzu.","gd.removeport":"Entfernen" });
   Object.assign(I18N.fr, { "gd.ioports":"Ports IO","gd.addport":"+ Ajouter un port","gd.noports":"Aucun port mappé. Ajoutez-en un.","gd.removeport":"Retirer" });

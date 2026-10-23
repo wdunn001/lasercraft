@@ -164,6 +164,7 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
                 g.fill.line_interval_mm,
                 g.fill.hatch_angle_deg,
                 g.fill.cross_hatch,
+                g.fill.bidirectional,
             ),
             _ => {
                 // Line mode: compose the outline with lead-in, perforation,
@@ -690,6 +691,7 @@ pub fn plan_galvo_project(
                 galvo.fill.line_interval_mm,
                 galvo.fill.hatch_angle_deg,
                 galvo.fill.cross_hatch,
+                galvo.fill.bidirectional,
             );
             commands.push(GalvoCommand::SetPower {
                 percent: setting.power_max.clamp(0.0, 100.0),
