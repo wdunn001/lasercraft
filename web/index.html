@@ -3554,11 +3554,83 @@
   // Import a bitmap, Floyd-Steinberg dither it, and lay each dark run as a short
   // engraving segment on the active layer. The engine then engraves the runs.
   let imgMode = "dither";
+  // Baseline TIFF decoder (browsers do not decode TIFF): II/MM byte order,
+  // uncompressed, PackBits, and LZW, grayscale and RGB at 8 bits per sample.
+  // Returns { width, height, rgba }. Verified pixel-exact against Pillow.
+  function decodeTiff(bytes){
+    const le = bytes[0] === 0x49 && bytes[1] === 0x49;
+    const u16 = (o) => le ? (bytes[o] | (bytes[o+1]<<8)) : ((bytes[o]<<8) | bytes[o+1]);
+    const u32 = (o) => le ? ((bytes[o] | (bytes[o+1]<<8) | (bytes[o+2]<<16) | (bytes[o+3]<<24)) >>> 0) : (((bytes[o]<<24) | (bytes[o+1]<<16) | (bytes[o+2]<<8) | bytes[o+3]) >>> 0);
+    if (u16(2) !== 42) throw new Error("not a TIFF");
+    const ifd = u32(4), nTags = u16(ifd), tags = {}, typeSize = { 1:1, 2:1, 3:2, 4:4, 5:8 };
+    for (let i = 0; i < nTags; i++){
+      const e = ifd + 2 + i*12, tag = u16(e), type = u16(e+2), count = u32(e+4), sz = (typeSize[type]||1) * count;
+      let valOff = e + 8; if (sz > 4) valOff = u32(e+8);
+      const read = (k) => { const o = valOff + k*(typeSize[type]||1); return type===3 ? u16(o) : type===4 ? u32(o) : bytes[o]; };
+      const vals = []; for (let k = 0; k < count; k++) vals.push(read(k));
+      tags[tag] = count === 1 ? vals[0] : vals;
+    }
+    const width = tags[256], height = tags[257];
+    const bps = tags[258] || 8, comp = tags[259] || 1, photo = tags[262], spp = tags[277] || (photo === 2 ? 3 : 1);
+    let offs = tags[273], counts = tags[279];
+    if (!Array.isArray(offs)) offs = [offs]; if (!Array.isArray(counts)) counts = [counts];
+    const bps0 = Array.isArray(bps) ? bps[0] : bps; if (bps0 !== 8) throw new Error("only 8-bit TIFF supported");
+    const raw = new Uint8Array(width * height * spp); let rp = 0;
+    const packbits = (d) => { const o = []; let i = 0; while (i < d.length){ let n = d[i++]; if (n >= 128) n -= 256; if (n >= 0){ for (let k = 0; k <= n; k++) o.push(d[i++]); } else if (n !== -128){ const v = d[i++]; for (let k = 0; k < 1-n; k++) o.push(v); } } return o; };
+    const lzw = (d) => {
+      const out = []; let dict = [], bits = 9, data = 0, nbits = 0, prev = null;
+      const clear = () => { dict = []; for (let i = 0; i < 256; i++) dict.push([i]); dict.push(null); dict.push(null); bits = 9; };
+      clear();
+      for (let i = 0; i < d.length; i++){
+        data = (data << 8) | d[i]; nbits += 8;
+        while (nbits >= bits){
+          const code = (data >> (nbits - bits)) & ((1 << bits) - 1); nbits -= bits;
+          if (code === 256){ clear(); prev = null; continue; }
+          if (code === 257) return out;
+          let entry;
+          if (code < dict.length && dict[code]) entry = dict[code]; else if (prev) entry = prev.concat(prev[0]); else entry = [code];
+          for (const b of entry) out.push(b);
+          if (prev) dict.push(prev.concat(entry[0]));
+          prev = entry;
+          if (dict.length + 1 >= (1 << bits) && bits < 12) bits++;
+        }
+      }
+      return out;
+    };
+    for (let s = 0; s < offs.length; s++){
+      const strip = bytes.subarray(offs[s], offs[s] + counts[s]);
+      let dec;
+      if (comp === 1) dec = strip; else if (comp === 32773) dec = packbits(Array.from(strip)); else if (comp === 5) dec = lzw(Array.from(strip)); else throw new Error("unsupported TIFF compression " + comp);
+      for (let k = 0; k < dec.length && rp < raw.length; k++) raw[rp++] = dec[k];
+    }
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < width*height; i++){
+      let r, g, b;
+      if (spp >= 3){ r = raw[i*spp]; g = raw[i*spp+1]; b = raw[i*spp+2]; }
+      else { r = g = b = raw[i]; if (photo === 0) r = g = b = 255 - r; }
+      rgba[i*4]=r; rgba[i*4+1]=g; rgba[i*4+2]=b; rgba[i*4+3]=255;
+    }
+    return { width, height, rgba };
+  }
+  function dispatchImage(img, mode){ try { if (mode==="trace") traceImage(img); else if (mode==="depth") depthImage(img); else ditherImage(img); } catch(e){ console.error(e); } }
   $("imgFile").onchange = ev => {
     const f = ev.target.files[0]; if (!f) return;
     const mode = imgMode;
+    // Browsers cannot decode TIFF natively, so decode it ourselves to a canvas first.
+    if (/\.tiff?$/i.test(f.name)){
+      const rd = new FileReader();
+      rd.onload = () => {
+        try {
+          const t = decodeTiff(new Uint8Array(rd.result));
+          const cv = document.createElement("canvas"); cv.width = t.width; cv.height = t.height;
+          cv.getContext("2d").putImageData(new ImageData(t.rgba, t.width, t.height), 0, 0);
+          const img = new Image(); img.onload = () => dispatchImage(img, mode); img.src = cv.toDataURL();
+        } catch(e){ console.error(e); alert(tr("tiff.bad","That TIFF could not be decoded (only baseline 8-bit is supported).")); }
+      };
+      rd.readAsArrayBuffer(f); return;
+    }
     const img = new Image();
-    img.onload = () => { try { if (mode==="trace") traceImage(img); else if (mode==="depth") depthImage(img); else ditherImage(img); } catch(e){ console.error(e); } URL.revokeObjectURL(img.src); };
+    img.onload = () => { dispatchImage(img, mode); URL.revokeObjectURL(img.src); };
     img.src = URL.createObjectURL(f);
   };
   // Trace a bitmap into closed vector contours and lay them on the active layer,
@@ -3673,7 +3745,7 @@
   const FORMATS = [
     { id:"svg",      ext:[".svg"],                                        label:"SVG",                   io:"both",   role:"vector",   input:"file" },
     { id:"dxf",      ext:[".dxf"],                                        label:"DXF",                   io:"both",   role:"vector",   input:"file" },
-    { id:"image",    ext:[".png",".jpg",".jpeg",".gif",".bmp",".webp"],   label:"Image",                 io:"import", role:"image",    input:"imgFile" },
+    { id:"image",    ext:[".png",".jpg",".jpeg",".gif",".bmp",".webp",".tif",".tiff"], label:"Image",           io:"import", role:"image",    input:"imgFile" },
     { id:"project",  ext:[".lcproj",".json"],                             label:"LaserCraft project",    io:"both",   role:"project",  input:"projFile" },
     { id:"gcode",    ext:[".gcode",".nc",".ngc"],                         label:"G-code",                io:"export", role:"gcode" },
     { id:"material", ext:[".json",".lbset",".lbsettings",".clb",".xml",".csv"], label:"Material library", io:"import", role:"material", input:"matFile" },
@@ -4241,6 +4313,10 @@
   Object.assign(I18N.de, { "hpgl.none":"Keine Pfade in dieser HPGL-Datei gefunden.","gci.none":"Keine Schnittbewegungen in diesem G-Code gefunden.","pdf.none":"Keine Vektorpfade in dieser PDF gefunden.","rd.none":"Keine Schnittbewegungen in dieser Ruida-Datei gefunden." });
   Object.assign(I18N.fr, { "hpgl.none":"Aucun tracé trouvé dans ce fichier HPGL.","gci.none":"Aucun mouvement de coupe trouvé dans ce G-code.","pdf.none":"Aucun tracé vectoriel trouvé dans ce PDF.","rd.none":"Aucun mouvement de coupe trouvé dans ce fichier Ruida." });
   Object.assign(I18N["pt-BR"], { "hpgl.none":"Nenhum traço encontrado nesse arquivo HPGL.","gci.none":"Nenhum movimento de corte encontrado nesse G-code.","pdf.none":"Nenhum traço vetorial encontrado nesse PDF.","rd.none":"Nenhum movimento de corte encontrado nesse arquivo Ruida." });
+  Object.assign(I18N.es, { "tiff.bad":"No se pudo decodificar ese TIFF (solo se admite TIFF base de 8 bits)." });
+  Object.assign(I18N.de, { "tiff.bad":"Diese TIFF konnte nicht decodiert werden (nur 8-Bit-Basis-TIFF)." });
+  Object.assign(I18N.fr, { "tiff.bad":"Ce TIFF n'a pas pu être décodé (seul le TIFF 8 bits de base est pris en charge)." });
+  Object.assign(I18N["pt-BR"], { "tiff.bad":"Não foi possível decodificar esse TIFF (apenas TIFF base de 8 bits)." });
   Object.assign(I18N.es, { "dm.module":"Tamaño de módulo mm","dm.toolong":"Ese texto es demasiado largo para este codificador Data Matrix." });
   Object.assign(I18N.de, { "dm.module":"Modulgröße mm","dm.toolong":"Dieser Text ist für diesen Data-Matrix-Encoder zu lang." });
   Object.assign(I18N.fr, { "dm.module":"Taille de module mm","dm.toolong":"Ce texte est trop long pour cet encodeur Data Matrix." });
@@ -4392,6 +4468,7 @@
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
     else if (act==="hpgl"){ importHpgl("IN;SP1;PU1000,1000;PD3000,1000,3000,2800,1000,2800,1000,1000;SP2;PU3600,1000;PD5600,1000,4600,3200,3600,1000;"); }
     else if (act==="gcin"){ importGcode("G21 G90\nM4 S0\nG0 X25 Y30\nG1 X70 Y30 S500\nG1 X70 Y70\nG1 X25 Y70\nG1 X25 Y30\nM5\nG0 X85 Y30\nM4 S500\nG1 X120 Y30\nG1 X102 Y72\nG1 X85 Y30\nM5\nG0 X0 Y0\n"); }
+    else if (act==="tiff"){ const b64="SUkqAOAAAACAAAFBQPCgZDwjFAtGQ3HhBIxLKBVLRfMhpNxzAUHhkRi0bkEllUvmk5n1DpFNqVXrlhs1ruF1wOCweEwuGw+IxOKxdzPCNx2PyGRyWTymVy2Xut6wSDQiFQyHRCJRSLRh4PqOR6QSKSSaUSqWS6YPV/zOnTaozmqTyrgSgVuh16jWGk2QE02a1CcVOd1Z9AQHVqhV2i2CkWN/gkJzSnzepTqqz2/g4MUGuUSv0exUrEhMO2e9Y+137ABgRXDCZm6YjFB0T3nHWq+5LSiIWYPMXPD5zWicYwEJAAABAwABAAAAGAAAAAEBAwABAAAAEAAAAAIBAwABAAAACAAAAAMBAwABAAAABQAAAAYBAwABAAAAAQAAABEBBAABAAAACAAAABYBAwABAAAAEAAAABcBBAABAAAA2AAAABwBAwABAAAAAQAAAAAAAAA="; const bin=atob(b64); const by=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i); const t=decodeTiff(by); console.log("TIFF", t.width, t.height); const cv=document.createElement("canvas"); cv.width=t.width; cv.height=t.height; cv.getContext("2d").putImageData(new ImageData(t.rgba,t.width,t.height),0,0); const im=new Image(); im.onload=()=>ditherImage(im); im.src=cv.toDataURL(); }
     else if (act==="rd"){ const b64="xAmJQouJiYmJu9A5iYmJidmCiYkJlamJiQmVqaKJiY15iYmJCZWpoomJC4/ZiYmNq/miiYkJlamJiQmVqQLHmceZIpWpiYkklalg"; const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i); importRd(bytes); }
     else if (act==="pdf"){ const b64="JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAzMDAgMzAwXS9Db250ZW50cyA0IDAgUj4+CmVuZG9iago0IDAgb2JqCjw8L0xlbmd0aCA2My9GaWx0ZXIvRmxhdGVEZWNvZGU+PgpzdHJlYW0KeJwzNFAwBCEDBQsDhaJUhWAuQ1OwUK6CEYSRo2BkYKBgCWJkKARzGRkogFTkKhgZQFQg0SCJZIVgLgDLGhB1CmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDUKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTQgMDAwMDAgbiAKMDAwMDAwMDEwNSAwMDAwMCBuIAowMDAwMDAwMTg1IDAwMDAwIG4gCnRyYWlsZXI8PC9TaXplIDUvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgozMTUKJSVFT0Y="; const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i); importPdf(bytes.buffer); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }

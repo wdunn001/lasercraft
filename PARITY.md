@@ -2,9 +2,13 @@
 
 This tracks LaserCraft against LightBurn's documented features and controls, drawn
 from the official reference at docs.lightburnsoftware.com. Status is one of Done,
-Partial, or Gap. The goal is 1:1 coverage of the documented controls. The long tail
-(barcodes, LiDAR, nesting, dual-laser, taper warp) is listed so nothing is lost, not
-because every item ships at once.
+Partial, or Gap. The goal is 1:1 coverage of the documented controls.
+
+LightBurn's documented import formats (per the official File Management reference)
+are: .ai, .svg, .dxf, .pdf, .plt/.hpgl, .lbrn/.lbrn2, GCode, and images
+(.png/.jpg/.bmp/.gif/.tif). LightBurn does not import Snapmaker .sc or Ruida .rd,
+and has no LiDAR feature; those were removed from this list as not-real gaps.
+Ruida .rd import and HPGL are implemented here as extras beyond LightBurn.
 
 ## Most-prominent 25 (baseline a reimplementation is judged on)
 
@@ -46,7 +50,7 @@ because every item ships at once.
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs/bridges, perforation, lead-in/out, overcut, kerf offset (all applied in the G-code path) Done; sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
 - Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI), overscan, bidirectional/unidirectional scanning, flood fill, dot mode (grid of dwell pulses, beam off between) Done. The full fill-control set is covered.
-- Image/art: trace + dither import, dither-mode picker, adjust image (brightness/contrast/gamma), 3D depth map Done; mask, convert-to-bitmap: Gap.
+- Image/art: trace + dither import, every documented image format including TIFF (.tif/.tiff decoded in-app, since browsers cannot), dither-mode picker, adjust image (brightness/contrast/gamma), 3D depth map Done; mask, convert-to-bitmap: Gap.
 - Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position, GRBL console Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); macros, file list, bridge: Gap.
 - Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
 
