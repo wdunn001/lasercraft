@@ -473,6 +473,81 @@ pub fn lead_out_segment(points: &[Point], closed: bool, len_mm: f64) -> Option<S
     })
 }
 
+/// Punch evenly spaced uncut gaps into a traced outline (LightBurn "Tabs /
+/// Bridges"), leaving small bridges that hold the part in the sheet.
+///
+/// `count` gaps of `size_mm` are centred at equal arc-length intervals around
+/// the whole outline. A non-positive count or size, an empty outline, or an
+/// outline too short to hold the tabs with cut between them returns the segments
+/// unchanged.
+pub fn apply_tabs(segments: &[Segment], count: u32, size_mm: f64) -> Vec<Segment> {
+    if count == 0 || size_mm <= 0.0 || segments.is_empty() {
+        return segments.to_vec();
+    }
+    let total: f64 = segments
+        .iter()
+        .map(|s| (s.end.x - s.start.x).hypot(s.end.y - s.start.y))
+        .sum();
+    // Refuse to tab an outline the tabs would nearly consume.
+    if total <= size_mm * f64::from(count) * 1.5 {
+        return segments.to_vec();
+    }
+    let spacing = total / f64::from(count);
+    let half = size_mm / 2.0;
+    let gaps: Vec<(f64, f64)> = (0..count)
+        .map(|i| {
+            let c = (f64::from(i) + 0.5) * spacing;
+            (c - half, c + half)
+        })
+        .collect();
+    // Subtract every gap interval from [a, b], in arc length.
+    let keep = |a: f64, b: f64| -> Vec<(f64, f64)> {
+        let mut spans = vec![(a, b)];
+        for &(gl, gh) in &gaps {
+            let mut next = Vec::new();
+            for (x, y) in spans {
+                if gh <= x || gl >= y {
+                    next.push((x, y));
+                } else {
+                    if x < gl {
+                        next.push((x, gl.min(y)));
+                    }
+                    if gh < y {
+                        next.push((gh.max(x), y));
+                    }
+                }
+            }
+            spans = next;
+        }
+        spans
+    };
+    let mut out = Vec::new();
+    let mut acc = 0.0;
+    for s in segments {
+        let (dx, dy) = (s.end.x - s.start.x, s.end.y - s.start.y);
+        let len = dx.hypot(dy);
+        if len <= f64::EPSILON {
+            continue;
+        }
+        let (ux, uy) = (dx / len, dy / len);
+        for (a, b) in keep(acc, acc + len) {
+            let (la, lb) = (a - acc, b - acc);
+            out.push(Segment {
+                start: Point {
+                    x: s.start.x + ux * la,
+                    y: s.start.y + uy * la,
+                },
+                end: Point {
+                    x: s.start.x + ux * lb,
+                    y: s.start.y + uy * lb,
+                },
+            });
+        }
+        acc += len;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -724,5 +799,44 @@ mod tests {
         assert!((lo.start.x - 10.0).abs() < 1e-9);
         assert!((lo.end.x - 12.0).abs() < 1e-9 && lo.end.y.abs() < 1e-9);
         assert!(lead_in_segment(&line, 0.0).is_none());
+    }
+
+    #[test]
+    fn tabs_remove_their_length_from_the_outline() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 40.0, y: 0.0 },
+            Point { x: 40.0, y: 40.0 },
+            Point { x: 0.0, y: 40.0 },
+        ];
+        let outline = follow_polyline(&square, true);
+        let solid: f64 = outline
+            .iter()
+            .map(|s| (s.end.x - s.start.x).hypot(s.end.y - s.start.y))
+            .sum();
+        let tabbed = apply_tabs(&outline, 4, 2.0);
+        let cut: f64 = tabbed
+            .iter()
+            .map(|s| (s.end.x - s.start.x).hypot(s.end.y - s.start.y))
+            .sum();
+        // Four tabs of 2 mm remove 8 mm from the 160 mm perimeter.
+        assert!((solid - cut - 8.0).abs() < 1e-6, "cut {cut} solid {solid}");
+        // The cut is now broken into more pieces than the four original edges.
+        assert!(tabbed.len() > outline.len(), "pieces {}", tabbed.len());
+    }
+
+    #[test]
+    fn tabs_pass_through_when_disabled_or_too_big() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        let outline = follow_polyline(&square, true);
+        assert_eq!(apply_tabs(&outline, 0, 2.0).len(), outline.len());
+        assert_eq!(apply_tabs(&outline, 4, 0.0).len(), outline.len());
+        // A 20 mm tab on a 40 mm perimeter would consume it: left unchanged.
+        assert_eq!(apply_tabs(&outline, 4, 20.0).len(), outline.len());
     }
 }

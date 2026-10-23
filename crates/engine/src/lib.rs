@@ -20,8 +20,8 @@ use lasercraft_laser_doc::{CutSetting, FillMode, Geometry, Point2, Project, Shap
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
 use lasercraft_toolpath::{
-    BBox, Point, follow_polyline, hatch_fill_angled, lead_in_segment, lead_out_segment, line_fill,
-    overcut_segments, perforate_path, wobble_path,
+    BBox, Point, apply_tabs, follow_polyline, hatch_fill_angled, lead_in_segment, lead_out_segment,
+    line_fill, overcut_segments, perforate_path, wobble_path,
 };
 
 /// Errors the engine can return while executing a command.
@@ -178,20 +178,26 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
                 } else {
                     vec![path.clone()]
                 };
+                let tabs = setting.galvo.as_ref().map(|g| &g.tabs);
                 let mut segs = Vec::new();
                 for contour in &contours {
                     if let Some(li) = line.and_then(|l| lead_in_segment(contour, l.lead_in_mm)) {
                         segs.push(li);
                     }
-                    match line {
-                        Some(l) if l.perforation => segs.extend(perforate_path(
+                    let mut outline = match line {
+                        Some(l) if l.perforation => perforate_path(
                             contour,
                             closed,
                             l.perforation_cut_mm,
                             l.perforation_skip_mm,
-                        )),
-                        _ => segs.extend(follow_polyline(contour, closed)),
+                        ),
+                        _ => follow_polyline(contour, closed),
+                    };
+                    // Tabs leave small uncut bridges that hold the part in the sheet.
+                    if let Some(t) = tabs.filter(|t| closed && t.enabled && t.tabs_per_shape > 0) {
+                        outline = apply_tabs(&outline, t.tabs_per_shape, t.size_mm);
                     }
+                    segs.extend(outline);
                     if let Some(l) = line {
                         segs.extend(overcut_segments(contour, closed, l.overcut_mm));
                     }
