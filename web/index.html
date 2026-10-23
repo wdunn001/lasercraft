@@ -643,7 +643,9 @@
   let FONT_BYTES = null;
   fetch("text-sans.ttf").then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b){ FONT_BYTES = new Uint8Array(b); if (typeof render === "function") render(); } }).catch(() => {});
 
-  const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
+  const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39",
+                   "#d22","#1a5","#06c","#da0","#92e","#088","#c50","#5a0","#a33","#36a","#6a0","#a07",
+                   "#f55","#3c8","#5af","#fd4","#c7f"];
   // A layer draws in its own stored color when it has one, else the palette slot
   // for its index. Shapes paint in the color of the layer whose index they carry.
   function layerColor(L){ return (L && L.color) || PALETTE[((L ? L.index : 0) % PALETTE.length + PALETTE.length) % PALETTE.length]; }
@@ -1053,7 +1055,7 @@
     let newShapes=[];
     if (closed){
       // Open the loop, dropping the clicked piece: start after the cut, wrap to before it.
-      const seq=[]; seq.push(Phi); for (let k=1;k<n;k++) seq.push(pts[(i+k)%n]); if (lo>0) seq.push(Plo);
+      const seq=[]; seq.push(Phi); for (let k=1;k<=n;k++) seq.push(pts[(i+k)%n]); if (lo>0) seq.push(Plo);
       newShapes=[seq];
     } else {
       const left=[]; for (let k=0;k<=i;k++) left.push(pts[k]); if (lo>0) left.push(Plo); if (left.length>=2) newShapes.push(left);
@@ -1642,9 +1644,10 @@
   }
   function csApply(){
     const L = doc.layers[csLayer]; if (!L) return;
-    const n=(id,d)=>{ const v=+csV(id); return Number.isFinite(v)?v:d; };
+    // An empty field keeps the default, so clearing a box cannot store 0.
+    const n=(id,d)=>{ const s=String(csV(id)).trim(); if (s==="") return d; const v=+s; return Number.isFinite(v)?v:d; };
     L.name = csV("cs_name").trim() || L.name; L.output = csC("cs_output"); L.mode = csV("cs_mode");
-    L.speed_mm_s = n("cs_speed",100); L.num_passes = Math.max(1,n("cs_passes",1)); L.power_max = n("cs_power",0); L.power_min = n("cs_pmin",0);
+    L.speed_mm_s = Math.max(1, n("cs_speed",100)); L.num_passes = Math.max(1,n("cs_passes",1)); L.power_max = n("cs_power",0); L.power_min = n("cs_pmin",0);
     L.air_assist = csC("cs_air"); L.freq = n("cs_freq",30); L.qpulse = n("cs_qpulse",200);
     L.interval = n("cs_interval",0.1); L.angle = n("cs_angle",0); L.angleInc = n("cs_angleinc",0);
     L.autoRotate = csC("cs_autorotate"); L.ramp = n("cs_ramp",0); L.dotAdjust = csC("cs_dotadj");
@@ -3188,6 +3191,7 @@
     else if (act==="fillet"){ doc.shapes=[rect(40,30,70,50,0)]; sel=new Set([0]); selected=0; const g=doc.shapes[0].geometry.Polyline; g.points=cornerMod(g.points,true,12,true,8).map(q=>p(q.x,q.y)); render(); refreshCounts(); }
     else if (act==="shapes"){ doc.shapes=[roundedRect(20,70,50,35,8,0), regPolygon(110,88,22,22,6,0), slotShape(20,25,70,20,1)]; selectOnly(null); render(); refreshCounts(); }
     else if (act==="trim"){ doc.shapes=[rect(50,45,60,40,0), { kind:"Path", cut_index:1, geometry:{ Polyline:{ points:[p(20,65),p(140,65)], closed:false } } }]; render(); trimAt({x:80,y:65}); }
+    else if (act==="trim2"){ doc.shapes=[rect(40,45,60,40,0), { kind:"Path", cut_index:1, geometry:{ Polyline:{ points:[p(60,30),p(60,55)], closed:false } } }]; render(); trimAt({x:50,y:45}); }
     else if (act==="galvoports"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); const pb=document.querySelector('.gdtabs button[data-gd="ports"]'); if(pb) pb.click(); addIoPort(); addIoPort(); gdIoPorts[0].purpose="reddot"; gdIoPorts[1].purpose="marking"; renderIoTable(); }
     else if (act==="star"){ doc.shapes.push(star(75,55,40,40,5,0)); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="cs"){ openCutSettings(2); }
