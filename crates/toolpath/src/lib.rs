@@ -186,6 +186,60 @@ pub fn dot_fill(bbox: &BBox, interval_mm: f64) -> Vec<Point> {
     dots
 }
 
+/// True when `(px, py)` lies inside the closed `polygon`, by the even-odd rule.
+fn point_in_polygon(polygon: &[Point], px: f64, py: f64) -> bool {
+    let n = polygon.len();
+    if n < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let mut j = n - 1;
+    for i in 0..n {
+        let (a, b) = (polygon[i], polygon[j]);
+        if (a.y > py) != (b.y > py) {
+            let x = (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x;
+            if px < x {
+                inside = !inside;
+            }
+        }
+        j = i;
+    }
+    inside
+}
+
+/// Grid of dot positions that fall inside a closed polygon (LightBurn "Dot Mode"
+/// fill). Each dot is a point the caller pulses the laser at. A non-positive
+/// interval or a degenerate polygon yields nothing.
+pub fn dot_fill_polygon(polygon: &[Point], interval_mm: f64) -> Vec<Point> {
+    if polygon.len() < 3 || interval_mm <= 0.0 {
+        return Vec::new();
+    }
+    let (min_x, min_y, max_x, max_y) = polygon.iter().fold(
+        (
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ),
+        |(lx, ly, hx, hy), p| (lx.min(p.x), ly.min(p.y), hx.max(p.x), hy.max(p.y)),
+    );
+    let mut dots = Vec::new();
+    let max_dots = 4_000_000usize;
+    // Centre the grid so the first row/column sits half an interval inside.
+    let mut y = min_y + interval_mm / 2.0;
+    while y <= max_y && dots.len() < max_dots {
+        let mut x = min_x + interval_mm / 2.0;
+        while x <= max_x && dots.len() < max_dots {
+            if point_in_polygon(polygon, x, y) {
+                dots.push(Point { x, y });
+            }
+            x += interval_mm;
+        }
+        y += interval_mm;
+    }
+    dots
+}
+
 /// Generate contour-parallel offset passes inward from `bbox`.
 ///
 /// This is LightBurn's offset fill for a rectangular region. Each ring insets by
@@ -697,6 +751,37 @@ mod tests {
     #[test]
     fn dot_fill_rejects_a_non_positive_interval() {
         assert!(dot_fill(&unit_box(), 0.0).is_empty());
+    }
+
+    #[test]
+    fn dot_fill_polygon_keeps_dots_inside() {
+        let square = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 10.0, y: 10.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        // Grid centred at 0.5 steps of 1 mm gives ten per axis, a hundred dots.
+        let dots = dot_fill_polygon(&square, 1.0);
+        assert_eq!(dots.len(), 100);
+        for d in &dots {
+            assert!(
+                d.x > 0.0 && d.x < 10.0 && d.y > 0.0 && d.y < 10.0,
+                "out of bounds"
+            );
+        }
+        // A triangle holds fewer dots than its bounding box would.
+        let tri = [
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 10.0, y: 0.0 },
+            Point { x: 0.0, y: 10.0 },
+        ];
+        let td = dot_fill_polygon(&tri, 1.0);
+        assert!(
+            td.len() < 100 && !td.is_empty(),
+            "triangle dots {}",
+            td.len()
+        );
     }
 
     #[test]

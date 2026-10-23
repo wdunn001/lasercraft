@@ -20,8 +20,9 @@ use lasercraft_laser_doc::{CutSetting, FillMode, Geometry, Point2, Project, Shap
 use lasercraft_motion::MotionConfig;
 use lasercraft_raster::{GrayImage, RasterParams, raster_scan};
 use lasercraft_toolpath::{
-    BBox, Point, apply_tabs, follow_polyline, hatch_fill_angled, hatch_fill_multi, lead_in_segment,
-    lead_out_segment, line_fill, overcut_segments, perforate_path, wobble_path,
+    BBox, Point, apply_tabs, dot_fill_polygon, follow_polyline, hatch_fill_angled,
+    hatch_fill_multi, lead_in_segment, lead_out_segment, line_fill, overcut_segments,
+    perforate_path, wobble_path,
 };
 
 /// Errors the engine can return while executing a command.
@@ -141,6 +142,8 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
     // Flood-fill shapes are gathered by layer and hatched together after the loop.
     let mut flood: std::collections::BTreeMap<u32, Vec<Vec<Point>>> =
         std::collections::BTreeMap::new();
+    // Dot-mode fills produce pulses, not segments, so collect them for the end.
+    let mut dot_jobs: Vec<(Vec<Point>, f64, f64)> = Vec::new();
     for shape in &project.shapes {
         let (points, closed) = match &shape.geometry {
             Geometry::Polyline { points, closed } => (points.clone(), *closed),
@@ -157,6 +160,20 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         );
         if closed && flood_on {
             flood.entry(shape.cut_index).or_default().push(path);
+            continue;
+        }
+        // Dot mode pulses a grid of dots inside a closed fill instead of scanning.
+        let dot_on = matches!(
+            setting.galvo.as_ref(),
+            Some(g) if g.mode == FillMode::Fill && g.fill.dot_mode
+        );
+        if closed && dot_on {
+            if let Some(g) = setting.galvo.as_ref() {
+                let dots = dot_fill_polygon(&path, g.fill.line_interval_mm);
+                if !dots.is_empty() {
+                    dot_jobs.push((dots, setting.power_max, g.fill.dot_time_ms / 1000.0));
+                }
+            }
             continue;
         }
         let is_fill =
@@ -352,6 +369,17 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
                     cur = Some(segment.end);
                 }
             }
+        }
+    }
+    // Dot-mode fills: one pulse per grid dot, beam off between dots.
+    for (dots, power, dwell_s) in dot_jobs {
+        for d in dots {
+            ops.push(Op::DotMark {
+                x: d.x,
+                y: d.y,
+                power,
+                dwell_s,
+            });
         }
     }
     program(dialect, &ops)

@@ -234,6 +234,18 @@ pub struct FillParams {
     /// shapes at once. LightBurn "flood fill" / "fill all shapes at once".
     #[serde(default)]
     pub flood_fill: bool,
+    /// Pulse the laser at a grid of dots instead of scanning lines. LightBurn
+    /// "Dot Mode". The grid spacing is the line interval.
+    #[serde(default)]
+    pub dot_mode: bool,
+    /// Dwell at each dot in milliseconds when dot mode is on.
+    #[serde(default = "default_dot_time")]
+    pub dot_time_ms: f64,
+}
+
+/// Serde default for the dot dwell time, a short pulse.
+fn default_dot_time() -> f64 {
+    1.0
 }
 
 /// Serde default for a flag that should load as `true` on older projects.
@@ -256,6 +268,8 @@ impl Default for FillParams {
             overscan_mm: 0.0,
             bidirectional: true,
             flood_fill: false,
+            dot_mode: false,
+            dot_time_ms: 1.0,
         }
     }
 }

@@ -57,6 +57,18 @@ pub enum Op {
     },
     /// Turn the laser off.
     LaserOff,
+    /// Mark a single dot: rapid to the point with the beam off, pulse the laser at
+    /// constant power for a dwell, then turn it off. Used by dot-mode fill.
+    DotMark {
+        /// Target X in millimetres.
+        x: f64,
+        /// Target Y in millimetres.
+        y: f64,
+        /// Laser power as a percentage from 0.0 to 100.0.
+        power: f64,
+        /// Dwell time in seconds.
+        dwell_s: f64,
+    },
 }
 
 /// A controller dialect. One implementation per GCode family.
@@ -217,6 +229,23 @@ impl Dialect for GCodeDialect {
                 )
             }
             Op::LaserOff => "M5".to_string(),
+            Op::DotMark {
+                x,
+                y,
+                power,
+                dwell_s,
+            } => {
+                // Rapid in beam-off, fire at constant power, dwell, then off. The
+                // dwell word is seconds on GRBL and LinuxCNC, milliseconds elsewhere.
+                let dwell = match self.flavor {
+                    Flavor::Grbl | Flavor::LinuxCnc => format!("P{dwell_s:.3}"),
+                    _ => format!("P{:.0}", dwell_s * 1000.0),
+                };
+                format!(
+                    "G0 X{x:.3} Y{y:.3}\nM3 {}\nG4 {dwell}\nM5",
+                    self.power_word(*power)
+                )
+            }
         }
     }
 }
@@ -247,6 +276,23 @@ mod tests {
         let out = program(&GCodeDialect::grbl(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
         assert!(out.starts_with("G90\nG21\nM4 S0\n"));
         assert!(out.trim_end().ends_with("G0 X0 Y0"));
+    }
+
+    #[test]
+    fn dot_mark_pulses_at_constant_power_with_a_dwell() {
+        let dot = Op::DotMark {
+            x: 3.0,
+            y: 4.0,
+            power: 60.0,
+            dwell_s: 0.002,
+        };
+        // GRBL: rapid in beam-off, M3 at scaled power, dwell in seconds, then off.
+        assert_eq!(
+            GCodeDialect::grbl().emit(&dot),
+            "G0 X3.000 Y4.000\nM3 S600\nG4 P0.002\nM5"
+        );
+        // Marlin expresses the dwell in milliseconds.
+        assert!(GCodeDialect::marlin().emit(&dot).contains("G4 P2"));
     }
 
     #[test]

@@ -45,7 +45,7 @@ because every item ships at once.
 - Text: core + alignment + fonts + variable text (serial, date/time, CSV merge) + text-on-path Done; bending: Gap; bar code Partial (Code 128).
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs/bridges, perforation, lead-in/out, overcut, kerf offset (all applied in the G-code path) Done; sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
-- Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI), overscan, bidirectional/unidirectional scanning, flood fill (fill all shapes at once) Done; dot mode: Gap (needs a dwell Op and a hardware test).
+- Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI), overscan, bidirectional/unidirectional scanning, flood fill, dot mode (grid of dwell pulses, beam off between) Done. The full fill-control set is covered.
 - Image/art: trace + dither import, dither-mode picker, adjust image (brightness/contrast/gamma), 3D depth map Done; mask, convert-to-bitmap: Gap.
 - Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position, GRBL console Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); macros, file list, bridge: Gap.
 - Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
