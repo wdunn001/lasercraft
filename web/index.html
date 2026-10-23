@@ -266,6 +266,7 @@
     </span>
     <span class="tgrp" id="tp-hint"><span class="tplabel" id="toolHint" data-i18n="tool.hint.select">Select and move. Drag a handle to scale or rotate.</span></span>
     <span class="tgrp" id="tp-draw" style="display:none">
+      <span id="tp-sides" style="display:none"><span class="tplabel" id="sidesLbl" data-i18n="tool.sides">Sides</span> <input id="toolSides" type="number" min="3" max="60" value="6" style="width:52px" /></span>
       <label class="tpcheck"><input type="checkbox" id="snapChk"> <span data-i18n="tool.snap">Snap to grid</span></label>
       <input id="gridMM" type="number" min="0.5" step="0.5" value="10" title="grid mm" style="width:62px" />
       <span class="tplabel" data-i18n="tool.gridmm">mm</span>
@@ -848,6 +849,10 @@
     const h = $("toolHint"); if (h) h.textContent = tr("tool.hint." + tool, TOOL_HINT[tool] || TOOL_HINT.select);
     // The grid-snap options belong to the drawing tools.
     const dp = $("tp-draw"); if (dp) dp.style.display = (!showText && DRAW_TOOLS[tool]) ? "flex" : "none";
+    // The sides/points count applies to the regular polygon and the star.
+    const sw = $("tp-sides"); if (sw){ const showN = (tool==="ngon"||tool==="star");
+      sw.style.display = showN ? "inline" : "none";
+      if (showN){ $("sidesLbl").textContent = tr(tool==="star"?"tool.points":"tool.sides", tool==="star"?"Points":"Sides"); $("toolSides").value = tool==="star" ? starPoints : polySides; } }
   }
   const toolsEl = $("tools");
   function setTool(name){
@@ -2368,6 +2373,7 @@
   // Grid-snap tool option.
   $("snapChk") && ($("snapChk").onchange = () => { snapOn = $("snapChk").checked; });
   $("gridMM") && ($("gridMM").onchange = () => { gridMM = +$("gridMM").value || 10; });
+  $("toolSides") && ($("toolSides").onchange = () => { const v = Math.max(3, +$("toolSides").value || 6); if (tool==="star") starPoints = v; else polySides = v; });
 
   $("genBtn").onclick = generate;
   $("frameBtn").onclick = runFrame;
@@ -3099,6 +3105,8 @@
   Object.assign(I18N.de, { "tool.hint.trim":"Auf ein Segment klicken, um es bis zur nächsten Kreuzung zu stutzen.","tool.hint.extend":"In die Nähe eines offenen Endes klicken, um es zur nächsten Form zu verlängern." });
   Object.assign(I18N.fr, { "tool.hint.trim":"Cliquez sur un segment pour le rogner jusqu'au croisement le plus proche.","tool.hint.extend":"Cliquez près d'une extrémité ouverte pour l'étendre à la forme la plus proche." });
   Object.assign(I18N["pt-BR"], { "tool.hint.trim":"Clique em um segmento para apará-lo até o cruzamento mais próximo.","tool.hint.extend":"Clique perto de uma extremidade aberta para estendê-la à forma mais próxima." });
+  Object.assign(I18N.es, { "tool.sides":"Lados","tool.points":"Puntas" }); Object.assign(I18N.de, { "tool.sides":"Seiten","tool.points":"Spitzen" });
+  Object.assign(I18N.fr, { "tool.sides":"Côtés","tool.points":"Pointes" }); Object.assign(I18N["pt-BR"], { "tool.sides":"Lados","tool.points":"Pontas" });
   Object.assign(I18N.de, { "action.fillet":"Ecken abrunden (Verrundung)…","action.chamfer":"Ecken fasen…","mod.filletamt":"Verrundungsradius mm","mod.chamferamt":"Fasenabstand mm" });
   Object.assign(I18N.fr, { "action.fillet":"Arrondir les coins (congé)…","action.chamfer":"Chanfreiner les coins…","mod.filletamt":"Rayon de congé mm","mod.chamferamt":"Distance de chanfrein mm" });
   Object.assign(I18N["pt-BR"], { "action.fillet":"Arredondar cantos (filete)…","action.chamfer":"Chanfrar cantos…","mod.filletamt":"Raio do filete mm","mod.chamferamt":"Distância do chanfro mm" });
