@@ -183,6 +183,28 @@ pub fn offset(polyline_json: &str, delta: f64) -> Result<String, JsError> {
     serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
+/// Read an ASCII DXF drawing into polylines for import.
+///
+/// The result is a JSON array of `{ points: [[x, y], ...], closed: bool }`, one per
+/// supported entity (LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC). The page lays each
+/// polyline on the active layer. Coordinates are drawing units, treated as mm.
+#[wasm_bindgen]
+pub fn import_dxf(text: &str) -> Result<String, JsError> {
+    #[derive(serde::Serialize)]
+    struct Poly {
+        points: Vec<(f64, f64)>,
+        closed: bool,
+    }
+    let polys: Vec<Poly> = lasercraft_dxf::parse_dxf(text)
+        .into_iter()
+        .map(|p| Poly {
+            points: p.points,
+            closed: p.closed,
+        })
+        .collect();
+    serde_json::to_string(&polys).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
+}
+
 /// Build a material-test grid project from `spec` and return it as project JSON.
 #[wasm_bindgen]
 pub fn material_test_project(spec_json: &str) -> Result<String, JsError> {

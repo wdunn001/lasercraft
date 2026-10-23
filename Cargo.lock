@@ -303,6 +303,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "lasercraft-dxf"
+version = "0.1.0"
+
+[[package]]
 name = "lasercraft-engine"
 version = "0.1.0"
 dependencies = [
@@ -412,6 +416,7 @@ version = "0.1.0"
 name = "lasercraft-wasm"
 version = "0.1.0"
 dependencies = [
+ "lasercraft-dxf",
  "lasercraft-engine",
  "lasercraft-galvo",
  "lasercraft-gcode",

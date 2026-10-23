@@ -134,7 +134,7 @@
     <span class="m" data-menu="file"><span data-i18n="menu.file">File</span>
       <div class="dropdown">
         <div data-act="new" data-i18n="action.new">New</div>
-        <div data-act="import" data-i18n="action.import">Import SVG&hellip;</div>
+        <div data-act="import" data-i18n="action.import">Import SVG / DXF&hellip;</div>
         <div data-act="image" data-i18n="action.image">Import Image (dither)&hellip;</div>
         <div data-act="export" data-i18n="action.export">Export GCode&hellip;</div>
       </div>
@@ -155,7 +155,7 @@
     <span class="btn ok" id="wasmok" style="margin-right:8px">loading&hellip;</span>
     <button class="btn" id="frameBtn" data-i18n="action.frame">Frame</button>
     <button class="btn primary" id="genBtn" data-i18n="action.generate">Generate</button>
-    <input type="file" id="file" accept=".svg" class="hidden" />
+    <input type="file" id="file" accept=".svg,.dxf" class="hidden" />
     <input type="file" id="imgFile" accept="image/*" class="hidden" />
   </div>
 
@@ -328,7 +328,7 @@
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf } from "./pkg/lasercraft_wasm.js";
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
@@ -1129,9 +1129,18 @@
   }
   $("file").onchange = ev => {
     const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
-    rd.onload = () => { try { importSvg(rd.result); render(); refreshCounts(); } catch(e){ console.error(e); } };
+    const isDxf = /\.dxf$/i.test(f.name);
+    rd.onload = () => { try { if (isDxf) importDxf(rd.result); else importSvg(rd.result); render(); refreshCounts(); } catch(e){ console.error(e); } };
     rd.readAsText(f);
   };
+  // Import an ASCII DXF through the engine reader, one shape per entity polyline.
+  function importDxf(text){
+    if (!ready) return;
+    let polys; try { polys = JSON.parse(import_dxf(text)); } catch(e){ console.error(e); return; }
+    const cut = doc.layers[activeLayer].index;
+    for (const pl of polys){ if (pl.points.length >= 2) doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.points.map(a => p(a[0], a[1])), closed: !!pl.closed } } }); }
+    selected = null;
+  }
   function importSvg(text){
     const d=new DOMParser().parseFromString(text,"image/svg+xml"); const cut=doc.layers[activeLayer].index;
     d.querySelectorAll("rect").forEach(r=>doc.shapes.push(rect(+r.getAttribute("x")||0,+r.getAttribute("y")||0,+r.getAttribute("width")||0,+r.getAttribute("height")||0,cut)));
@@ -1324,6 +1333,14 @@
     else if (act==="nodes"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Path:{ start:{x:25,y:35}, segments:[{Cubic:{c1:{x:40,y:80},c2:{x:95,y:80},to:{x:120,y:35}}},{Cubic:{c1:{x:95,y:-5},c2:{x:40,y:-5},to:{x:25,y:35}}}], closed:true } } }]; selected=0; const tb=document.querySelector('.tool[data-tool="node"]'); if (tb) tb.click(); render(); refreshCounts(); }
     else if (act==="offset"){ doc.shapes=[{ kind:"Rect", cut_index:0, geometry:{ Polyline:{ points:[p(60,60),p(100,60),p(100,95),p(60,95)], closed:true } } }]; selected=0; offsetSelected(6); offsetSelected(-6); openArrange(); }
     else if (act==="measure"){ const tb=document.querySelector('.tool[data-tool="measure"]'); if (tb) tb.click(); drawing = measureOverlay(p(30,40), p(110,95)); render(); }
+    else if (act==="dxf"){ const L=[], pr=(c,v)=>{L.push(c);L.push(v);};
+      pr(0,"SECTION");pr(2,"ENTITIES");
+      pr(0,"LWPOLYLINE");pr(90,4);pr(70,1);pr(10,20);pr(20,20);pr(10,90);pr(20,20);pr(42,0.6);pr(10,90);pr(20,55);pr(10,20);pr(20,55);
+      pr(0,"CIRCLE");pr(10,145);pr(20,115);pr(40,22);
+      pr(0,"ARC");pr(10,55);pr(20,115);pr(40,26);pr(50,0);pr(51,135);
+      pr(0,"LINE");pr(10,20);pr(20,160);pr(11,120);pr(21,185);
+      pr(0,"ENDSEC");pr(0,"EOF");
+      doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>
