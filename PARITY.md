@@ -17,7 +17,7 @@ because every item ships at once.
 | 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled). |
 | 6 | Variable text (serial, date/time, CSV merge) | Gap | |
 | 7 | Group / Ungroup | Done | Group id on shapes, group-aware selection, Ctrl+G / Ctrl+Shift+G. |
-| 8 | Align and distribute | Partial | Align to bed done; distribute: Partial. |
+| 8 | Align and distribute | Done | Align to bed; distribute horizontally/vertically by even spacing. |
 | 9 | Boolean union / subtract / intersect + weld | Done | |
 | 10 | Offset shapes | Done | |
 | 11 | Grid array and circular array | Done | Arrange dialog. |
@@ -25,7 +25,7 @@ because every item ships at once.
 | 13 | Cut settings editor: Line/Fill/Image/Offset-fill | Done | Line/Fill/Concentric/Image modes. |
 | 14 | Speed, max/min power, passes | Done | |
 | 15 | Scan angle, line interval, cross-hatch | Partial | Angle + interval done; cross-hatch: Gap. |
-| 16 | Image dithering modes | Partial | Dither import present; explicit mode picker: Gap. |
+| 16 | Image dithering modes | Done | Floyd-Steinberg, Atkinson, Jarvis, Stucki, Ordered, Threshold, picked in Preferences. |
 | 17 | Trace image (vectorize) | Done | |
 | 18 | Laser window: start, frame, pause, stop | Done | GRBL serial: Run (confirm), Frame (beam-off), Pause/Resume, Stop. |
 | 19 | Job origin / start from (abs, current, user) | Partial | Absolute and current position done; user origin: Partial. |

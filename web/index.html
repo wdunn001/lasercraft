@@ -215,7 +215,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -516,6 +516,13 @@
           </select>
         </div>
         <div class="stat" style="color:var(--muted);margin-top:8px" data-i18n="prefs.langnote">The default follows your browser.</div>
+        <div class="f" style="margin-top:14px"><label data-i18n="prefs.dither">Image dithering</label>
+          <select id="dmSel" style="width:100%">
+            <option value="floyd">Floyd-Steinberg</option><option value="atkinson">Atkinson</option>
+            <option value="jarvis">Jarvis</option><option value="stucki">Stucki</option>
+            <option value="ordered">Ordered (Bayer)</option><option value="threshold">Threshold</option>
+          </select>
+        </div>
       </div>
       <div class="mfoot"><span class="spacer"></span><button class="btn" id="prefCancel" data-i18n="action.cancel">Close</button></div>
     </div>
@@ -888,6 +895,15 @@
   function propsFlip(horiz){
     const b = selBBox(); if (!b) return; const cx=(b.x0+b.x1)/2, cy=(b.y0+b.y1)/2;
     eachSel(sh=>scaleShapeAbout(sh, cx, cy, horiz?-1:1, horiz?1:-1)); propsCommit();
+  }
+  // Space the selected shapes evenly by centre along one axis.
+  function distribute(horiz){
+    const items = [...sel].map(i=>({ i, sh:doc.shapes[i] })).filter(o=>o.sh); if (items.length < 3) return;
+    items.forEach(o=>{ const b=bbox(o.sh); o.c = horiz ? (b.x0+b.x1)/2 : (b.y0+b.y1)/2; });
+    items.sort((a,b)=>a.c-b.c);
+    const lo=items[0].c, hi=items[items.length-1].c, step=(hi-lo)/(items.length-1);
+    items.forEach((o,k)=>{ const target=lo+step*k, d=target-o.c; if (horiz) translateShape(o.sh, d, 0); else translateShape(o.sh, 0, d); });
+    snapshot(); render(); generate();
   }
   // The transform handles around the selected shape's box, in mm. Four corners
   // scale both axes about the opposite corner, four edges scale one axis about the
@@ -2114,6 +2130,8 @@
     else if (a==="group"){ groupSelection(); return; }
     else if (a==="ungroup"){ ungroupSelection(); return; }
     else if (a==="preview"){ openPreview(); return; }
+    else if (a==="disth"){ distribute(true); return; }
+    else if (a==="distv"){ distribute(false); return; }
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ imgMode="dither"; $("imgFile").click(); }
     else if (a==="trace"){ imgMode="trace"; $("imgFile").click(); }
@@ -2133,6 +2151,7 @@
   });
   $("addLayer").onclick = addLayer;
   $("prefClose").onclick = $("prefCancel").onclick = () => $("prefBg").classList.remove("show");
+  $("dmSel") && ($("dmSel").value = ditherMode, $("dmSel").onchange = () => { ditherMode = $("dmSel").value; });
   function moveShapeTo2(sh,dx,dy){ translateShape(sh,dx,dy); }
   // Tile the selection into a cols by rows grid. Gap is the mm space between copies.
   function arrayGrid(cols, rows, gapX, gapY){
@@ -2215,6 +2234,15 @@
     for (const pl of polys){ if (pl.points.length >= 3) doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.points.map(a => p(bx + a[0]*px, by0 + (h-1-a[1])*px)), closed: !!pl.closed } } }); }
     selectOnly(null); render(); refreshCounts();
   }
+  // Error-diffusion kernels as [dx, dy, weight]; the divisor is the weight sum.
+  const DITHER_KERNELS = {
+    floyd: [[1,0,7],[-1,1,3],[0,1,5],[1,1,1]],
+    atkinson: [[1,0,1],[2,0,1],[-1,1,1],[0,1,1],[1,1,1],[0,2,1]],
+    jarvis: [[1,0,7],[2,0,5],[-2,1,3],[-1,1,5],[0,1,7],[1,1,5],[2,1,3],[-2,2,1],[-1,2,3],[0,2,5],[1,2,3],[2,2,1]],
+    stucki: [[1,0,8],[2,0,4],[-2,1,2],[-1,1,4],[0,1,8],[1,1,4],[2,1,2],[-2,2,1],[-1,2,2],[0,2,4],[1,2,2],[2,2,1]],
+  };
+  const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];   // ordered dithering threshold map
+  let ditherMode = "floyd";
   function ditherImage(img){
     const targetW = 110;                               // sample width in pixels (kept modest for speed)
     const w = targetW, h = Math.max(1, Math.round(img.height / img.width * targetW));
@@ -2223,10 +2251,19 @@
     const data = ctx.getImageData(0, 0, w, h).data;
     const gray = new Float32Array(w * h);
     for (let i = 0; i < w * h; i++) gray[i] = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2];
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
-      const i = y*w + x, old = gray[i], nv = old < 128 ? 0 : 255, err = old - nv; gray[i] = nv;
-      if (x+1 < w) gray[i+1] += err*7/16;
-      if (y+1 < h){ if (x > 0) gray[i+w-1] += err*3/16; gray[i+w] += err*5/16; if (x+1 < w) gray[i+w+1] += err*1/16; }
+    const mode = ditherMode;
+    if (mode === "threshold" || mode === "ordered"){
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+        const thr = mode === "ordered" ? (BAYER4[y&3][x&3] + 0.5) * (256/16) : 128;
+        gray[y*w+x] = gray[y*w+x] < thr ? 0 : 255;
+      }
+    } else {
+      const K = DITHER_KERNELS[mode] || DITHER_KERNELS.floyd;
+      const div = K.reduce((s,k)=>s+k[2], 0);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+        const i = y*w + x, old = gray[i], nv = old < 128 ? 0 : 255, err = old - nv; gray[i] = nv;
+        for (const [dx,dy,wt] of K){ const nx=x+dx, ny=y+dy; if (nx>=0 && nx<w && ny>=0 && ny<h) gray[ny*w+nx] += err*wt/div; }
+      }
     }
     const bw = Math.min(BED.w * 0.8, 80), px = bw / w;
     const bx = (BED.w - bw) / 2, by0 = (BED.h - h*px) / 2;
@@ -2490,6 +2527,10 @@
   Object.assign(I18N.de, { "action.group":"Gruppieren","action.ungroup":"Gruppierung aufheben","action.preview":"Vorschau…","pv.title":"Vorschau","pv.play":"Abspielen","pv.pause":"Pause","pv.travel":"Leerfahrten zeigen","pv.note":"Grün ist Schneiden, Grau ist Eilgang.","tool.hint.star":"Ziehen, um einen Stern zu zeichnen." });
   Object.assign(I18N.fr, { "action.group":"Grouper","action.ungroup":"Dégrouper","action.preview":"Aperçu…","pv.title":"Aperçu","pv.play":"Lire","pv.pause":"Pause","pv.travel":"Afficher les déplacements","pv.note":"Vert = coupe, gris = déplacement rapide.","tool.hint.star":"Faites glisser pour dessiner une étoile." });
   Object.assign(I18N["pt-BR"], { "action.group":"Agrupar","action.ungroup":"Desagrupar","action.preview":"Visualização…","pv.title":"Visualização","pv.play":"Reproduzir","pv.pause":"Pausar","pv.travel":"Mostrar deslocamento","pv.note":"Verde é corte, cinza é deslocamento rápido.","tool.hint.star":"Arraste para desenhar uma estrela." });
+  Object.assign(I18N.es, { "prefs.dither":"Tramado de imagen","action.disth":"Distribuir horizontalmente","action.distv":"Distribuir verticalmente" });
+  Object.assign(I18N.de, { "prefs.dither":"Bild-Dithering","action.disth":"Horizontal verteilen","action.distv":"Vertikal verteilen" });
+  Object.assign(I18N.fr, { "prefs.dither":"Tramage d'image","action.disth":"Répartir horizontalement","action.distv":"Répartir verticalement" });
+  Object.assign(I18N["pt-BR"], { "prefs.dither":"Pontilhado de imagem","action.disth":"Distribuir horizontalmente","action.distv":"Distribuir verticalmente" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
