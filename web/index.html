@@ -813,10 +813,34 @@
   let snapOn = false, gridMM = 10;
   const DRAW_TOOLS = { rect:1, rrect:1, ellipse:1, ngon:1, poly:1, star:1, slot:1, line:1, pen:1 };
   const DRAG_BOX_TOOLS = { rect:1, rrect:1, ellipse:1, star:1, ngon:1, slot:1 };   // drag a bounding box to create
-  // Snap a point to the grid, but only while a drawing tool is active and snap is on.
+  // Centralized tool modifier state, read from pointer and key events so every
+  // tool resolves modifiers the same way. Shift constrains or adds to a selection,
+  // Alt suppresses snap or draws from the centre, and the primary key (Ctrl, or Cmd
+  // on a Mac) toggles a selection. Mirrors SolidCraft's shared modifier resolver.
+  const MODS = { shift:false, alt:false, primary:false };
+  function readMods(e){ MODS.shift = !!e.shiftKey; MODS.alt = !!e.altKey; MODS.primary = !!(e.ctrlKey || e.metaKey); }
+  // Snap a point to the grid, but only while a drawing tool is active, snap is on,
+  // and Alt is not held. Holding Alt suppresses the snap for a free placement.
   function snapForTool(pt){
-    if (!snapOn || !DRAW_TOOLS[tool] || !(gridMM > 0)) return pt;
+    if (!snapOn || !DRAW_TOOLS[tool] || !(gridMM > 0) || MODS.alt) return pt;
     return { x: +(Math.round(pt.x/gridMM)*gridMM).toFixed(3), y: +(Math.round(pt.y/gridMM)*gridMM).toFixed(3) };
+  }
+  // Constrain a drag box: Shift makes it square, Alt grows it from the start point
+  // as the centre. Returns the adjusted corner pair.
+  function applyBoxMods(x0, y0, x1, y1){
+    let ax1 = x1, ay1 = y1;
+    if (MODS.shift){ const s = Math.max(Math.abs(x1-x0), Math.abs(y1-y0)); ax1 = x0 + (x1 < x0 ? -s : s); ay1 = y0 + (y1 < y0 ? -s : s); }
+    let ax0 = x0, ay0 = y0;
+    if (MODS.alt){ const dx = ax1 - x0, dy = ay1 - y0; ax0 = x0 - dx; ay0 = y0 - dy; }
+    return [ax0, ay0, ax1, ay1];
+  }
+  // Constrain a line endpoint to the nearest 45 degree step from its start when
+  // Shift is held.
+  function applyLineMods(x0, y0, x1, y1){
+    if (!MODS.shift) return [x1, y1];
+    const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy);
+    const a = Math.round(Math.atan2(dy, dx) / (Math.PI/4)) * (Math.PI/4);
+    return [+(x0 + len*Math.cos(a)).toFixed(3), +(y0 + len*Math.sin(a)).toFixed(3)];
   }
 
   // A single-stroke engraving font (grid x 0..5, y up 0..7). Each glyph is a list
@@ -913,6 +937,19 @@
     trim:"Click a segment to trim it back to the nearest crossing.",
     extend:"Click near an open end to extend it to the nearest shape.",
   };
+  // Per-tool modifier-key hints, shown after the tool hint. Shift constrains or
+  // adds to a selection, Alt suppresses snap or draws from the centre, and the
+  // primary key (Ctrl, or Cmd on a Mac) toggles a selection.
+  const MOD_HINT = {
+    select:"Shift or Ctrl: add to selection. Shift while rotating: snap 15°. Shift on a corner: keep aspect.",
+    rect:"Shift: square. Alt: from centre.",
+    rrect:"Shift: square. Alt: from centre.",
+    ellipse:"Shift: circle. Alt: from centre.",
+    ngon:"Shift: regular. Alt: from centre.",
+    star:"Shift: regular. Alt: from centre.",
+    slot:"Shift: square. Alt: from centre.",
+    line:"Shift: snap to 45°.",
+  };
   function updateToolbar(){
     const t = (typeof selText === "function") ? selText() : null;
     const showText = tool === "text" || !!t;
@@ -930,7 +967,7 @@
       if (lbl) lbl.textContent = tr("text.add", "Add Text");
       $("addText").style.display = "";
     }
-    const h = $("toolHint"); if (h) h.textContent = tr("tool.hint." + tool, TOOL_HINT[tool] || TOOL_HINT.select);
+    const h = $("toolHint"); if (h){ let txt = tr("tool.hint." + tool, TOOL_HINT[tool] || TOOL_HINT.select); const mh = tr("tool.mod." + tool, MOD_HINT[tool] || ""); if (mh) txt += "   " + mh; h.textContent = txt; }
     // The grid-snap options belong to the drawing tools.
     const dp = $("tp-draw"); if (dp) dp.style.display = (!showText && DRAW_TOOLS[tool]) ? "flex" : "none";
     // The sides/points count applies to the regular polygon and the star.
@@ -1501,6 +1538,7 @@
   }
   canvas.addEventListener("mousedown", e => {
     if (camCalibrating){ handleCalibClick(e); return; }
+    readMods(e);
     const m = snapForTool(px2mm(e.clientX, e.clientY)); start = m;
     if (mirrorAxis){
       if (!mirrorAxis.a){ mirrorAxis.a = { x:m.x, y:m.y }; }
@@ -1534,13 +1572,16 @@
         xform = { h, orig, cx:(bb.x0+bb.x1)/2, cy:(bb.y0+bb.y1)/2, startAng: Math.atan2(m.y-(bb.y0+bb.y1)/2, m.x-(bb.x0+bb.x1)/2) };
         render(); return; }
       const hit = hitTest(m);
+      // Shift or the primary key (Ctrl, or Cmd on a Mac) keeps the current set and
+      // toggles the clicked shape, matching the classic selection modifiers.
+      const addSel = e.shiftKey || e.ctrlKey || e.metaKey;
       if (hit == null){
-        // Empty space: start a marquee. Plain click clears, shift keeps the set.
-        if (!e.shiftKey) selectOnly(null);
+        // Empty space: start a marquee. A plain click clears; a modified click keeps it.
+        if (!addSel) selectOnly(null);
         marquee = { x0:m.x, y0:m.y, base:new Set(sel) }; dragShape = null; render(); return;
       }
       const grp = groupMembers(hit);   // clicking one grouped shape grabs the whole group
-      if (e.shiftKey){ if (sel.has(hit)) grp.forEach(i=>sel.delete(i)); else grp.forEach(i=>sel.add(i)); selected = sel.size ? hit : null; }
+      if (addSel){ if (sel.has(hit)) grp.forEach(i=>sel.delete(i)); else grp.forEach(i=>sel.add(i)); selected = sel.size ? hit : null; }
       else if (!sel.has(hit)){ sel = new Set(grp); selected = grp.length===1 ? hit : hit; }
       else { selected = hit; }
       dragShape = hit; dragLast = m;
@@ -1549,15 +1590,18 @@
     }
   });
   canvas.addEventListener("mousemove", e => {
+    readMods(e);
     const m = snapForTool(px2mm(e.clientX, e.clientY));
     $("readout").textContent = `x ${mm2u(m.x).toFixed(dispUnits==="in"?3:1)}  y ${mm2u(m.y).toFixed(dispUnits==="in"?3:1)} ${dispUnits}`;
     if (tool==="pen" && penDrag && penAnchors.length){ const a = penAnchors[penAnchors.length-1]; a.hOut={x:m.x,y:m.y}; a.hIn={x:2*a.p.x-m.x,y:2*a.p.y-m.y}; drawing=penPreview(); render(); return; }
     if (tool==="measure" && measureA){ drawing = measureOverlay(measureA, m); render(); return; }
     if (xform && selected!=null){
       const sh2 = JSON.parse(JSON.stringify(xform.orig)), h = xform.h;
-      if (h.kind==="rotate"){ const ang = Math.atan2(m.y-xform.cy, m.x-xform.cx) - xform.startAng; rotateShapeAbout(sh2, xform.cx, xform.cy, ang); }
+      if (h.kind==="rotate"){ let ang = Math.atan2(m.y-xform.cy, m.x-xform.cx) - xform.startAng; if (MODS.shift){ const step = Math.PI/12; ang = Math.round(ang/step)*step; } rotateShapeAbout(sh2, xform.cx, xform.cy, ang); }
       else { let sx=1, sy=1;
-        if (h.kind==="corner"){ const dx=h.x-h.ax, dy=h.y-h.ay; if (Math.abs(dx)>1e-6) sx=(m.x-h.ax)/dx; if (Math.abs(dy)>1e-6) sy=(m.y-h.ay)/dy; }
+        if (h.kind==="corner"){ const dx=h.x-h.ax, dy=h.y-h.ay; if (Math.abs(dx)>1e-6) sx=(m.x-h.ax)/dx; if (Math.abs(dy)>1e-6) sy=(m.y-h.ay)/dy;
+          // Shift on a corner constrains the aspect ratio to a uniform scale.
+          if (MODS.shift){ const s=Math.max(Math.abs(sx),Math.abs(sy)); sx=(sx<0?-s:s); sy=(sy<0?-s:s); } }
         else if (h.axis==="x"){ const dx=h.x-h.ax; if (Math.abs(dx)>1e-6) sx=(m.x-h.ax)/dx; }
         else { const dy=h.y-h.ay; if (Math.abs(dy)>1e-6) sy=(m.y-h.ay)/dy; }
         const clamp = v => (Math.abs(v)<0.02 ? (v<0?-0.02:0.02) : v);
@@ -1574,13 +1618,14 @@
       else moveShapeTo(dragShape, m.x-dragOff.x, m.y-dragOff.y);
       render(); return;
     }
-    if (DRAG_BOX_TOOLS[tool] && Math.abs(m.x-start.x)>0.2){ const col=layerColor(doc.layers[activeLayer]); const sh=dragBoxShape(tool, start.x, start.y, m.x, m.y, 0); const d=sh?shapeD(sh):"";
+    if (DRAG_BOX_TOOLS[tool] && Math.abs(m.x-start.x)>0.2){ const col=layerColor(doc.layers[activeLayer]); const [bx0,by0,bx1,by1]=applyBoxMods(start.x,start.y,m.x,m.y); const sh=dragBoxShape(tool, bx0, by0, bx1, by1, 0); const d=sh?shapeD(sh):"";
       drawing = d ? `<path d="${d}" fill="none" stroke="${col}" stroke-dasharray="4 3"/>` : null; render(); }
-    if (tool==="line"){ const a=mm2px(start), b=mm2px(m); const col=layerColor(doc.layers[activeLayer]);
+    if (tool==="line"){ const [lx,ly]=applyLineMods(start.x,start.y,m.x,m.y); const a=mm2px(start), b=mm2px(p(lx,ly)); const col=layerColor(doc.layers[activeLayer]);
       drawing = `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${col}" stroke-dasharray="4 3"/>`; render(); }
     if (tool==="poly" && polyAnchors.length){ drawing = polyPreview(m); render(); }
   });
   window.addEventListener("mouseup", e => {
+    readMods(e);
     if (xform){ xform=null; start=null; dragShape=null; render(); refreshCounts(); return; }
     if (tool==="select" && marquee){ const m0=px2mm(e.clientX,e.clientY); const hits=marqueeHits(marquee.x0,marquee.y0,m0.x,m0.y);
       sel = new Set(marquee.base); for (const i of hits) sel.add(i); selected = sel.size===1 ? [...sel][0] : (sel.size?selected:null); if (selected!=null && !sel.has(selected)) selected = hits.length?hits[hits.length-1]:null;
@@ -1591,8 +1636,8 @@
     if (tool==="poly"){ start=null; return; }   // poly commits points on click, not on release
     if (!start){ return; }
     const m = px2mm(e.clientX, e.clientY);
-    if (DRAG_BOX_TOOLS[tool] && Math.abs(m.x-start.x)>1 && Math.abs(m.y-start.y)>0.5){ const sh=dragBoxShape(tool, start.x, start.y, m.x, m.y, doc.layers[activeLayer].index); if (sh){ doc.shapes.push(sh); selectOnly(doc.shapes.length-1); } }
-    else if (tool==="line" && Math.hypot(m.x-start.x,m.y-start.y)>0.5){ doc.shapes.push({ kind:"Path", cut_index:doc.layers[activeLayer].index, geometry:{ Polyline:{ points:[p(start.x,start.y),p(m.x,m.y)], closed:false } } }); selectOnly(doc.shapes.length-1); }
+    if (DRAG_BOX_TOOLS[tool] && Math.abs(m.x-start.x)>1 && Math.abs(m.y-start.y)>0.5){ const [bx0,by0,bx1,by1]=applyBoxMods(start.x,start.y,m.x,m.y); const sh=dragBoxShape(tool, bx0, by0, bx1, by1, doc.layers[activeLayer].index); if (sh){ doc.shapes.push(sh); selectOnly(doc.shapes.length-1); } }
+    else if (tool==="line" && Math.hypot(m.x-start.x,m.y-start.y)>0.5){ const [lx,ly]=applyLineMods(start.x,start.y,m.x,m.y); doc.shapes.push({ kind:"Path", cut_index:doc.layers[activeLayer].index, geometry:{ Polyline:{ points:[p(start.x,start.y),p(lx,ly)], closed:false } } }); selectOnly(doc.shapes.length-1); }
     start=null; drawing=null; dragShape=null; dragNode=null; render(); refreshCounts();
   });
   function hitTest(m){ for (let i=doc.shapes.length-1;i>=0;i--){ if (doc.shapes[i].locked) continue; const bb=bbox(doc.shapes[i]); if (m.x>=bb.x0-1&&m.x<=bb.x1+1&&m.y>=bb.y0-1&&m.y<=bb.y1+1) return i; } return null; }
@@ -3972,6 +4017,14 @@
   Object.assign(I18N.de, { "action.mattest":"Materialtest…","mt.cols":"Leistungsstufen (Spalten)","mt.rows":"Geschwindigkeitsstufen (Zeilen)","mt.toomany":"Zu viele Zellen. Die Palette fasst 28 Testebenen.","mt.pmin":"Min. Leistung %","mt.pmax":"Max. Leistung %","mt.smin":"Min. Geschwindigkeit mm/s","mt.smax":"Max. Geschwindigkeit mm/s","mt.cell":"Zellengröße mm","mt.labels":"Beschriftungen" });
   Object.assign(I18N.fr, { "action.mattest":"Test de matériau…","mt.cols":"Pas de puissance (colonnes)","mt.rows":"Pas de vitesse (lignes)","mt.toomany":"Trop de cellules. La palette contient 28 calques de test.","mt.pmin":"Puissance min %","mt.pmax":"Puissance max %","mt.smin":"Vitesse min mm/s","mt.smax":"Vitesse max mm/s","mt.cell":"Taille de cellule mm","mt.labels":"Étiquettes" });
   Object.assign(I18N["pt-BR"], { "action.mattest":"Teste de material…","mt.cols":"Passos de potência (colunas)","mt.rows":"Passos de velocidade (linhas)","mt.toomany":"Células demais. A paleta comporta 28 camadas de teste.","mt.pmin":"Potência mín %","mt.pmax":"Potência máx %","mt.smin":"Velocidade mín mm/s","mt.smax":"Velocidade máx mm/s","mt.cell":"Tamanho da célula mm","mt.labels":"Etiquetas" });
+  { const MH={
+      es:{sel:"Mayús o Ctrl: añadir a la selección. Mayús al rotar: 15°. Mayús en esquina: conservar proporción.",sq:"Mayús: cuadrado. Alt: desde el centro.",ci:"Mayús: círculo. Alt: desde el centro.",rg:"Mayús: regular. Alt: desde el centro.",ln:"Mayús: ajustar a 45°."},
+      de:{sel:"Umschalt oder Strg: zur Auswahl hinzufügen. Umschalt beim Drehen: 15°. Umschalt an Ecke: Seitenverhältnis halten.",sq:"Umschalt: Quadrat. Alt: aus der Mitte.",ci:"Umschalt: Kreis. Alt: aus der Mitte.",rg:"Umschalt: regelmäßig. Alt: aus der Mitte.",ln:"Umschalt: auf 45° rasten."},
+      fr:{sel:"Maj ou Ctrl : ajouter à la sélection. Maj en tournant : 15°. Maj sur un coin : garder les proportions.",sq:"Maj : carré. Alt : depuis le centre.",ci:"Maj : cercle. Alt : depuis le centre.",rg:"Maj : régulier. Alt : depuis le centre.",ln:"Maj : aligner sur 45°."},
+      "pt-BR":{sel:"Shift ou Ctrl: adicionar à seleção. Shift ao girar: 15°. Shift no canto: manter proporção.",sq:"Shift: quadrado. Alt: do centro.",ci:"Shift: círculo. Alt: do centro.",rg:"Shift: regular. Alt: do centro.",ln:"Shift: ajustar a 45°."}
+    };
+    for (const loc in MH){ const t=MH[loc]; Object.assign(I18N[loc], { "tool.mod.select":t.sel,"tool.mod.rect":t.sq,"tool.mod.rrect":t.sq,"tool.mod.slot":t.sq,"tool.mod.ellipse":t.ci,"tool.mod.ngon":t.rg,"tool.mod.star":t.rg,"tool.mod.line":t.ln }); }
+  }
   Object.assign(I18N.es, { "action.nest":"Anidar formas" }); Object.assign(I18N.de, { "action.nest":"Formen verschachteln" }); Object.assign(I18N.fr, { "action.nest":"Imbriquer les formes" }); Object.assign(I18N["pt-BR"], { "action.nest":"Aninhar formas" });
   Object.assign(I18N.es, { "action.nodebreak":"Romper en el nodo","action.tocurve":"Convertir en curva","action.toline":"Convertir en línea","action.mirrorline":"Reflejar sobre línea","mir.need":"Seleccione formas y luego haga clic en dos puntos para la línea.","mir.hint":"Haga clic en dos puntos para la línea de reflejo. Escape cancela." });
   Object.assign(I18N.de, { "action.nodebreak":"Am Knoten trennen","action.tocurve":"In Kurve umwandeln","action.toline":"In Linie umwandeln","action.mirrorline":"An Linie spiegeln","mir.need":"Formen auswählen, dann zwei Punkte für die Linie anklicken.","mir.hint":"Zwei Punkte für die Spiegelachse anklicken. Escape bricht ab." });
@@ -4181,6 +4234,15 @@
     else if (act==="nodebreak"){ doc.shapes=[{ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(45,45),p(110,45),p(110,95),p(45,95)], closed:true } } }]; selectOnly(0); activeNode=1; nodeBreak(); render(); refreshCounts(); }
     else if (act==="mirrorline"){ const base={ kind:"Path", cut_index:0, geometry:{ Polyline:{ points:[p(30,40),p(70,50),p(35,85),p(55,60)], closed:true } } }; doc.shapes=[base, JSON.parse(JSON.stringify(base))]; sel=new Set([1]); selected=1; mirrorSelAcross(80,20,80,100); render(); refreshCounts(); }
     else if (act==="nest"){ doc.shapes=[rect(10,10,45,30,0), rect(10,10,20,50,0), rect(10,10,35,18,0), rect(10,10,25,40,0), rect(10,10,30,22,0), rect(10,10,15,35,0)]; sel=new Set(doc.shapes.map((_,i)=>i)); selected=null; nestSelection(); selectOnly(null); render(); refreshCounts(); }
+    else if (act==="mods"){ doc.shapes=[];
+      // Shift constrains a wide drag (30..110, 40..65) into a square.
+      MODS.shift=true; MODS.alt=false; let b=applyBoxMods(30,40,110,65); doc.shapes.push(dragBoxShape("rect",b[0],b[1],b[2],b[3],0));
+      // Alt grows an ellipse from the centre point (90,75).
+      MODS.shift=false; MODS.alt=true; b=applyBoxMods(90,75,110,90); doc.shapes.push(dragBoxShape("ellipse",b[0],b[1],b[2],b[3],1));
+      // Shift snaps a line to the nearest 45° from a shallow drag.
+      MODS.shift=true; MODS.alt=false; const l=applyLineMods(30,90,80,100); doc.shapes.push({ kind:"Path", cut_index:2, geometry:{ Polyline:{ points:[p(30,90),p(l[0],l[1])], closed:false } } });
+      MODS.shift=false; MODS.alt=false; selectOnly(null); render(); refreshCounts();
+    }
     else if (act==="projround"){ doc.shapes=[rect(30,30,65,45,0), ellipse(110,95,25,20,1)]; stashPage();
       const out={ format:"lasercraft-project", version:1, pageIdx, pages: pages.map(pg=>({ name:pg.name, activeLayer:pg.activeLayer, view:pg.view, doc:pg.doc })) };
       const json=JSON.stringify(out,(k,v)=>(typeof k==="string"&&k.startsWith("_"))?undefined:v);

@@ -50,6 +50,8 @@ because every item ships at once.
 - Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position, GRBL console Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); macros, file list, bridge: Gap.
 - Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
 
+- Tool modifier keys (SolidCraft PR #5217-style shared resolver): Shift constrains (square/circle/regular, 45° lines, keep-aspect corners) and adds to a selection, Alt suppresses grid snap and draws from the centre, the primary key (Ctrl/Cmd) toggles a selection, Shift while rotating snaps to 15°. Per-tool hints in the sub-header, translated across five locales.
+
 ## Beyond LightBurn
 
 - Depth / heat-map engrave: a grayscale image drives cut depth, banded into
