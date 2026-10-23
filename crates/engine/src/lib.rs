@@ -126,6 +126,8 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
     // Collect the drawable shapes as toolpathed segment runs.
     struct Run {
         segments: Vec<lasercraft_toolpath::Segment>,
+        points: Vec<Point>,
+        closed: bool,
         feed: f64,
         power: f64,
         passes: u32,
@@ -147,17 +149,22 @@ pub fn plan_project(project: &Project, motion: &MotionConfig, dialect: &dyn Dial
         }
         runs.push(Run {
             segments,
+            points: path,
+            closed,
             feed: motion.clamp_feed(setting.speed_mm_s),
             power: setting.power_max,
             passes: setting.num_passes,
         });
     }
-    // Order the runs to shorten rapid travel between shapes.
+    // Order the runs so an enclosed shape cuts before its container, and travel
+    // between shapes stays short.
     let starts: Vec<Point> = runs
         .iter()
         .filter_map(|r| r.segments.first().map(|s| s.start))
         .collect();
-    let order = optimize_order(&starts);
+    let run_points: Vec<Vec<Point>> = runs.iter().map(|r| r.points.clone()).collect();
+    let run_closed: Vec<bool> = runs.iter().map(|r| r.closed).collect();
+    let order = nested_order(&run_points, &run_closed, &starts);
     let mut ops = Vec::new();
     for &index in &order {
         let Some(run) = runs.get(index) else { continue };
@@ -320,6 +327,120 @@ pub fn material_test(spec: &MaterialTestSpec) -> Project {
         }
     }
     project
+}
+
+/// The unsigned area of a closed polygon by the shoelace sum.
+fn polygon_area(poly: &[Point]) -> f64 {
+    let n = poly.len();
+    if n < 3 {
+        return 0.0;
+    }
+    let mut sum = 0.0;
+    let mut j = n - 1;
+    for i in 0..n {
+        sum += (poly[j].x + poly[i].x) * (poly[j].y - poly[i].y);
+        j = i;
+    }
+    (sum / 2.0).abs()
+}
+
+/// Whether `point` lies inside the closed ring `poly`, by ray casting.
+fn point_in_polygon(point: Point, poly: &[Point]) -> bool {
+    let n = poly.len();
+    if n < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let mut j = n - 1;
+    for i in 0..n {
+        let a = poly[i];
+        let b = poly[j];
+        if (a.y > point.y) != (b.y > point.y)
+            && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x
+        {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+/// Order runs so an enclosed shape cuts before the shape that encloses it.
+///
+/// A part that sits inside another, a hole in a plate or a letter counter, must be
+/// cut while the outer shape still holds the material. Otherwise the outer cut
+/// frees the piece and the inner cut lands on something that has already dropped.
+/// A run waits until every run it contains is done, and among the ready runs the
+/// nearest to the laser's current position goes next, so travel stays short.
+// The loops index several parallel arrays (points, areas, children, visited,
+// starts) by the same i, so a range loop reads clearer than zipped iterators.
+#[allow(clippy::needless_range_loop)]
+fn nested_order(points: &[Vec<Point>], closed: &[bool], starts: &[Point]) -> Vec<usize> {
+    let n = starts.len();
+    let areas: Vec<f64> = points.iter().map(|p| polygon_area(p)).collect();
+    // children[i] are the runs that run i encloses, so i must wait for them.
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for i in 0..n {
+        if !closed.get(i).copied().unwrap_or(false) {
+            continue;
+        }
+        let Some(outer) = points.get(i) else { continue };
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let rep = points.get(j).and_then(|p| p.first()).copied();
+            let (Some(rep), Some(&outer_area), Some(&inner_area)) =
+                (rep, areas.get(i), areas.get(j))
+            else {
+                continue;
+            };
+            if outer_area > inner_area && point_in_polygon(rep, outer) {
+                children[i].push(j);
+            }
+        }
+    }
+    let mut visited = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    let mut current = Point { x: 0.0, y: 0.0 };
+    for _ in 0..n {
+        let mut best: Option<usize> = None;
+        let mut best_distance = f64::INFINITY;
+        for i in 0..n {
+            if visited[i] || !children[i].iter().all(|&c| visited[c]) {
+                continue;
+            }
+            let Some(start) = starts.get(i) else { continue };
+            let distance = (start.x - current.x).hypot(start.y - current.y);
+            if distance < best_distance {
+                best_distance = distance;
+                best = Some(i);
+            }
+        }
+        // A containment cycle should not happen, but fall back to the nearest
+        // unvisited run so the walk always makes progress.
+        if best.is_none() {
+            for i in 0..n {
+                if visited[i] {
+                    continue;
+                }
+                let Some(start) = starts.get(i) else { continue };
+                let distance = (start.x - current.x).hypot(start.y - current.y);
+                if distance < best_distance {
+                    best_distance = distance;
+                    best = Some(i);
+                }
+            }
+        }
+        if let Some(i) = best {
+            visited[i] = true;
+            order.push(i);
+            if let Some(start) = starts.get(i) {
+                current = *start;
+            }
+        }
+    }
+    order
 }
 
 /// Order points by a greedy nearest-neighbour walk from the origin.
@@ -1140,6 +1261,31 @@ mod tests {
         ];
         // From the origin: nearest is index 1, then 2, then 0.
         assert_eq!(optimize_order(&starts), vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn nested_order_cuts_inner_before_outer() {
+        let outer = vec![
+            Point { x: 0.0, y: 0.0 },
+            Point { x: 20.0, y: 0.0 },
+            Point { x: 20.0, y: 20.0 },
+            Point { x: 0.0, y: 20.0 },
+        ];
+        let inner = vec![
+            Point { x: 8.0, y: 8.0 },
+            Point { x: 12.0, y: 8.0 },
+            Point { x: 12.0, y: 12.0 },
+            Point { x: 8.0, y: 12.0 },
+        ];
+        // Run 0 is the outer square and sits nearer the origin, so a plain
+        // nearest-neighbour walk would cut it first and free the inner piece.
+        let starts = vec![outer[0], inner[0]];
+        let points = vec![outer, inner];
+        let closed = vec![true, true];
+        let order = nested_order(&points, &closed, &starts);
+        let pos_inner = order.iter().position(|&i| i == 1).unwrap_or(usize::MAX);
+        let pos_outer = order.iter().position(|&i| i == 0).unwrap_or(usize::MAX);
+        assert!(pos_inner < pos_outer, "order {order:?}");
     }
 
     #[test]
