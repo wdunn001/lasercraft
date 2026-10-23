@@ -15,7 +15,7 @@ because every item ships at once.
 | 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
 | 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
 | 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled). |
-| 6 | Variable text (serial, date/time, CSV merge) | Partial | Serial numbers via Serialize (%N token, start/count/step/digits); date/time + CSV merge: Gap. |
+| 6 | Variable text (serial, date/time, CSV merge) | Partial | Serial numbers (Serialize, %N token) and date/time insert done; CSV merge: Gap. |
 | 7 | Group / Ungroup | Done | Group id on shapes, group-aware selection, Ctrl+G / Ctrl+Shift+G. |
 | 8 | Align and distribute | Done | Align to bed; distribute horizontally/vertically by even spacing. |
 | 9 | Boolean union / subtract / intersect + weld | Done | |
@@ -45,7 +45,7 @@ because every item ships at once.
 - Text: core + alignment + fonts Done; variable text, text-on-path, bending, bar code: Gap.
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, kerf, tabs, perforation, ramp Done; lead-in/out, overcut, sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
-- Fill/scan: interval, angle, cross-hatch Done (angle honored on galvo and G-code); bidirectional, overscan, DPI, fill grouping, flood fill: Gap.
+- Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI) Done; bidirectional, overscan, fill grouping, flood fill: Gap (engine work).
 - Image/art: trace + dither import Done; adjust image, dither-mode picker, mask, convert-to-bitmap, 3D depth map: Gap.
 - Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); console, macros, file list, bridge: Gap.
 - Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch Done; guidelines, snap distances, alignment guides: Gap.
