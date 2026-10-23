@@ -3653,14 +3653,16 @@
     { id:"hpgl",     ext:[".plt",".hpgl"],                                label:"HPGL plot",             io:"import", role:"vector",   input:"file" },
     { id:"gcin",     ext:[".gc",".nc",".cnc"],                            label:"G-code program",        io:"import", role:"vector",   input:"file" },
     { id:"pdf",      ext:[".pdf",".ai"],                                  label:"PDF / Illustrator",     io:"import", role:"vector",   input:"file" },
+    { id:"rd",       ext:[".rd"],                                         label:"Ruida RDWorks",         io:"import", role:"vector",   input:"file" },
   ];
   function acceptFor(inputId){ return FORMATS.filter(f=>f.input===inputId).flatMap(f=>f.ext).join(","); }
   // Drive every file input's accept list from the registry.
   ["file","imgFile","projFile","matFile","gdCorFile"].forEach(id => { const el=$(id); if (!el) return; const a=acceptFor(id); if (a) el.accept = (id==="imgFile") ? ("image/*,"+a) : a; });
   $("file").onchange = ev => {
     const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
-    const isDxf = /\.dxf$/i.test(f.name), isLbrn = /\.lbrn2?$/i.test(f.name), isHpgl = /\.(plt|hpgl)$/i.test(f.name), isGcode = /\.(gc|nc|cnc|gcode|ngc)$/i.test(f.name), isPdf = /\.(pdf|ai)$/i.test(f.name);
+    const isDxf = /\.dxf$/i.test(f.name), isLbrn = /\.lbrn2?$/i.test(f.name), isHpgl = /\.(plt|hpgl)$/i.test(f.name), isGcode = /\.(gc|nc|cnc|gcode|ngc)$/i.test(f.name), isPdf = /\.(pdf|ai)$/i.test(f.name), isRd = /\.rd$/i.test(f.name);
     if (isPdf){ rd.onload = () => { importPdf(rd.result).catch(e => console.error(e)); }; rd.readAsArrayBuffer(f); return; }
+    if (isRd){ rd.onload = () => { try { importRd(new Uint8Array(rd.result)); } catch(e){ console.error(e); } }; rd.readAsArrayBuffer(f); return; }
     rd.onload = () => { try { if (isLbrn) importLbrn(rd.result); else if (isDxf) importDxf(rd.result); else if (isHpgl) importHpgl(rd.result); else if (isGcode) importGcode(rd.result); else importSvg(rd.result); render(); refreshCounts(); } catch(e){ console.error(e); } };
     rd.readAsText(f);
   };
@@ -3803,6 +3805,41 @@
     const toMm = 25.4 / 72;                                // PDF points to millimetres
     const cut = doc.layers[activeLayer].index;
     const added = polys.map(pl => ({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.map(([px,py]) => p(px*toMm, py*toMm)), closed: false } } }));
+    doc.shapes.push(...added); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
+  }
+  // Import a Ruida RDWorks file (.rd). The blob is scrambled with the Ruida swizzle
+  // (magic 0x88), so each byte is unswizzled first. Command bytes have bit 7 set and
+  // their parameter bytes are 7-bit, so a command runs until the next high byte: that
+  // lets the reader skip unknown header and settings commands. Move commands lift the
+  // pen and start a run; cut commands extend it. Absolute coordinates are five 7-bit
+  // groups (microns), relative ones are two. Verified against the meerk40t reference.
+  function importRd(bytes, magic){
+    magic = magic == null ? 0x88 : magic;
+    const n = bytes.length, un = new Uint8Array(n);
+    for (let i = 0; i < n; i++){ let b = (bytes[i]-1)&0xFF; b ^= magic; b ^= (b>>7)&0xFF; b ^= (b<<7)&0xFF; b ^= (b>>7)&0xFF; un[i] = b&0xFF; }
+    const d32 = (o) => { let v = un[o]*(1<<28) + (un[o+1]<<21) + (un[o+2]<<14) + (un[o+3]<<7) + un[o+4]; if (v >= 2**34) v -= 2**35; return v; };
+    const d14 = (o) => { let v = (un[o]<<7)|un[o+1]; if (v >= (1<<13)) v -= (1<<14); return v; };
+    const U = 1000;                                        // microns per millimetre
+    const polys = []; let cur = null, x = 0, y = 0, i = 0;
+    const endParams = (s) => { let j = s; while (j < n && un[j] < 0x80) j++; return j; };
+    while (i < n){
+      if (un[i] < 0x80){ i++; continue; }
+      const op = un[i], p = i+1, pe = endParams(p), len = pe-p;
+      if (op===0x88 && len>=10){ x=d32(p); y=d32(p+5); if (cur&&cur.length>=2) polys.push(cur); cur=[[x,y]]; }
+      else if (op===0xA8 && len>=10){ x=d32(p); y=d32(p+5); if (!cur) cur=[[x,y]]; else cur.push([x,y]); }
+      else if (op===0x89 && len>=4){ x+=d14(p); y+=d14(p+2); if (cur&&cur.length>=2) polys.push(cur); cur=[[x,y]]; }
+      else if (op===0xA9 && len>=4){ x+=d14(p); y+=d14(p+2); if (!cur) cur=[[x,y]]; else cur.push([x,y]); }
+      else if (op===0x8A && len>=2){ x+=d14(p); if (cur&&cur.length>=2) polys.push(cur); cur=[[x,y]]; }
+      else if (op===0x8B && len>=2){ y+=d14(p); if (cur&&cur.length>=2) polys.push(cur); cur=[[x,y]]; }
+      else if (op===0xAA && len>=2){ x+=d14(p); if (!cur) cur=[[x,y]]; else cur.push([x,y]); }
+      else if (op===0xAB && len>=2){ y+=d14(p); if (!cur) cur=[[x,y]]; else cur.push([x,y]); }
+      i = pe;
+    }
+    if (cur && cur.length>=2) polys.push(cur);
+    if (!polys.length){ alert(tr("rd.none","No cutting moves found in that Ruida file.")); return; }
+    // Ruida's origin is top-left with Y down; flip into our bottom-left, Y-up bed.
+    const cut = doc.layers[activeLayer].index;
+    const added = polys.map(pl => ({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.map(([px,py]) => p(px/U, BED.h - py/U)), closed:false } } }));
     doc.shapes.push(...added); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
   }
   // Import a LightBurn project (.lbrn/.lbrn2). Each CutSetting becomes a layer; Rect,
@@ -4167,10 +4204,10 @@
   Object.assign(I18N.de, { "action.mergecsv":"CSV in Text einfügen…","merge.need":"Wählen Sie zuerst ein Textobjekt, dann eine CSV.","merge.empty":"Diese CSV hat keine Datenzeilen.","action.textpath":"Text auf Pfad","top.need":"Wählen Sie ein Textobjekt und einen Pfad.","top.badpath":"Diese Form hat keinen nutzbaren Pfad." });
   Object.assign(I18N.fr, { "action.mergecsv":"Fusionner un CSV dans le texte…","merge.need":"Sélectionnez d'abord un objet texte, puis choisissez un CSV.","merge.empty":"Ce CSV n'a aucune ligne de données.","action.textpath":"Texte sur chemin","top.need":"Sélectionnez un objet texte et un chemin.","top.badpath":"Cette forme n'a pas de chemin utilisable." });
   Object.assign(I18N["pt-BR"], { "action.mergecsv":"Mesclar CSV no texto…","merge.need":"Selecione primeiro um objeto de texto, depois escolha um CSV.","merge.empty":"Esse CSV não tem linhas de dados.","action.textpath":"Texto no caminho","top.need":"Selecione um objeto de texto e um caminho.","top.badpath":"Essa forma não tem um caminho utilizável." });
-  Object.assign(I18N.es, { "hpgl.none":"No se encontraron trazos en ese archivo HPGL.","gci.none":"No se encontraron movimientos de corte en ese G-code.","pdf.none":"No se encontraron trazos vectoriales en ese PDF." });
-  Object.assign(I18N.de, { "hpgl.none":"Keine Pfade in dieser HPGL-Datei gefunden.","gci.none":"Keine Schnittbewegungen in diesem G-Code gefunden.","pdf.none":"Keine Vektorpfade in dieser PDF gefunden." });
-  Object.assign(I18N.fr, { "hpgl.none":"Aucun tracé trouvé dans ce fichier HPGL.","gci.none":"Aucun mouvement de coupe trouvé dans ce G-code.","pdf.none":"Aucun tracé vectoriel trouvé dans ce PDF." });
-  Object.assign(I18N["pt-BR"], { "hpgl.none":"Nenhum traço encontrado nesse arquivo HPGL.","gci.none":"Nenhum movimento de corte encontrado nesse G-code.","pdf.none":"Nenhum traço vetorial encontrado nesse PDF." });
+  Object.assign(I18N.es, { "hpgl.none":"No se encontraron trazos en ese archivo HPGL.","gci.none":"No se encontraron movimientos de corte en ese G-code.","pdf.none":"No se encontraron trazos vectoriales en ese PDF.","rd.none":"No se encontraron movimientos de corte en ese archivo Ruida." });
+  Object.assign(I18N.de, { "hpgl.none":"Keine Pfade in dieser HPGL-Datei gefunden.","gci.none":"Keine Schnittbewegungen in diesem G-Code gefunden.","pdf.none":"Keine Vektorpfade in dieser PDF gefunden.","rd.none":"Keine Schnittbewegungen in dieser Ruida-Datei gefunden." });
+  Object.assign(I18N.fr, { "hpgl.none":"Aucun tracé trouvé dans ce fichier HPGL.","gci.none":"Aucun mouvement de coupe trouvé dans ce G-code.","pdf.none":"Aucun tracé vectoriel trouvé dans ce PDF.","rd.none":"Aucun mouvement de coupe trouvé dans ce fichier Ruida." });
+  Object.assign(I18N["pt-BR"], { "hpgl.none":"Nenhum traço encontrado nesse arquivo HPGL.","gci.none":"Nenhum movimento de corte encontrado nesse G-code.","pdf.none":"Nenhum traço vetorial encontrado nesse PDF.","rd.none":"Nenhum movimento de corte encontrado nesse arquivo Ruida." });
   Object.assign(I18N.es, { "dm.module":"Tamaño de módulo mm","dm.toolong":"Ese texto es demasiado largo para este codificador Data Matrix." });
   Object.assign(I18N.de, { "dm.module":"Modulgröße mm","dm.toolong":"Dieser Text ist für diesen Data-Matrix-Encoder zu lang." });
   Object.assign(I18N.fr, { "dm.module":"Taille de module mm","dm.toolong":"Ce texte est trop long pour cet encodeur Data Matrix." });
@@ -4322,6 +4359,7 @@
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
     else if (act==="hpgl"){ importHpgl("IN;SP1;PU1000,1000;PD3000,1000,3000,2800,1000,2800,1000,1000;SP2;PU3600,1000;PD5600,1000,4600,3200,3600,1000;"); }
     else if (act==="gcin"){ importGcode("G21 G90\nM4 S0\nG0 X25 Y30\nG1 X70 Y30 S500\nG1 X70 Y70\nG1 X25 Y70\nG1 X25 Y30\nM5\nG0 X85 Y30\nM4 S500\nG1 X120 Y30\nG1 X102 Y72\nG1 X85 Y30\nM5\nG0 X0 Y0\n"); }
+    else if (act==="rd"){ const b64="xAmJQouJiYmJu9A5iYmJidmCiYkJlamJiQmVqaKJiY15iYmJCZWpoomJC4/ZiYmNq/miiYkJlamJiQmVqQLHmceZIpWpiYkklalg"; const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i); importRd(bytes); }
     else if (act==="pdf"){ const b64="JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAzMDAgMzAwXS9Db250ZW50cyA0IDAgUj4+CmVuZG9iago0IDAgb2JqCjw8L0xlbmd0aCA2My9GaWx0ZXIvRmxhdGVEZWNvZGU+PgpzdHJlYW0KeJwzNFAwBCEDBQsDhaJUhWAuQ1OwUK6CEYSRo2BkYKBgCWJkKARzGRkogFTkKhgZQFQg0SCJZIVgLgDLGhB1CmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDUKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTQgMDAwMDAgbiAKMDAwMDAwMDEwNSAwMDAwMCBuIAowMDAwMDAwMTg1IDAwMDAwIG4gCnRyYWlsZXI8PC9TaXplIDUvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgozMTUKJSVFT0Y="; const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i); importPdf(bytes.buffer); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }

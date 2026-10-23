@@ -38,7 +38,7 @@ because every item ships at once.
 
 ## By area (condensed)
 
-- Document/File: core open/save/import/export, LightBurn .lbrn import, HPGL (.plt) import Done. G-code (.gc/.nc) import, PDF and Adobe Illustrator (.ai, PDF inside) import Done. LightBurn's remaining import formats are Ruida .rd (binary) and Snapmaker .sc. (LightBurn does not import Gerber or STL/3D.) Templates, bundles, print: Gap.
+- Document/File: core open/save/import/export, LightBurn .lbrn import, HPGL (.plt) import Done. G-code (.gc/.nc) import, PDF and Adobe Illustrator (.ai, PDF inside) import, Ruida .rd import (unswizzle + command parse, reference-verified against meerk40t) Done. Snapmaker .sc import: Gap (no public spec). (LightBurn does not import Gerber or STL/3D.) Templates, bundles, print: Gap.
 - Drawing: primary shapes, rounded rect, slot, regular N-gon, star, Code 128, Code 39, QR code, Data Matrix (ECC-200 ASCII, sizes 10 to 26, reference-verified) Done; EAN/UPC and other symbologies Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
 - Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend, mirror-across-line, nesting (shelf pack) Done. Dock, two-point rotate: Gap.
 - Node editing: insert/delete/move, trim, extend, break-at-node, convert-to-curve, convert-to-line Done; optimize/warp/deform: Gap.
