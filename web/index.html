@@ -240,7 +240,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -957,6 +957,49 @@
   function translateShape(sh, dx, dy){ eachPoint(sh, q => { q.x=+(q.x+dx).toFixed(3); q.y=+(q.y+dy).toFixed(3); }); }
   function rotateShapeAbout(sh, cx, cy, th){ const cs=Math.cos(th), sn=Math.sin(th); eachPoint(sh, q => { const x=q.x-cx, y=q.y-cy; q.x=+(cx+x*cs-y*sn).toFixed(3); q.y=+(cy+x*sn+y*cs).toFixed(3); }); }
   function scaleShapeAbout(sh, ox, oy, sx, sy){ eachPoint(sh, q => { q.x=+(ox+(q.x-ox)*sx).toFixed(3); q.y=+(oy+(q.y-oy)*sy).toFixed(3); }); }
+  // Modify tools (ported from SolidCraft's sketch-modify set, polyline form).
+  // Round or bevel every corner of a polyline. `arc` true = fillet, false = chamfer.
+  function cornerMod(pts, closed, amount, arc, K){
+    const n = pts.length; if (n < 3) return pts.slice();
+    const out = [];
+    for (let i=0;i<n;i++){
+      const cur = pts[i];
+      const isCorner = closed || (i>0 && i<n-1);
+      if (!isCorner){ out.push({x:cur.x,y:cur.y}); continue; }
+      const prev = pts[(i-1+n)%n], next = pts[(i+1)%n];
+      const v1 = {x:prev.x-cur.x,y:prev.y-cur.y}, v2 = {x:next.x-cur.x,y:next.y-cur.y};
+      const l1 = Math.hypot(v1.x,v1.y), l2 = Math.hypot(v2.x,v2.y);
+      if (l1<1e-6||l2<1e-6){ out.push({x:cur.x,y:cur.y}); continue; }
+      const u1 = {x:v1.x/l1,y:v1.y/l1}, u2 = {x:v2.x/l2,y:v2.y/l2};
+      const dot = Math.max(-1,Math.min(1,u1.x*u2.x+u1.y*u2.y));
+      const ang = Math.acos(dot);
+      if (ang<0.02 || Math.PI-ang<0.02){ out.push({x:cur.x,y:cur.y}); continue; }
+      const half = ang/2;
+      let set = arc ? amount/Math.tan(half) : amount;   // fillet setback from radius, or chamfer distance
+      set = Math.min(set, l1*0.49, l2*0.49);
+      const t1 = {x:cur.x+u1.x*set, y:cur.y+u1.y*set};
+      const t2 = {x:cur.x+u2.x*set, y:cur.y+u2.y*set};
+      if (!arc){ out.push(t1, t2); continue; }
+      const rr = set*Math.tan(half);
+      const bis = {x:u1.x+u2.x,y:u1.y+u2.y}; const bl = Math.hypot(bis.x,bis.y)||1; const ub = {x:bis.x/bl,y:bis.y/bl};
+      const c = {x:cur.x+ub.x*(rr/Math.sin(half)), y:cur.y+ub.y*(rr/Math.sin(half))};
+      let a1 = Math.atan2(t1.y-c.y,t1.x-c.x), a2 = Math.atan2(t2.y-c.y,t2.x-c.x);
+      let da = a2-a1; while (da>Math.PI) da-=2*Math.PI; while (da<-Math.PI) da+=2*Math.PI;
+      const steps = Math.max(2, K||6);
+      for (let k=0;k<=steps;k++){ const a=a1+da*k/steps; out.push({x:c.x+rr*Math.cos(a), y:c.y+rr*Math.sin(a)}); }
+    }
+    return out;
+  }
+  function applyCornerMod(arc){
+    const label = arc ? tr("mod.filletamt","Fillet radius mm") : tr("mod.chamferamt","Chamfer distance mm");
+    const amt = parseFloat(prompt(label, arc ? "3" : "3")); if (!(amt>0)) return;
+    let changed = false;
+    for (const i of sel){ const sh=doc.shapes[i]; const g=sh&&sh.geometry; if (!g||!g.Polyline) continue;
+      g.Polyline.points = cornerMod(g.Polyline.points, !!g.Polyline.closed, amt, arc, 8).map(q=>p(q.x,q.y)); changed = true; }
+    if (changed){ snapshot(); render(); generate(); refreshCounts(); }
+    else setDevMsgNone();
+  }
+  function setDevMsgNone(){ /* no polyline shape selected; nothing to do */ }
   // Union box over the whole selection, in mm.
   function selBBox(){
     let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9, any=false;
@@ -2446,6 +2489,8 @@
     else if (a==="preview"){ openPreview(); return; }
     else if (a==="disth"){ distribute(true); return; }
     else if (a==="distv"){ distribute(false); return; }
+    else if (a==="fillet"){ applyCornerMod(true); return; }
+    else if (a==="chamfer"){ applyCornerMod(false); return; }
     else if (a==="lock"){ lockSelection(); return; }
     else if (a==="unlock"){ unlockSelection(); return; }
     else if (a==="import"){ $("file").click(); }
@@ -2915,6 +2960,10 @@
   Object.assign(I18N.de, { "action.depth":"Tiefengravur (Textur)…","prefs.depthlevels":"Tiefenstufen","prefs.depthinvert":"Tiefenrichtung","prefs.depthinvertlbl":"Dunkler schneidet tiefer (umkehren)" });
   Object.assign(I18N.fr, { "action.depth":"Gravure en profondeur (texture)…","prefs.depthlevels":"Niveaux de profondeur","prefs.depthinvert":"Sens de la profondeur","prefs.depthinvertlbl":"Le plus foncé coupe plus profond (inverser)" });
   Object.assign(I18N["pt-BR"], { "action.depth":"Gravação em profundidade (textura)…","prefs.depthlevels":"Níveis de profundidade","prefs.depthinvert":"Direção da profundidade","prefs.depthinvertlbl":"Mais escuro corta mais fundo (inverter)" });
+  Object.assign(I18N.es, { "action.fillet":"Redondear esquinas (empalme)…","action.chamfer":"Chaflán de esquinas…","mod.filletamt":"Radio de empalme mm","mod.chamferamt":"Distancia de chaflán mm" });
+  Object.assign(I18N.de, { "action.fillet":"Ecken abrunden (Verrundung)…","action.chamfer":"Ecken fasen…","mod.filletamt":"Verrundungsradius mm","mod.chamferamt":"Fasenabstand mm" });
+  Object.assign(I18N.fr, { "action.fillet":"Arrondir les coins (congé)…","action.chamfer":"Chanfreiner les coins…","mod.filletamt":"Rayon de congé mm","mod.chamferamt":"Distance de chanfrein mm" });
+  Object.assign(I18N["pt-BR"], { "action.fillet":"Arredondar cantos (filete)…","action.chamfer":"Chanfrar cantos…","mod.filletamt":"Raio do filete mm","mod.chamferamt":"Distância do chanfro mm" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -2990,6 +3039,7 @@
     else if (act==="preview"){ generate(); openPreview(); }
     else if (act==="cutsettings"){ openCutSettings(0); }
     else if (act==="galvosettings"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); }
+    else if (act==="fillet"){ doc.shapes=[rect(40,30,70,50,0)]; sel=new Set([0]); selected=0; const g=doc.shapes[0].geometry.Polyline; g.points=cornerMod(g.points,true,12,true,8).map(q=>p(q.x,q.y)); render(); refreshCounts(); }
     else if (act==="galvoports"){ populateMachines("2"); applyMachine(allMachines()[2]); openGalvoSettings(2); const pb=document.querySelector('.gdtabs button[data-gd="ports"]'); if(pb) pb.click(); addIoPort(); addIoPort(); gdIoPorts[0].purpose="reddot"; gdIoPorts[1].purpose="marking"; renderIoTable(); }
     else if (act==="star"){ doc.shapes.push(star(75,55,40,40,5,0)); selectOnly(doc.shapes.length-1); render(); refreshCounts(); }
     else if (act==="cs"){ openCutSettings(2); }
