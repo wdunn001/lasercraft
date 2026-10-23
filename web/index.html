@@ -3348,13 +3348,15 @@
     { id:"lbrn",     ext:[".lbrn",".lbrn2"],                              label:"LightBurn project",     io:"import", role:"vector",   input:"file" },
     { id:"hpgl",     ext:[".plt",".hpgl"],                                label:"HPGL plot",             io:"import", role:"vector",   input:"file" },
     { id:"gcin",     ext:[".gc",".nc",".cnc"],                            label:"G-code program",        io:"import", role:"vector",   input:"file" },
+    { id:"pdf",      ext:[".pdf",".ai"],                                  label:"PDF / Illustrator",     io:"import", role:"vector",   input:"file" },
   ];
   function acceptFor(inputId){ return FORMATS.filter(f=>f.input===inputId).flatMap(f=>f.ext).join(","); }
   // Drive every file input's accept list from the registry.
   ["file","imgFile","projFile","matFile","gdCorFile"].forEach(id => { const el=$(id); if (!el) return; const a=acceptFor(id); if (a) el.accept = (id==="imgFile") ? ("image/*,"+a) : a; });
   $("file").onchange = ev => {
     const f = ev.target.files[0]; if(!f) return; const rd=new FileReader();
-    const isDxf = /\.dxf$/i.test(f.name), isLbrn = /\.lbrn2?$/i.test(f.name), isHpgl = /\.(plt|hpgl)$/i.test(f.name), isGcode = /\.(gc|nc|cnc|gcode|ngc)$/i.test(f.name);
+    const isDxf = /\.dxf$/i.test(f.name), isLbrn = /\.lbrn2?$/i.test(f.name), isHpgl = /\.(plt|hpgl)$/i.test(f.name), isGcode = /\.(gc|nc|cnc|gcode|ngc)$/i.test(f.name), isPdf = /\.(pdf|ai)$/i.test(f.name);
+    if (isPdf){ rd.onload = () => { importPdf(rd.result).catch(e => console.error(e)); }; rd.readAsArrayBuffer(f); return; }
     rd.onload = () => { try { if (isLbrn) importLbrn(rd.result); else if (isDxf) importDxf(rd.result); else if (isHpgl) importHpgl(rd.result); else if (isGcode) importGcode(rd.result); else importSvg(rd.result); render(); refreshCounts(); } catch(e){ console.error(e); } };
     rd.readAsText(f);
   };
@@ -3438,6 +3440,65 @@
     if (!polys.length){ alert(tr("gci.none","No cutting moves found in that G-code.")); return; }
     const cut = doc.layers[activeLayer].index;
     const added = polys.map(pl => ({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.map(([px,py]) => p(px, py)), closed:false } } }));
+    doc.shapes.push(...added); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
+  }
+  // Import a PDF (or a modern Adobe Illustrator .ai, which is PDF inside): find the
+  // content streams, inflate the FlateDecode ones through DecompressionStream, and
+  // read the path operators (m, l, c, v, y, re, h) into polylines. The cm, q and Q
+  // operators carry the transform. PDF units are points at 72 per inch, Y up, which
+  // matches our model after scaling. Verified in an offline harness against plain
+  // and Flate-compressed PDFs.
+  const pdfLatin1 = (bytes) => { let s = ""; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return s; };
+  async function pdfInflate(bytes){
+    const ds = new DecompressionStream("deflate"); const w = ds.writable.getWriter(); w.write(bytes); w.close();
+    const out = []; const r = ds.readable.getReader();
+    for (;;){ const { done, value } = await r.read(); if (done) break; out.push(value); }
+    let len = 0; out.forEach(c => len += c.length); const res = new Uint8Array(len); let o = 0; out.forEach(c => { res.set(c, o); o += c.length; });
+    return res;
+  }
+  function pdfParseContent(content){
+    const toks = content.match(/-?\d*\.?\d+(?:e-?\d+)?|[A-Za-z*'"]+/g) || [];
+    const polys = []; let cur = null, start = null, x = 0, y = 0;
+    let ctm = [1,0,0,1,0,0]; const stack = []; const nums = [];
+    const mul = (m,n) => [m[0]*n[0]+m[2]*n[1], m[1]*n[0]+m[3]*n[1], m[0]*n[2]+m[2]*n[3], m[1]*n[2]+m[3]*n[3], m[0]*n[4]+m[2]*n[5]+m[4], m[1]*n[4]+m[3]*n[5]+m[5]];
+    const ap = (px,py) => [ctm[0]*px+ctm[2]*py+ctm[4], ctm[1]*px+ctm[3]*py+ctm[5]];
+    const flushPoly = () => { if (cur && cur.length >= 2) polys.push(cur); cur = null; };
+    const bez = (x0,y0,x1,y1,x2,y2,x3,y3) => { const N = 16; for (let i = 1; i <= N; i++){ const t = i/N, u = 1-t; cur.push(ap(u*u*u*x0+3*u*u*t*x1+3*u*t*t*x2+t*t*t*x3, u*u*u*y0+3*u*u*t*y1+3*u*t*t*y2+t*t*t*y3)); } };
+    for (const tk of toks){
+      if (/^-?\d*\.?\d/.test(tk)){ nums.push(parseFloat(tk)); continue; }
+      const op = tk; const n = nums.splice(0);
+      if (op === "m"){ flushPoly(); x = n[0]; y = n[1]; start = [x,y]; cur = [ap(x,y)]; }
+      else if (op === "l"){ x = n[0]; y = n[1]; if (!cur) cur = [ap(x,y)]; else cur.push(ap(x,y)); }
+      else if (op === "c"){ if (cur) bez(x,y,n[0],n[1],n[2],n[3],n[4],n[5]); x = n[4]; y = n[5]; }
+      else if (op === "v"){ if (cur) bez(x,y,x,y,n[0],n[1],n[2],n[3]); x = n[2]; y = n[3]; }
+      else if (op === "y"){ if (cur) bez(x,y,n[0],n[1],n[2],n[3],n[2],n[3]); x = n[2]; y = n[3]; }
+      else if (op === "re"){ flushPoly(); const rx = n[0], ry = n[1], rw = n[2], rh = n[3]; cur = [ap(rx,ry), ap(rx+rw,ry), ap(rx+rw,ry+rh), ap(rx,ry+rh), ap(rx,ry)]; flushPoly(); }
+      else if (op === "h"){ if (cur && start) cur.push(ap(start[0], start[1])); }
+      else if (op === "cm"){ ctm = mul(ctm, [n[0],n[1],n[2],n[3],n[4],n[5]]); }
+      else if (op === "q"){ stack.push(ctm.slice()); }
+      else if (op === "Q"){ if (stack.length) ctm = stack.pop(); }
+      else if (op === "S" || op === "s" || op === "f" || op === "F" || op === "f*" || op === "B" || op === "b" || op === "n"){ if ((op === "s" || op === "b") && cur && start) cur.push(ap(start[0], start[1])); flushPoly(); }
+    }
+    flushPoly();
+    return polys;
+  }
+  async function importPdf(buf){
+    const bytes = new Uint8Array(buf); const text = pdfLatin1(bytes);
+    const polys = []; const re = /stream\r?\n/g; let m;
+    while ((m = re.exec(text))){
+      const s = m.index + m[0].length; const e = text.indexOf("endstream", s); if (e < 0) continue;
+      const dict = text.slice(text.lastIndexOf("<<", m.index), m.index);
+      let data = bytes.slice(s, e);
+      if (data[data.length-1] === 10) data = data.slice(0, -1);
+      if (data[data.length-1] === 13) data = data.slice(0, -1);
+      if (/FlateDecode/.test(dict)){ try { data = await pdfInflate(data); } catch(err){ continue; } }
+      const content = pdfLatin1(data);
+      if (/[\d.\s](re|m|l|c)\b/.test(content)){ for (const pl of pdfParseContent(content)) polys.push(pl); }
+    }
+    if (!polys.length){ alert(tr("pdf.none","No vector paths found in that PDF.")); return; }
+    const toMm = 25.4 / 72;                                // PDF points to millimetres
+    const cut = doc.layers[activeLayer].index;
+    const added = polys.map(pl => ({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.map(([px,py]) => p(px*toMm, py*toMm)), closed: false } } }));
     doc.shapes.push(...added); selectOnly(null); snapshot(); render(); generate(); refreshCounts();
   }
   // Import a LightBurn project (.lbrn/.lbrn2). Each CutSetting becomes a layer; Rect,
@@ -3740,10 +3801,10 @@
   Object.assign(I18N.de, { "action.mergecsv":"CSV in Text einfügen…","merge.need":"Wählen Sie zuerst ein Textobjekt, dann eine CSV.","merge.empty":"Diese CSV hat keine Datenzeilen.","action.textpath":"Text auf Pfad","top.need":"Wählen Sie ein Textobjekt und einen Pfad.","top.badpath":"Diese Form hat keinen nutzbaren Pfad." });
   Object.assign(I18N.fr, { "action.mergecsv":"Fusionner un CSV dans le texte…","merge.need":"Sélectionnez d'abord un objet texte, puis choisissez un CSV.","merge.empty":"Ce CSV n'a aucune ligne de données.","action.textpath":"Texte sur chemin","top.need":"Sélectionnez un objet texte et un chemin.","top.badpath":"Cette forme n'a pas de chemin utilisable." });
   Object.assign(I18N["pt-BR"], { "action.mergecsv":"Mesclar CSV no texto…","merge.need":"Selecione primeiro um objeto de texto, depois escolha um CSV.","merge.empty":"Esse CSV não tem linhas de dados.","action.textpath":"Texto no caminho","top.need":"Selecione um objeto de texto e um caminho.","top.badpath":"Essa forma não tem um caminho utilizável." });
-  Object.assign(I18N.es, { "hpgl.none":"No se encontraron trazos en ese archivo HPGL.","gci.none":"No se encontraron movimientos de corte en ese G-code." });
-  Object.assign(I18N.de, { "hpgl.none":"Keine Pfade in dieser HPGL-Datei gefunden.","gci.none":"Keine Schnittbewegungen in diesem G-Code gefunden." });
-  Object.assign(I18N.fr, { "hpgl.none":"Aucun tracé trouvé dans ce fichier HPGL.","gci.none":"Aucun mouvement de coupe trouvé dans ce G-code." });
-  Object.assign(I18N["pt-BR"], { "hpgl.none":"Nenhum traço encontrado nesse arquivo HPGL.","gci.none":"Nenhum movimento de corte encontrado nesse G-code." });
+  Object.assign(I18N.es, { "hpgl.none":"No se encontraron trazos en ese archivo HPGL.","gci.none":"No se encontraron movimientos de corte en ese G-code.","pdf.none":"No se encontraron trazos vectoriales en ese PDF." });
+  Object.assign(I18N.de, { "hpgl.none":"Keine Pfade in dieser HPGL-Datei gefunden.","gci.none":"Keine Schnittbewegungen in diesem G-Code gefunden.","pdf.none":"Keine Vektorpfade in dieser PDF gefunden." });
+  Object.assign(I18N.fr, { "hpgl.none":"Aucun tracé trouvé dans ce fichier HPGL.","gci.none":"Aucun mouvement de coupe trouvé dans ce G-code.","pdf.none":"Aucun tracé vectoriel trouvé dans ce PDF." });
+  Object.assign(I18N["pt-BR"], { "hpgl.none":"Nenhum traço encontrado nesse arquivo HPGL.","gci.none":"Nenhum movimento de corte encontrado nesse G-code.","pdf.none":"Nenhum traço vetorial encontrado nesse PDF." });
   Object.assign(I18N.es, { "action.qr":"Crear código QR…","qr.text":"Texto o URL del QR","qr.module":"Tamaño de módulo mm","qr.toolong":"Ese texto es demasiado largo para este codificador (máx. unos 213 bytes)." });
   Object.assign(I18N.de, { "action.qr":"QR-Code erstellen…","qr.text":"QR-Text oder URL","qr.module":"Modulgröße mm","qr.toolong":"Dieser Text ist für diesen Encoder zu lang (max. etwa 213 Byte)." });
   Object.assign(I18N.fr, { "action.qr":"Créer un code QR…","qr.text":"Texte ou URL du QR","qr.module":"Taille de module mm","qr.toolong":"Ce texte est trop long pour cet encodeur (max. environ 213 octets)." });
@@ -3887,6 +3948,7 @@
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
     else if (act==="hpgl"){ importHpgl("IN;SP1;PU1000,1000;PD3000,1000,3000,2800,1000,2800,1000,1000;SP2;PU3600,1000;PD5600,1000,4600,3200,3600,1000;"); }
     else if (act==="gcin"){ importGcode("G21 G90\nM4 S0\nG0 X25 Y30\nG1 X70 Y30 S500\nG1 X70 Y70\nG1 X25 Y70\nG1 X25 Y30\nM5\nG0 X85 Y30\nM4 S500\nG1 X120 Y30\nG1 X102 Y72\nG1 X85 Y30\nM5\nG0 X0 Y0\n"); }
+    else if (act==="pdf"){ const b64="JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAzMDAgMzAwXS9Db250ZW50cyA0IDAgUj4+CmVuZG9iago0IDAgb2JqCjw8L0xlbmd0aCA2My9GaWx0ZXIvRmxhdGVEZWNvZGU+PgpzdHJlYW0KeJwzNFAwBCEDBQsDhaJUhWAuQ1OwUK6CEYSRo2BkYKBgCWJkKARzGRkogFTkKhgZQFQg0SCJZIVgLgDLGhB1CmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDUKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTQgMDAwMDAgbiAKMDAwMDAwMDEwNSAwMDAwMCBuIAowMDAwMDAwMTg1IDAwMDAwIG4gCnRyYWlsZXI8PC9TaXplIDUvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgozMTUKJSVFT0Y="; const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i); importPdf(bytes.buffer); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
     else if (act==="barcode"){ console.log("C128 entries", C128.length); doc.shapes=barcode128("LC-0001", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }
     else if (act==="code39"){ console.log("C39 entries", Object.keys(C39).length); doc.shapes=barcode39("LC-39", 25, 55, 18, 0.6, 0); selectOnly(null); render(); refreshCounts(); }

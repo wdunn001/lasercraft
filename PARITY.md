@@ -10,7 +10,7 @@ because every item ships at once.
 
 | # | Feature | Status | Notes |
 |---|---------|--------|-------|
-| 1 | New / Open / Save / Import / Export, project files | Done | Native .lcproj; SVG/DXF/image/.lbrn import; GCode/DXF export. .lbrn import composes group transforms and maps cut modes. |
+| 1 | New / Open / Save / Import / Export, project files | Done | Native .lcproj; SVG/DXF/image/.lbrn/HPGL/G-code/PDF/AI import; GCode/DXF export. PDF import inflates FlateDecode streams and reads path operators. |
 | 2 | Draw lines + shape tools (rect, ellipse, polygon, star) | Done | rect, rounded rect, ellipse, regular N-gon, freeform poly, star, slot, line, pen, text. |
 | 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
 | 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
@@ -38,7 +38,7 @@ because every item ships at once.
 
 ## By area (condensed)
 
-- Document/File: core open/save/import/export, LightBurn .lbrn import, HPGL (.plt) import Done. G-code (.gc/.nc) import Done. LightBurn's remaining import formats are AI, PDF, Ruida .rd, and Snapmaker .sc; AI and PDF share a PDF parser. (LightBurn does not import Gerber or STL/3D.) Templates, bundles, print: Gap.
+- Document/File: core open/save/import/export, LightBurn .lbrn import, HPGL (.plt) import Done. G-code (.gc/.nc) import, PDF and Adobe Illustrator (.ai, PDF inside) import Done. LightBurn's remaining import formats are Ruida .rd (binary) and Snapmaker .sc. (LightBurn does not import Gerber or STL/3D.) Templates, bundles, print: Gap.
 - Drawing: primary shapes, rounded rect, slot, regular N-gon, star, Code 128, Code 39, QR code (byte mode, versions 1 to 10, decoder-verified) Done; other 1D/2D symbologies (Data Matrix, EAN/UPC) Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
 - Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
 - Node editing: insert/delete/move, trim, extend Done; convert-curve/break/optimize/warp/deform: Gap.
