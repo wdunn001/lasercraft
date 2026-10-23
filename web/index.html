@@ -966,11 +966,18 @@
   function groupBBox(){ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,any=false; for (const i of sel){ const sh=doc.shapes[i]; if(!sh) continue; const bb=bbox(sh); x0=Math.min(x0,bb.x0);y0=Math.min(y0,bb.y0);x1=Math.max(x1,bb.x1);y1=Math.max(y1,bb.y1);any=true; } return any?{x0,y0,x1,y1}:null; }
   function marqueeHits(x0,y0,x1,y1){ const lo={x:Math.min(x0,x1),y:Math.min(y0,y1)}, hi={x:Math.max(x0,x1),y:Math.max(y0,y1)}; const out=[]; doc.shapes.forEach((sh,i)=>{ const b=bbox(sh); if (b.x1>=lo.x&&b.x0<=hi.x&&b.y1>=lo.y&&b.y0<=hi.y) out.push(i); }); return out; }
   function deleteSelection(){ const idx=[...sel].sort((a,b)=>b-a); for (const i of idx) doc.shapes.splice(i,1); selectOnly(null); snapshot(); render(); refreshCounts(); }
-  function duplicateSelection(){ const added=[]; for (const i of [...sel].sort((a,b)=>a-b)){ const c=JSON.parse(JSON.stringify(doc.shapes[i])); moveShapeTo2(c,5,5); added.push(c); } const startIdx=doc.shapes.length; doc.shapes.push(...added); sel=new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1?startIdx:(added.length?startIdx:null); snapshot(); render(); refreshCounts(); }
+  // Give a batch of cloned shapes fresh group ids, so a duplicated group is
+  // independent of the original instead of fusing into it.
+  function remapGroups(shapes){
+    let next = doc.shapes.reduce((m,s)=>Math.max(m, s.group||0), 0) + 1;
+    const map = new Map();
+    for (const s of shapes){ if (s.group){ if (!map.has(s.group)) map.set(s.group, next++); s.group = map.get(s.group); } }
+  }
+  function duplicateSelection(){ const added=[]; for (const i of [...sel].sort((a,b)=>a-b)){ const c=JSON.parse(JSON.stringify(doc.shapes[i])); moveShapeTo2(c,5,5); added.push(c); } remapGroups(added); const startIdx=doc.shapes.length; doc.shapes.push(...added); sel=new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1?startIdx:(added.length?startIdx:null); snapshot(); render(); refreshCounts(); }
   // Clipboard of shapes, copied and pasted with a small offset so they are visible.
   let clipboard = [];
   function copySelection(){ if (!sel.size) return; clipboard = [...sel].sort((a,b)=>a-b).map(i => JSON.parse(JSON.stringify(doc.shapes[i]))); }
-  function pasteClipboard(){ if (!clipboard.length) return; const added = clipboard.map(s => { const c = JSON.parse(JSON.stringify(s)); moveShapeTo2(c, 6, 6); return c; }); const startIdx = doc.shapes.length; doc.shapes.push(...added); sel = new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1 ? startIdx : null; snapshot(); render(); refreshCounts(); }
+  function pasteClipboard(){ if (!clipboard.length) return; const added = clipboard.map(s => { const c = JSON.parse(JSON.stringify(s)); moveShapeTo2(c, 6, 6); return c; }); remapGroups(added); const startIdx = doc.shapes.length; doc.shapes.push(...added); sel = new Set(added.map((_,k)=>startIdx+k)); selected = sel.size===1 ? startIdx : null; snapshot(); render(); refreshCounts(); }
   function setLayerForSelection(cutIndex){ for (const i of sel){ if (doc.shapes[i]) doc.shapes[i].cut_index = cutIndex; } snapshot(); render(); generate(); }
   let penAnchors = [], penDrag = false, measureA = null;
   // The ruler overlay between two mm points: a dashed line with a distance and
@@ -1376,15 +1383,16 @@
   }
   function applyFinish(f){
     const L = doc.layers[activeLayer]; if (!L) return;
+    const fin = (v)=>{ const n=+v; return Number.isFinite(n) ? n : null; };   // reject NaN/Infinity
     if (f.mode) L.mode = f.mode;
-    if (f.speed!=null) L.speed_mm_s = +f.speed;
-    if (f.power!=null) L.power_max = +f.power;
-    if (f.pmin!=null) L.power_min = +f.pmin;
-    L.num_passes = +f.passes || 1;
-    if (f.interval!=null) L.interval = +f.interval;
-    if (f.angle!=null) L.angle = +f.angle;
-    if (f.freq!=null) L.freq = +f.freq;
-    if (f.qpulse!=null) L.qpulse = +f.qpulse;
+    if (fin(f.speed)!=null) L.speed_mm_s = fin(f.speed);
+    if (fin(f.power)!=null) L.power_max = fin(f.power);
+    if (fin(f.pmin)!=null) L.power_min = fin(f.pmin);
+    L.num_passes = fin(f.passes) || 1;
+    if (fin(f.interval)!=null) L.interval = fin(f.interval);
+    if (fin(f.angle)!=null) L.angle = fin(f.angle);
+    if (fin(f.freq)!=null) L.freq = fin(f.freq);
+    if (fin(f.qpulse)!=null) L.qpulse = fin(f.qpulse);
     if (f.air!=null) L.air_assist = !!f.air;
     $("matBg").classList.remove("show");
     snapshot(); renderLayers(); render(); generate();
@@ -1470,14 +1478,18 @@
           name: g("name") || typ, mode: typ==="Scan" ? "Fill" : (typ==="Cut" ? "Line" : typ),
           speed: +(g("speed")||100), power: +(g("maxPower")||g("maxPowerValue")||0), pmin:+(g("minPower")||0),
           passes:+(g("numPasses")||1), interval: g("interval")!=null?+g("interval"):undefined,
-          freq: g("QPulseWidth")!=null?undefined:(g("frequency")!=null?+g("frequency")/1000:undefined),
-          air: g("enableAirAssist")==="1", note: g("name")&&g("name")!==typ ? "" : "" });
+          freq: g("frequency")!=null ? +g("frequency")/1000 : undefined,
+          qpulse: g("QPulseWidth")!=null ? +g("QPulseWidth") : undefined,
+          air: g("enableAirAssist")==="1", note: "" });
       });
       if (!mat.finishes.length) mat.finishes.push({ name:name, mode:"Line", speed:100, power:50, passes:1 });
       mats.push(mat); added++;
     });
     return added;
   }
+  // Optional numeric cell: undefined for a missing or blank cell, a finite number
+  // otherwise, never NaN (which would poison the engine's fill spacing).
+  function numOpt(cell){ if (cell==null) return undefined; const s=String(cell).trim(); if (s==="") return undefined; const v=+s; return Number.isFinite(v)?v:undefined; }
   function parseCsvMaterials(csv, mats){
     const lines = csv.split(/\r?\n/).filter(l=>l.trim()); if (!lines.length) return 0;
     const head = lines[0].split(",").map(h=>h.trim().toLowerCase());
@@ -1491,7 +1503,7 @@
       mat.finishes.push({
         name: (ci.finish>=0 && c[ci.finish] ? c[ci.finish].trim() : "Cut"), mode: (ci.mode>=0 && c[ci.mode] ? c[ci.mode].trim() : "Line"),
         speed:+(ci.speed>=0?c[ci.speed]:100)||100, power:+(ci.power>=0?c[ci.power]:0)||0, pmin:+(ci.pmin>=0?c[ci.pmin]:0)||0,
-        passes:+(ci.passes>=0?c[ci.passes]:1)||1, interval: ci.interval>=0?+c[ci.interval]:undefined, freq: ci.freq>=0?+c[ci.freq]:undefined,
+        passes:+(ci.passes>=0?c[ci.passes]:1)||1, interval: numOpt(ci.interval>=0?c[ci.interval]:undefined), freq: numOpt(ci.freq>=0?c[ci.freq]:undefined),
         air: ci.air>=0 ? /^(1|true|yes)$/i.test((c[ci.air]||"").trim()) : false, note: ci.note>=0 ? (c[ci.note]||"").trim() : "" });
     }
     return added;
@@ -1981,8 +1993,11 @@
       updateDeviceButtons();
     } catch(e){ setDev(tr("dev.connfail","Serial connect failed: ") + e.message); $("devstat").style.display="flex"; }
   }
+  // Resolve any parked sendLine waiters so a streamGcode loop unwinds cleanly
+  // instead of hanging on a promise that will never see its "ok".
+  function drainOkq(){ SERIAL.okq.splice(0).forEach(r => { try { r("abort"); } catch(e){} }); }
   async function disconnectSerial(){
-    SERIAL.running = false; SERIAL.paused = false;
+    SERIAL.running = false; SERIAL.paused = false; drainOkq();
     try { if (SERIAL.reader){ await SERIAL.reader.cancel(); } } catch(e){}
     try { if (SERIAL.writer){ SERIAL.writer.releaseLock(); } } catch(e){}
     try { if (SERIAL.port){ await SERIAL.port.close(); } } catch(e){}
@@ -2007,9 +2022,14 @@
   }
   function handleGrblLine(line){
     if (!line) return;
-    if (line === "ok" || line.startsWith("error") || line.startsWith("ALARM")){
+    // Only ok/error are command acknowledgements, one per sent line. ALARM is an
+    // unsolicited async push and must NOT consume an okq slot, or the stream desyncs.
+    if (line === "ok" || line.startsWith("error")){
       const w = SERIAL.okq.shift(); if (w) w(line);
-      if (line.startsWith("ALARM")) setDev("GRBL " + line + " — click Unlock ($X) to clear.");
+      return;
+    }
+    if (line.startsWith("ALARM")){
+      SERIAL.paused = true; setDev("GRBL " + line + " — click Unlock ($X) to clear."); updateDeviceButtons();
       return;
     }
     // Status report: <Idle|MPos:0.000,0.000,0.000|...>
@@ -2052,8 +2072,12 @@
   async function runJob(){
     if (!serialConnected()){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; }
     if (SERIAL.running){ setDev(tr("dev.busy","A job is already running.")); return; }
-    const g = $("gcode").textContent;
-    if (!g || !g.trim() || isGalvo()){ setDev(tr("dev.gennext","Generate G-code first.")); return; }
+    if (isGalvo() || !ready){ setDev(tr("dev.gennext","Generate G-code first.")); return; }
+    // Build the job fresh from the design, never from whatever the box displays
+    // (which may be a frame outline or an error string).
+    let g; try { g = generate_gcode(JSON.stringify(toProject()), MOTION, curFlavor); } catch(e){ setDev(String(e)); return; }
+    if (!g || !g.trim()){ setDev(tr("dev.gennext","Generate G-code first.")); return; }
+    $("gcode").textContent = g;
     if (!confirm(tr("dev.runconfirm","Run this job on the laser now? The beam will fire. Make sure the lid is closed, the area is clear, and you can reach Stop."))) return;
     // "Current position" start treats the head's current spot as work zero.
     const prefix = curStart === "current" ? "G92 X0 Y0\n" : "";
@@ -2067,7 +2091,7 @@
     updateDeviceButtons();
   }
   async function stopJob(){
-    SERIAL.running = false; SERIAL.paused = false; SERIAL.okq = [];
+    SERIAL.running = false; SERIAL.paused = false; drainOkq();
     await rawByte(0x18);   // GRBL soft reset: halts motion and clears the planner
     setDev(tr("dev.stopped","Stopped.")); updateDeviceButtons(); setTimeout(()=>rawWrite("?"), 300);
   }
