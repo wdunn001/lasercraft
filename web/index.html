@@ -180,6 +180,7 @@
       <span class="tplabel" data-i18n="text.add">Add Text</span>
       <input id="textIn" placeholder="type to mark…" data-i18n-ph="text.ph" style="width:200px" />
       <input id="textH" type="number" value="8" step="1" title="height mm" style="width:58px" />
+      <select id="textAlign" title="Alignment"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
       <button class="btn" id="addText" data-i18n="text.place">Place</button>
     </span>
     <span class="tgrp" id="tp-hint"><span class="tplabel" id="toolHint" data-i18n="tool.hint.select">Select and move. Drag a handle to scale or rotate.</span></span>
@@ -507,9 +508,21 @@
     measure:"Drag to measure distance and angle.",
   };
   function updateToolbar(){
-    const isText = tool === "text";
-    $("tp-text").style.display = isText ? "flex" : "none";
-    $("tp-hint").style.display = isText ? "none" : "flex";
+    const t = (typeof selText === "function") ? selText() : null;
+    const showText = tool === "text" || !!t;
+    $("tp-text").style.display = showText ? "flex" : "none";
+    $("tp-hint").style.display = showText ? "none" : "flex";
+    const lbl = $("tp-text").querySelector(".tplabel");
+    if (t){
+      if (document.activeElement !== $("textIn")) $("textIn").value = t.s;
+      if (document.activeElement !== $("textH")) $("textH").value = t.h;
+      if ($("textAlign")) $("textAlign").value = t.align || "left";
+      if (lbl) lbl.textContent = "Edit Text";
+      $("addText").style.display = "none";
+    } else {
+      if (lbl) lbl.textContent = "Add Text";
+      $("addText").style.display = "";
+    }
     const h = $("toolHint"); if (h) h.textContent = TOOL_HINT[tool] || TOOL_HINT.select;
   }
   const toolsEl = $("tools");
@@ -574,6 +587,7 @@
     if (drawing) s += drawing;
     canvas.innerHTML = s;
     if (typeof positionCam === "function") positionCam();
+    if (typeof updateToolbar === "function") updateToolbar();
   }
   function shapePoints(sh){ return sh.geometry.Polyline ? sh.geometry.Polyline.points : []; }
   // Editable control points for the node tool. Each entry references the live
@@ -592,9 +606,25 @@
     }
     return [];
   }
-  // The SVG path for a shape, in screen pixels. Handles both polylines and cubic paths.
+  // Generate the mm polylines for an editable Text object, positioned by its
+  // origin and alignment. The glyph geometry is cached by content, so dragging the
+  // text is cheap and only an edit to the string, height or spacing regenerates.
+  function textPolys(t){
+    if (!ready) return [];
+    const gap = (t.gap != null ? t.gap : (t.h||8) * 0.28);
+    const sig = (t.s||"")+"|"+(t.h||8)+"|"+gap+"|"+(t.align||"left");
+    if (t._sig !== sig){
+      let base = []; try { base = JSON.parse(text_to_paths(t.s||"", t.h||8, 0, 0, gap)); } catch(e){ base = []; }
+      let w = 0; for (const pl of base) for (const a of pl) if (a[0] > w) w = a[0];
+      t._base = base; t._w = w; t._sig = sig;
+    }
+    const off = t.align==="center" ? -t._w/2 : (t.align==="right" ? -t._w : 0);
+    return (t._base||[]).map(pl => pl.map(a => ({ x:(t.x||0)+off+a[0], y:(t.y||0)+a[1] })));
+  }
+  // The SVG path for a shape, in screen pixels. Handles polylines, cubic paths and text.
   function shapeD(sh){
     const g = sh.geometry;
+    if (g.Text){ const polys = textPolys(g.Text); if (!polys.length) return ""; return polys.map(pl => pl.map(mm2px).map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ")).join(" "); }
     if (g.Polyline){ const pts = g.Polyline.points.map(mm2px); if (!pts.length) return ""; return pts.map((q,k)=>(k?"L":"M")+q.x.toFixed(1)+" "+q.y.toFixed(1)).join(" ") + (g.Polyline.closed?" Z":""); }
     if (g.Path){ const P = g.Path; const s0 = mm2px(P.start); let d = "M "+s0.x.toFixed(1)+" "+s0.y.toFixed(1);
       for (const seg of P.segments){
@@ -607,6 +637,7 @@
   // Flattened mm points of a shape, for the bounding box and hit testing.
   function shapeFlatPts(sh){
     const g = sh.geometry;
+    if (g.Text){ const out=[]; for (const pl of textPolys(g.Text)) for (const q of pl) out.push(q); return out; }
     if (g.Polyline) return g.Polyline.points;
     if (g.Path){ const pts = [g.Path.start]; let a = g.Path.start;
       for (const seg of g.Path.segments){
@@ -621,6 +652,7 @@
   // Visit every anchor and control point of a shape, polyline or cubic path.
   function eachPoint(sh, fn){
     const g = sh.geometry;
+    if (g.Text){ fn(g.Text); return; }
     if (g.Polyline){ for (const q of g.Polyline.points) fn(q); return; }
     if (g.Path){ fn(g.Path.start); for (const seg of g.Path.segments){ if (seg.Cubic){ fn(seg.Cubic.c1); fn(seg.Cubic.c2); fn(seg.Cubic.to); } else if (seg.Line){ fn(seg.Line.to); } } }
   }
@@ -631,6 +663,9 @@
   // scale both axes about the opposite corner, four edges scale one axis about the
   // opposite edge, and a stem above the box rotates about the centre.
   function transformHandles(sh){
+    // A Text object resizes through its Height field, not corner handles, so it
+    // shows none. Dragging still moves it.
+    if (sh.geometry && sh.geometry.Text) return [];
     const bb = bbox(sh), cx=(bb.x0+bb.x1)/2, cy=(bb.y0+bb.y1)/2, m = 14/view.s;
     return [
       { kind:"corner", x:bb.x0, y:bb.y0, ax:bb.x1, ay:bb.y1 },
@@ -712,8 +747,7 @@
       penAnchors.push({ p:{x:m.x,y:m.y}, hIn:{x:m.x,y:m.y}, hOut:{x:m.x,y:m.y} });
       penDrag = true; drawing = penPreview(); render(); return;
     }
-    if (tool === "text"){ const str = ($("textIn").value||"").trim(); if (!str) return; const h = +$("textH").value || 8;
-      const shapes = engineTextShapes(str, m.x, m.y - h/2, h, doc.layers[activeLayer].index); doc.shapes.push(...shapes); selected = null; render(); refreshCounts(); return; }
+    if (tool === "text"){ placeText(m.x, m.y); return; }
     if (tool === "measure"){ measureA = m; drawing = measureOverlay(m, m); render(); return; }
     if (tool === "node") {
       dragNode = hitNode(e.clientX, e.clientY);
@@ -976,10 +1010,18 @@
   populateMachines("0");
 
   // ---- export to engine project JSON ----
+  // Expand a Text object into polyline shapes the engine understands. Every other
+  // shape passes through unchanged.
+  function expandShape(sh){
+    if (sh.geometry && sh.geometry.Text){
+      return textPolys(sh.geometry.Text).filter(pl => pl.length >= 2).map(pl => ({ kind:"Path", cut_index:sh.cut_index, geometry:{ Polyline:{ points: pl.map(q=>p(q.x,q.y)), closed:false } } }));
+    }
+    return [sh];
+  }
   function toProject(){
     return {
       app_version: "web",
-      shapes: doc.shapes,
+      shapes: doc.shapes.flatMap(expandShape),
       cut_settings: doc.layers.map(L=>({
         index:L.index, name:L.name, speed_mm_s:L.speed_mm_s, power_min:L.power_min, power_max:L.power_max,
         num_passes:L.num_passes, air_assist:L.air_assist,
@@ -1087,13 +1129,21 @@
     render(); refreshCounts();
   }
 
-  $("addText").onclick = () => {
-    const str = $("textIn").value.trim(); if (!str) return;
-    const h = +$("textH").value || 8;
-    const shapes = engineTextShapes(str, 20, BED.h/2, h, doc.layers[activeLayer].index);
-    doc.shapes.push(...shapes); selected = null; render(); refreshCounts();
-  };
-  $("textIn").addEventListener("keydown", e => { if (e.key === "Enter") $("addText").click(); });
+  // The live Text object under the selection, or null.
+  function selText(){ const sh = selected!=null ? doc.shapes[selected] : null; return (sh && sh.geometry && sh.geometry.Text) ? sh.geometry.Text : null; }
+  // Create an editable Text object at (x, y) from the current bar settings.
+  function placeText(x, y){
+    const str = ($("textIn").value||"").trim(); if (!str) return;
+    const h = +$("textH").value || 8; const al = $("textAlign") ? $("textAlign").value : "left";
+    doc.shapes.push({ kind:"Text", cut_index:doc.layers[activeLayer].index, geometry:{ Text:{ s:str, x, y:y - h/2, h, gap:h*0.28, align:al } } });
+    selected = doc.shapes.length - 1; snapshot(); render(); refreshCounts(); updateToolbar();
+  }
+  $("addText").onclick = () => placeText(20, BED.h/2);
+  $("textIn").addEventListener("keydown", e => { if (e.key === "Enter" && !selText()) $("addText").click(); });
+  // Editing the bar while a Text object is selected updates it in place.
+  $("textIn").addEventListener("input", () => { const t = selText(); if (t){ t.s = $("textIn").value; render(); generate(); refreshCounts(); } });
+  $("textH").addEventListener("input", () => { const t = selText(); if (t){ t.h = +$("textH").value || 8; t.gap = t.h*0.28; render(); generate(); } });
+  $("textAlign").addEventListener("change", () => { const t = selText(); if (t){ t.align = $("textAlign").value; render(); generate(); } });
 
   $("genBtn").onclick = generate;
   $("frameBtn").onclick = () => { if(!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":$("flavor").value); } catch(e){ $("gcode").textContent=String(e); } };
@@ -1543,6 +1593,11 @@
       pr(0,"LINE");pr(10,20);pr(20,160);pr(11,120);pr(21,185);
       pr(0,"ENDSEC");pr(0,"EOF");
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
+    else if (act==="textobj"){ $("textIn").value="Hello 2026"; $("textH").value=16;
+      doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"Hello 2026", x:18, y:95, h:16, gap:16*0.28, align:"left" } } },
+        { kind:"Text", cut_index:1, geometry:{ Text:{ s:"centered label", x:75, y:55, h:11, gap:11*0.28, align:"center" } } },
+        { kind:"Text", cut_index:2, geometry:{ Text:{ s:"SN-00421", x:138, y:20, h:9, gap:9*0.28, align:"right" } } }];
+      selected=0; render(); refreshCounts(); }
     else if (act==="svgpath"){ const svg = '<svg xmlns="http://www.w3.org/2000/svg">'
       + '<path d="M 30 40 C 50 90 100 90 120 40 C 100 10 50 10 30 40 Z"/>'
       + '<path d="M 20 120 L 60 100 L 100 130 L 140 110"/></svg>';
