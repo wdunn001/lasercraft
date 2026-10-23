@@ -14,7 +14,7 @@ because every item ships at once.
 | 2 | Draw lines + shape tools (rect, ellipse, polygon, star) | Done | rect, rounded rect, ellipse, regular N-gon, freeform poly, star, slot, line, pen, text. |
 | 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
 | 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
-| 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled). |
+| 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled); text-on-path warps glyphs along a selected curve. |
 | 6 | Variable text (serial, date/time, CSV merge) | Done | Serial numbers (%N token), date/time insert, and CSV merge (%col% / {col} tokens, one copy per row) all done. |
 | 7 | Group / Ungroup | Done | Group id on shapes, group-aware selection, Ctrl+G / Ctrl+Shift+G. |
 | 8 | Align and distribute | Done | Align to bed; distribute horizontally/vertically by even spacing. |
@@ -42,7 +42,7 @@ because every item ships at once.
 - Drawing: primary shapes, rounded rect, slot, regular N-gon, star Done; bar code Partial (Code 128; QR and the other 26 symbologies Gap); tabs tool Partial (per-layer tabs done, manual placement Gap).
 - Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend Done. Nesting, dock, two-point rotate, mirror-across-line: Gap.
 - Node editing: insert/delete/move, trim, extend Done; convert-curve/break/optimize/warp/deform: Gap.
-- Text: core + alignment + fonts + variable text (serial, date/time, CSV merge) Done; text-on-path, bending: Gap; bar code Partial (Code 128).
+- Text: core + alignment + fonts + variable text (serial, date/time, CSV merge) + text-on-path Done; bending: Gap; bar code Partial (Code 128).
 - Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs/bridges, perforation, lead-in/out, overcut, kerf offset (all applied in the G-code path) Done; sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
 - Material library: Done (editable, per-machine, multi-finish, 3-format import). Material/focus/interval test generators: Gap.
 - Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI) Done; bidirectional, overscan, fill grouping, flood fill: Gap (engine work).

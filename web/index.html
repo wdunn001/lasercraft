@@ -245,7 +245,7 @@
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
-      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
+      <div class="dropdown"><div data-act="undo" data-i18n="action.undo">Undo</div><div data-act="redo" data-i18n="action.redo">Redo</div><div data-act="delete" data-i18n="action.delete">Delete selected</div><div data-act="dupe" data-i18n="action.dupe">Duplicate</div><div data-act="group" data-i18n="action.group">Group</div><div data-act="ungroup" data-i18n="action.ungroup">Ungroup</div><div data-act="preview" data-i18n="action.preview">Preview&hellip;</div><div data-act="disth" data-i18n="action.disth">Distribute horizontally</div><div data-act="distv" data-i18n="action.distv">Distribute vertically</div><div data-act="serialize" data-i18n="action.serialize">Serialize text&hellip;</div><div data-act="mergecsv" data-i18n="action.mergecsv">Merge CSV into text&hellip;</div><div data-act="textpath" data-i18n="action.textpath">Text on path</div><div data-act="datetime" data-i18n="action.datetime">Insert date/time&hellip;</div><div data-act="barcode" data-i18n="action.barcode">Create barcode&hellip;</div><div data-act="mattest" data-i18n="action.mattest">Material test&hellip;</div><div data-act="fillet" data-i18n="action.fillet">Round corners (fillet)&hellip;</div><div data-act="chamfer" data-i18n="action.chamfer">Chamfer corners&hellip;</div><div data-act="reverse" data-i18n="action.reverse">Reverse path direction</div><div data-act="lock" data-i18n="action.lock">Lock</div><div data-act="unlock" data-i18n="action.unlock">Unlock all</div><div class="sep"></div><div data-act="rotary" data-i18n="action.rotary">Rotary setup&hellip;</div><div data-act="arrange" data-i18n="action.arrange">Arrange&hellip;</div><div data-act="weld" data-i18n="action.weld">Weld (union)</div><div data-act="subtract" data-i18n="action.subtract">Subtract</div><div data-act="intersect" data-i18n="action.intersect">Intersect</div><div data-act="concentric" data-i18n="action.concentric">Concentric fill</div><div class="sep"></div><div data-act="prefs" data-i18n="action.prefs">Preferences&hellip;</div></div>
     </span>
     <span class="spacer"></span>
     <span class="stat" style="margin-right:14px"><span><span data-i18n="label.est">Est.</span> <b id="est">&mdash;</b></span></span>
@@ -2616,6 +2616,42 @@
     doc.shapes.splice(selected, 1); doc.shapes.push(...added);
     selectOnly(null); snapshot(); render(); generate(); refreshCounts();
   }
+  // Text on a path (LightBurn "Text on Path"): lay a selected text object's
+  // glyphs along a selected curve. The glyph x becomes arc length travelled along
+  // the path and the glyph height becomes the offset along the path normal.
+  function textOnPath(){
+    if (!ready){ alert(tr("top.need","Select one text object and one path.")); return; }
+    const idxs = [...sel];
+    let ti = -1, pi = -1;
+    for (const i of idxs){ if (doc.shapes[i] && doc.shapes[i].kind === "Text") ti = i; else if (doc.shapes[i]) pi = i; }
+    if (idxs.length !== 2 || ti < 0 || pi < 0){ alert(tr("top.need","Select one text object and one path.")); return; }
+    const t = doc.shapes[ti].geometry.Text;
+    const path = shapeFlatPts(doc.shapes[pi]);
+    if (!path || path.length < 2){ alert(tr("top.badpath","That shape has no usable path.")); return; }
+    let glyphs;
+    try { glyphs = JSON.parse(text_to_paths(t.s, t.h, 0, 0, t.h*0.28)); }
+    catch(e){ console.error(e); alert(tr("top.badpath","That shape has no usable path.")); return; }
+    // Arc-length table over the path segments.
+    const seg = []; let total = 0;
+    for (let i = 0; i < path.length - 1; i++){
+      const a = path[i], b = path[i+1]; const L = Math.hypot(b.x-a.x, b.y-a.y);
+      if (L > 1e-9){ seg.push({ a, b, L, acc: total }); total += L; }
+    }
+    if (!seg.length){ alert(tr("top.badpath","That shape has no usable path.")); return; }
+    const at = (d) => {
+      d = Math.max(0, Math.min(total, d));
+      let s = seg[0];
+      for (const cand of seg){ s = cand; if (d <= cand.acc + cand.L) break; }
+      const tt = (d - s.acc) / (s.L || 1);
+      return { x: s.a.x + (s.b.x-s.a.x)*tt, y: s.a.y + (s.b.y-s.a.y)*tt, tx: (s.b.x-s.a.x)/(s.L||1), ty: (s.b.y-s.a.y)/(s.L||1) };
+    };
+    const cut = doc.shapes[ti].cut_index;
+    const warped = glyphs.map(poly => poly.map(([px,py]) => { const f = at(px); return p(f.x - f.ty*py, f.y + f.tx*py); }));
+    const added = warped.filter(pts => pts.length >= 2).map(pts => ({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points:pts, closed:false } } }));
+    if (!added.length){ alert(tr("top.badpath","That shape has no usable path.")); return; }
+    doc.shapes.splice(ti, 1); doc.shapes.push(...added);     // drop the flat text, keep the path
+    selectOnly(null); snapshot(); render(); generate(); refreshCounts();
+  }
   // Create an editable Text object at (x, y) from the current bar settings.
   function placeText(x, y){
     const str = ($("textIn").value||"").trim(); if (!str) return;
@@ -2924,6 +2960,7 @@
     else if (a==="rotary"){ openRotary(); return; }
     else if (a==="serialize"){ serializeText(); return; }
     else if (a==="mergecsv"){ mergeCsvStart(); return; }
+    else if (a==="textpath"){ textOnPath(); return; }
     else if (a==="datetime"){ insertDateTime(); return; }
     else if (a==="barcode"){ createBarcode(); return; }
     else if (a==="mattest"){ materialTest(); return; }
@@ -3457,10 +3494,10 @@
   Object.assign(I18N.de, { "action.mattest":"Materialtest…","mt.cols":"Leistungsstufen (Spalten)","mt.rows":"Geschwindigkeitsstufen (Zeilen)","mt.toomany":"Zu viele Zellen. Die Palette fasst 28 Testebenen.","mt.pmin":"Min. Leistung %","mt.pmax":"Max. Leistung %","mt.smin":"Min. Geschwindigkeit mm/s","mt.smax":"Max. Geschwindigkeit mm/s","mt.cell":"Zellengröße mm","mt.labels":"Beschriftungen" });
   Object.assign(I18N.fr, { "action.mattest":"Test de matériau…","mt.cols":"Pas de puissance (colonnes)","mt.rows":"Pas de vitesse (lignes)","mt.toomany":"Trop de cellules. La palette contient 28 calques de test.","mt.pmin":"Puissance min %","mt.pmax":"Puissance max %","mt.smin":"Vitesse min mm/s","mt.smax":"Vitesse max mm/s","mt.cell":"Taille de cellule mm","mt.labels":"Étiquettes" });
   Object.assign(I18N["pt-BR"], { "action.mattest":"Teste de material…","mt.cols":"Passos de potência (colunas)","mt.rows":"Passos de velocidade (linhas)","mt.toomany":"Células demais. A paleta comporta 28 camadas de teste.","mt.pmin":"Potência mín %","mt.pmax":"Potência máx %","mt.smin":"Velocidade mín mm/s","mt.smax":"Velocidade máx mm/s","mt.cell":"Tamanho da célula mm","mt.labels":"Etiquetas" });
-  Object.assign(I18N.es, { "action.mergecsv":"Combinar CSV en texto…","merge.need":"Seleccione primero un objeto de texto, luego elija un CSV.","merge.empty":"Ese CSV no tiene filas de datos." });
-  Object.assign(I18N.de, { "action.mergecsv":"CSV in Text einfügen…","merge.need":"Wählen Sie zuerst ein Textobjekt, dann eine CSV.","merge.empty":"Diese CSV hat keine Datenzeilen." });
-  Object.assign(I18N.fr, { "action.mergecsv":"Fusionner un CSV dans le texte…","merge.need":"Sélectionnez d'abord un objet texte, puis choisissez un CSV.","merge.empty":"Ce CSV n'a aucune ligne de données." });
-  Object.assign(I18N["pt-BR"], { "action.mergecsv":"Mesclar CSV no texto…","merge.need":"Selecione primeiro um objeto de texto, depois escolha um CSV.","merge.empty":"Esse CSV não tem linhas de dados." });
+  Object.assign(I18N.es, { "action.mergecsv":"Combinar CSV en texto…","merge.need":"Seleccione primero un objeto de texto, luego elija un CSV.","merge.empty":"Ese CSV no tiene filas de datos.","action.textpath":"Texto sobre trayecto","top.need":"Seleccione un objeto de texto y un trayecto.","top.badpath":"Esa forma no tiene un trayecto utilizable." });
+  Object.assign(I18N.de, { "action.mergecsv":"CSV in Text einfügen…","merge.need":"Wählen Sie zuerst ein Textobjekt, dann eine CSV.","merge.empty":"Diese CSV hat keine Datenzeilen.","action.textpath":"Text auf Pfad","top.need":"Wählen Sie ein Textobjekt und einen Pfad.","top.badpath":"Diese Form hat keinen nutzbaren Pfad." });
+  Object.assign(I18N.fr, { "action.mergecsv":"Fusionner un CSV dans le texte…","merge.need":"Sélectionnez d'abord un objet texte, puis choisissez un CSV.","merge.empty":"Ce CSV n'a aucune ligne de données.","action.textpath":"Texte sur chemin","top.need":"Sélectionnez un objet texte et un chemin.","top.badpath":"Cette forme n'a pas de chemin utilisable." });
+  Object.assign(I18N["pt-BR"], { "action.mergecsv":"Mesclar CSV no texto…","merge.need":"Selecione primeiro um objeto de texto, depois escolha um CSV.","merge.empty":"Esse CSV não tem linhas de dados.","action.textpath":"Texto no caminho","top.need":"Selecione um objeto de texto e um caminho.","top.badpath":"Essa forma não tem um caminho utilizável." });
   Object.assign(I18N.es, { "action.barcode":"Crear código de barras…","bc.text":"Texto del código (Code 128)","bc.height":"Altura de barra mm","bc.module":"Barra estrecha mm","bc.none":"Sin caracteres codificables." });
   Object.assign(I18N.de, { "action.barcode":"Barcode erstellen…","bc.text":"Barcode-Text (Code 128)","bc.height":"Balkenhöhe mm","bc.module":"Schmaler Balken mm","bc.none":"Keine kodierbaren Zeichen." });
   Object.assign(I18N.fr, { "action.barcode":"Créer un code-barres…","bc.text":"Texte du code (Code 128)","bc.height":"Hauteur de barre mm","bc.module":"Barre étroite mm","bc.none":"Aucun caractère encodable." });
@@ -3595,6 +3632,7 @@
     else if (act==="lbrn"){ const xml=`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/><speed Value="15"/><maxPower Value="80"/></CutSetting><CutSetting type="Scan"><index Value="1"/><name Value="Engrave"/><speed Value="200"/><maxPower Value="40"/></CutSetting><Shape Type="Rect" CutIndex="0" W="60" H="40"><XForm>1 0 0 1 80 60</XForm></Shape><Shape Type="Ellipse" CutIndex="1" Rx="20" Ry="15"><XForm>1 0 0 1 45 100</XForm></Shape><Shape Type="Path" CutIndex="0"><XForm>1 0 0 1 0 0</XForm><VertList>V10 20V40 20V40 55V10 55</VertList><PrimList>LineClosed</PrimList></Shape><Shape Type="Group"><XForm>1 0 0 1 120 30</XForm><Children><Shape Type="Rect" CutIndex="1" W="22" H="22"><XForm>1 0 0 1 0 0</XForm></Shape></Children></Shape></LightBurnProject>`; doc.shapes=[]; importLbrn(xml); }
     else if (act==="serial"){ doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"SN-%N", x:20, y:95, h:9, gap:9*0.28, align:"left", font:"mark" } } }]; selectOnly(0); doSerialize(1,10,1,4); }
     else if (act==="mergecsv"){ doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"%name% %sku%", x:16, y:95, h:8, gap:8*0.28, align:"left", font:"mark" } } }]; selectOnly(0); doMergeCsv("name,sku\nAlpha,A-01\nBravo,B-02\nCharlie,C-03\nDelta,D-04\nEcho,E-05\nFoxtrot,F-06"); }
+    else if (act==="textpath"){ const arc=[]; for (let i=0;i<=40;i++){ const a=Math.PI*(1 - i/40); arc.push(p(80+55*Math.cos(a), 45+40*Math.sin(a))); } doc.shapes=[{ kind:"Text", cut_index:0, geometry:{ Text:{ s:"LASERCRAFT ON A CURVE", x:0, y:0, h:9, gap:9*0.28, align:"left", font:"mark" } } }, { kind:"Path", cut_index:1, geometry:{ Polyline:{ points:arc, closed:false } } }]; sel=new Set([0,1]); selected=0; textOnPath(); }
     else if (act==="prefs"){ $("prefBg").classList.add("show"); }
     else if (act==="console"){ $("consoleRow").style.display="flex"; $("consolePanel").style.display="block"; consoleLog("Grbl 1.1h ['$' for help]","rx"); consoleLog("$$","tx"); consoleLog("$30=1000","rx"); consoleLog("$110=6000.000","rx"); consoleLog("ok","rx"); consoleLog("G0 X10 Y10","tx"); consoleLog("ok","rx"); }
     else if (act==="lbrnempty"){ const before=doc.shapes.length; const n0=window.__alerts=0; const origAlert=window.alert; window.alert=()=>{window.__alerts++;}; importLbrn(`<?xml version="1.0"?><LightBurnProject AppVersion="1.0"><CutSetting type="Cut"><index Value="0"/><name Value="Cut"/></CutSetting><Shape Type="Group"><XForm>1 0 0 1 0 0</XForm><Children></Children></Shape></LightBurnProject>`); window.alert=origAlert; const kept=doc.shapes.length===before; $("gcode").textContent=`no-shape import: shapesBefore=${before} shapesAfter=${doc.shapes.length} kept=${kept} alerts=${window.__alerts} layers=${doc.layers.length}`; }
