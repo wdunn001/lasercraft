@@ -15,7 +15,7 @@ because every item ships at once.
 | 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
 | 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
 | 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled). |
-| 6 | Variable text (serial, date/time, CSV merge) | Gap | |
+| 6 | Variable text (serial, date/time, CSV merge) | Partial | Serial numbers via Serialize (%N token, start/count/step/digits); date/time + CSV merge: Gap. |
 | 7 | Group / Ungroup | Done | Group id on shapes, group-aware selection, Ctrl+G / Ctrl+Shift+G. |
 | 8 | Align and distribute | Done | Align to bed; distribute horizontally/vertically by even spacing. |
 | 9 | Boolean union / subtract / intersect + weld | Done | |
