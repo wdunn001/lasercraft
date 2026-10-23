@@ -205,6 +205,29 @@ pub fn import_dxf(text: &str) -> Result<String, JsError> {
     serde_json::to_string(&polys).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
 
+/// Write polylines out as an ASCII DXF drawing.
+///
+/// The input is a JSON array of `{ points: [[x, y], ...], closed: bool }`. The
+/// result is DXF text the page offers as a download. This is the inverse of
+/// [`import_dxf`], so a drawing round-trips through the editor.
+#[wasm_bindgen]
+pub fn export_dxf(polylines_json: &str) -> Result<String, JsError> {
+    #[derive(serde::Deserialize)]
+    struct Poly {
+        points: Vec<(f64, f64)>,
+        closed: bool,
+    }
+    let polys: Vec<Poly> = parse(polylines_json, "polylines")?;
+    let dxf: Vec<lasercraft_dxf::DxfPolyline> = polys
+        .into_iter()
+        .map(|p| lasercraft_dxf::DxfPolyline {
+            points: p.points,
+            closed: p.closed,
+        })
+        .collect();
+    Ok(lasercraft_dxf::write_dxf(&dxf))
+}
+
 /// Build a material-test grid project from `spec` and return it as project JSON.
 #[wasm_bindgen]
 pub fn material_test_project(spec_json: &str) -> Result<String, JsError> {

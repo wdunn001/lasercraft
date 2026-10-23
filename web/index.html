@@ -137,6 +137,7 @@
         <div data-act="import" data-i18n="action.import">Import SVG / DXF&hellip;</div>
         <div data-act="image" data-i18n="action.image">Import Image (dither)&hellip;</div>
         <div data-act="export" data-i18n="action.export">Export GCode&hellip;</div>
+        <div data-act="exportdxf" data-i18n="action.exportdxf">Export DXF&hellip;</div>
       </div>
     </span>
     <span class="m" data-menu="edit"><span data-i18n="menu.edit">Edit</span>
@@ -328,7 +329,7 @@
   </div>
 
 <script type="module">
-  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf } from "./pkg/lasercraft_wasm.js";
+  import init, { generate_gcode, generate_frame, estimate_seconds, generate_galvo_lmc, weld, concentric, boolean_op, text_to_paths, offset, import_dxf, export_dxf } from "./pkg/lasercraft_wasm.js";
 
   const PALETTE = ["#e23","#2a7","#39f","#fb0","#b5f","#0cc","#f70","#7d2","#e63","#09c","#9c3","#c39"];
   let BED = { w: 150, h: 150 };                 // work area in mm, set by the machine
@@ -1041,6 +1042,7 @@
     else if (a==="import"){ $("file").click(); }
     else if (a==="image"){ $("imgFile").click(); }
     else if (a==="export"){ const b=new Blob([$("gcode").textContent],{type:"text/plain"}); const u=URL.createObjectURL(b); const x=document.createElement("a"); x.href=u; x.download="job.gcode"; x.click(); }
+    else if (a==="exportdxf"){ exportDxf(); }
     else if (a==="weld"){ weldActive(); }
     else if (a==="subtract"){ booleanWith("difference"); }
     else if (a==="intersect"){ booleanWith("intersect"); }
@@ -1140,6 +1142,17 @@
     const cut = doc.layers[activeLayer].index;
     for (const pl of polys){ if (pl.points.length >= 2) doc.shapes.push({ kind:"Path", cut_index:cut, geometry:{ Polyline:{ points: pl.points.map(a => p(a[0], a[1])), closed: !!pl.closed } } }); }
     selected = null;
+  }
+  // Export every shape as DXF polylines. Cubic paths flatten to polylines first.
+  function exportDxf(){
+    if (!ready) return;
+    const polys = doc.shapes.map(sh => {
+      const closed = sh.geometry.Polyline ? !!sh.geometry.Polyline.closed : (sh.geometry.Path ? !!sh.geometry.Path.closed : false);
+      return { points: shapeFlatPts(sh).map(q => [q.x, q.y]), closed };
+    }).filter(pl => pl.points.length >= 2);
+    let text; try { text = export_dxf(JSON.stringify(polys)); } catch(e){ console.error(e); return; }
+    const b = new Blob([text], { type:"application/dxf" }); const u = URL.createObjectURL(b);
+    const x = document.createElement("a"); x.href = u; x.download = "lasercraft.dxf"; x.click(); URL.revokeObjectURL(u);
   }
   function importSvg(text){
     const d=new DOMParser().parseFromString(text,"image/svg+xml"); const cut=doc.layers[activeLayer].index;
@@ -1269,6 +1282,10 @@
   Object.assign(I18N.de, { "action.arrange":"Anordnen…","ar.title":"Anordnen","ar.grid":"Rasteranordnung","ar.cols":"Spalten","ar.rows":"Zeilen","ar.dx":"Abstand X mm","ar.dy":"Abstand Y mm","ar.apply":"Anwenden","ar.circ":"Kreisanordnung","ar.count":"Anzahl","ar.radius":"Radius mm","ar.align":"An Arbeitsfläche ausrichten","ar.a.center":"Zentrieren","ar.a.cx":"X zentrieren","ar.a.cy":"Y zentrieren","ar.a.left":"Links","ar.a.right":"Rechts","ar.a.top":"Oben","ar.a.bottom":"Unten","ar.note":"Zuerst eine Form wählen. Die Anordnung kopiert die Auswahl.","ar.offset":"Formen versetzen","ar.dist":"Abstand mm","ar.outset":"Vergrößern","ar.inset":"Verkleinern" });
   Object.assign(I18N.fr, { "action.arrange":"Agencer…","ar.title":"Agencer","ar.grid":"Réseau en grille","ar.cols":"Colonnes","ar.rows":"Lignes","ar.dx":"Écart X mm","ar.dy":"Écart Y mm","ar.apply":"Appliquer","ar.circ":"Réseau circulaire","ar.count":"Nombre","ar.radius":"Rayon mm","ar.align":"Aligner sur le plateau","ar.a.center":"Centrer","ar.a.cx":"Centrer X","ar.a.cy":"Centrer Y","ar.a.left":"Gauche","ar.a.right":"Droite","ar.a.top":"Haut","ar.a.bottom":"Bas","ar.note":"Sélectionnez une forme. Le réseau copie la sélection.","ar.offset":"Décaler les formes","ar.dist":"Distance mm","ar.outset":"Agrandir","ar.inset":"Réduire" });
   Object.assign(I18N["pt-BR"], { "action.arrange":"Organizar…","ar.title":"Organizar","ar.grid":"Matriz em grade","ar.cols":"Colunas","ar.rows":"Linhas","ar.dx":"Espaço X mm","ar.dy":"Espaço Y mm","ar.apply":"Aplicar","ar.circ":"Matriz circular","ar.count":"Quantidade","ar.radius":"Raio mm","ar.align":"Alinhar à mesa","ar.a.center":"Centralizar","ar.a.cx":"Centralizar X","ar.a.cy":"Centralizar Y","ar.a.left":"Esquerda","ar.a.right":"Direita","ar.a.top":"Topo","ar.a.bottom":"Base","ar.note":"Selecione uma forma. A matriz copia a seleção.","ar.offset":"Deslocar formas","ar.dist":"Distância mm","ar.outset":"Expandir","ar.inset":"Reduzir" });
+  Object.assign(I18N.es, { "action.exportdxf":"Exportar DXF…" });
+  Object.assign(I18N.de, { "action.exportdxf":"DXF exportieren…" });
+  Object.assign(I18N.fr, { "action.exportdxf":"Exporter DXF…" });
+  Object.assign(I18N["pt-BR"], { "action.exportdxf":"Exportar DXF…" });
   Object.assign(I18N.es, { "layer.speed":"Velocidad","layer.power":"Potencia","layer.passes":"Pasadas","layer.air_assist":"Asistencia de aire" });
   Object.assign(I18N.de, { "layer.speed":"Geschwindigkeit","layer.power":"Leistung","layer.passes":"Durchgänge","layer.air_assist":"Luftunterstützung" });
   Object.assign(I18N.fr, { "layer.speed":"Vitesse","layer.power":"Puissance","layer.passes":"Passes","layer.air_assist":"Assistance d'air" });
@@ -1341,6 +1358,15 @@
       pr(0,"LINE");pr(10,20);pr(20,160);pr(11,120);pr(21,185);
       pr(0,"ENDSEC");pr(0,"EOF");
       doc.shapes=[]; importDxf(L.join("\n")); render(); refreshCounts(); }
+    else if (act==="dxfround"){ const L=[], pr=(c,v)=>{L.push(c);L.push(v);};
+      pr(0,"SECTION");pr(2,"ENTITIES");
+      pr(0,"LWPOLYLINE");pr(90,4);pr(70,1);pr(10,20);pr(20,20);pr(10,90);pr(20,20);pr(42,0.6);pr(10,90);pr(20,55);pr(10,20);pr(20,55);
+      pr(0,"CIRCLE");pr(10,145);pr(20,115);pr(40,22);
+      pr(0,"ENDSEC");pr(0,"EOF");
+      doc.shapes=[]; importDxf(L.join("\n"));
+      const polys = doc.shapes.map(sh => ({ points: shapeFlatPts(sh).map(q=>[q.x,q.y]), closed: sh.geometry.Polyline ? !!sh.geometry.Polyline.closed : false }));
+      const text = export_dxf(JSON.stringify(polys));
+      doc.shapes=[]; importDxf(text); render(); refreshCounts(); }
   }).catch(e=>{ $("wasmok").textContent="WASM failed"; $("gcode").textContent=String(e); });
 </script>
 </body>

@@ -307,6 +307,33 @@ pub fn parse_dxf(text: &str) -> Vec<DxfPolyline> {
     out
 }
 
+/// Write polylines as an ASCII DXF drawing.
+///
+/// The output is an R12-style file: each polyline is a POLYLINE entity with its
+/// VERTEX list and a SEQEND, on layer 0. R12 needs no subclass markers, so the
+/// file reads in the widest range of tools, this crate's own reader included. A
+/// closed polyline sets the closed flag. Coordinates are drawing units, which laser
+/// work treats as millimetres.
+pub fn write_dxf(polylines: &[DxfPolyline]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    out.push_str("0\nSECTION\n2\nENTITIES\n");
+    for poly in polylines {
+        if poly.points.len() < 2 {
+            continue;
+        }
+        let flag = if poly.closed { 1 } else { 0 };
+        // 66 marks that vertices follow, which R12 POLYLINE requires.
+        let _ = write!(out, "0\nPOLYLINE\n8\n0\n66\n1\n70\n{flag}\n");
+        for &(x, y) in &poly.points {
+            let _ = write!(out, "0\nVERTEX\n8\n0\n10\n{x}\n20\n{y}\n30\n0\n");
+        }
+        out.push_str("0\nSEQEND\n");
+    }
+    out.push_str("0\nENDSEC\n0\nEOF\n");
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +423,23 @@ mod tests {
             assert!(poly.closed);
             assert_eq!(poly.points.len(), 3);
         }
+    }
+
+    #[test]
+    fn write_then_read_round_trips() {
+        let polys = vec![
+            DxfPolyline {
+                points: vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)],
+                closed: true,
+            },
+            DxfPolyline {
+                points: vec![(1.0, 2.0), (3.0, 4.0)],
+                closed: false,
+            },
+        ];
+        let text = write_dxf(&polys);
+        let back = parse_dxf(&text);
+        assert_eq!(back, polys);
     }
 
     #[test]
