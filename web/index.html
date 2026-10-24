@@ -113,7 +113,10 @@
   .cols { display: grid; grid-template-columns: 46px 1fr 96px; padding: 5px 14px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
   .cols span:nth-child(n+4) { text-align: center; }
   .layers { overflow-y: auto; max-height: 190px; }
-  .row { display: grid; grid-template-columns: 42px 1fr 72px 26px 24px; align-items: center; gap: 2px; padding: 8px 12px; border-top: 1px solid var(--line); cursor: pointer; position: relative; }
+  .row { display: grid; grid-template-columns: 42px 1fr 72px 26px 24px 20px; align-items: center; gap: 2px; padding: 8px 12px; border-top: 1px solid var(--line); cursor: pointer; position: relative; }
+  .row .lyr-del { justify-self: center; cursor: pointer; opacity: .45; font-size: 16px; line-height: 1; }
+  .row:hover .lyr-del { opacity: .8; }
+  .row .lyr-del:hover { opacity: 1; color: #e2554b; }
   .row.dragover { box-shadow: inset 0 2px 0 var(--accent); }
   .row .eye { font-size: 13px; justify-self: center; cursor: pointer; opacity: .85; }
   .row .eye.off { opacity: .35; }
@@ -2053,14 +2056,15 @@
         +`<span class="badge ${cls}">${trMode(L.mode)}</span>`
         +`<span class="sp">${L.speed_mm_s} <span class="pw">/ ${L.power_max}%</span></span>`
         +`<span class="sw-toggle ${out?"":"off"}" title="${tr("layer.output","Output this layer")}"></span>`
-        +`<span class="eye ${shown?"":"off"}" title="${tr("layer.show","Show this layer")}">${shown?"&#128065;":"&#8856;"}</span>`;
+        +`<span class="eye ${shown?"":"off"}" title="${tr("layer.show","Show this layer")}">${shown?"&#128065;":"&#8856;"}</span>`
+        +`<span class="lyr-del" title="${tr("layer.delete","Delete this layer")}">&times;</span>`;
       el.draggable = true;
       // Click a row: make it active, and select its shapes on the canvas so the
       // selection and the layer stay in step.
-      el.onclick=(ev)=>{ if (ev.target.closest(".sw")||ev.target.closest(".sw-toggle")||ev.target.closest(".eye")) return; activeLayer=i; selectLayerShapes(L.index); renderLayers(); render(); };
+      el.onclick=(ev)=>{ if (ev.target.closest(".sw")||ev.target.closest(".sw-toggle")||ev.target.closest(".eye")||ev.target.closest(".lyr-del")) return; activeLayer=i; selectLayerShapes(L.index); renderLayers(); render(); };
       // Double-click a row opens the full Cut Settings Editor; double-click the
       // name alone renames in place.
-      el.ondblclick=(ev)=>{ if (ev.target.closest(".sw")||ev.target.closest(".sw-toggle")||ev.target.closest(".eye")||ev.target.closest(".n")) return; openCutSettings(i); };
+      el.ondblclick=(ev)=>{ if (ev.target.closest(".sw")||ev.target.closest(".sw-toggle")||ev.target.closest(".eye")||ev.target.closest(".n")||ev.target.closest(".lyr-del")) return; openCutSettings(i); };
       el.querySelector(".n").ondblclick=(ev)=>{ ev.stopPropagation(); beginRenameLayer(el, i); };
       // Click the swatch to open the color palette for this layer.
       el.querySelector(".sw").onclick=(ev)=>{ ev.stopPropagation(); openColorPicker(ev.currentTarget, L); };
@@ -2068,6 +2072,7 @@
       // job, Show hides it on the canvas.
       el.querySelector(".sw-toggle").onclick=(ev)=>{ ev.stopPropagation(); L.output = L.output===false; renderLayers(); generate(); };
       el.querySelector(".eye").onclick=(ev)=>{ ev.stopPropagation(); L.show = L.show===false; renderLayers(); render(); };
+      el.querySelector(".lyr-del").onclick=(ev)=>{ ev.stopPropagation(); deleteLayer(i); };
       // Drag a row onto another to reorder cut order.
       el.ondragstart=(ev)=>{ ev.dataTransfer.setData("text/plain", String(i)); ev.dataTransfer.effectAllowed="move"; };
       el.ondragover=(ev)=>{ ev.preventDefault(); el.classList.add("dragover"); };
@@ -2081,6 +2086,25 @@
   // renderPalette is retired with the bottom palette bar; kept as a no-op so the
   // many existing call sites stay valid.
   function renderPalette(){}
+  // Delete a layer. At least one layer must remain. If the layer holds shapes,
+  // confirm first, then remove those shapes with it (undo restores them). The
+  // active layer is clamped back into range afterward.
+  function deleteLayer(i){
+    if (!doc.layers[i]) return;
+    if (doc.layers.length <= 1){ setDev(tr("layer.keepone","At least one layer must remain.")); return; }
+    const L = doc.layers[i];
+    const onLayer = doc.shapes.filter(sh => sh.cut_index === L.index).length;
+    if (onLayer > 0){
+      const msg = tr("layer.delconfirm","Delete layer \"{name}\" and its {n} shape(s)?").replace("{name}", L.name).replace("{n}", onLayer);
+      if (!confirm(msg)) return;
+    }
+    doc.shapes = doc.shapes.filter(sh => sh.cut_index !== L.index);
+    doc.layers.splice(i, 1);
+    if (activeLayer >= doc.layers.length) activeLayer = doc.layers.length - 1;
+    if (activeLayer < 0) activeLayer = 0;
+    selectOnly(null);
+    snapshot(); renderLayers(); render(); generate(); refreshCounts();
+  }
   // Drag-reorder layers. List order is cut order, top to bottom.
   function reorderLayer(from, to){
     const arr = doc.layers; if (from===to || from<0 || from>=arr.length || to<0 || to>=arr.length) return;
@@ -4903,10 +4927,10 @@
   Object.assign(I18N.de, { "tab.props":"Eigenschaften","props.empty":"Wählen Sie ein Objekt, um Position, Größe und Drehung zu bearbeiten.","props.x":"X","props.y":"Y","props.w":"Breite","props.h":"Höhe","props.lock":"Seitenverhältnis sperren","props.rot":"Drehen °","props.fliph":"Horizontal spiegeln","props.flipv":"Vertikal spiegeln","tool.snap":"Am Raster einrasten","tool.gridmm":"mm","mc.origin":"Nullpunkt-Ecke","mc.start":"Jobstart","mc.baud":"Baud","dev.connect":"Verbinden (USB seriell)","dev.disconnect":"Trennen","dev.run":"▶ Job starten","dev.pause":"Pause","dev.resume":"Fortsetzen","dev.console":"Konsole","dev.send":"Senden","dev.status":"?","dev.clear":"Leeren","dev.stop":"Stopp","dev.home":"Referenzfahrt","dev.setorigin":"Nullpunkt setzen","dev.unlock":"Entsperren","dev.noserial":"WebSerial nicht verfügbar. Chrome oder Edge über HTTPS verwenden.","dev.connected":"Seriell verbunden mit ","dev.connfail":"Serielle Verbindung fehlgeschlagen: ","dev.disconnected":"Getrennt.","dev.framing":"Rahmen","dev.running2":"Läuft","dev.complete":"fertig","dev.busy":"Es läuft bereits ein Job.","dev.connectfirst":"Zuerst eine Maschine verbinden.","dev.gennext":"Zuerst G-Code erzeugen.","dev.runconfirm":"Diesen Job jetzt am Laser starten? Der Strahl feuert. Deckel geschlossen, Bereich frei, und Sie erreichen Stopp?","dev.paused":"Pausiert.","dev.resumed":"Fortgesetzt.","dev.stopped":"Gestoppt." });
   Object.assign(I18N.fr, { "tab.props":"Propriétés","props.empty":"Sélectionnez un objet pour modifier sa position, sa taille et sa rotation.","props.x":"X","props.y":"Y","props.w":"Largeur","props.h":"Hauteur","props.lock":"Verrouiller les proportions","props.rot":"Pivoter °","props.fliph":"Miroir horizontal","props.flipv":"Miroir vertical","tool.snap":"Aligner sur la grille","tool.gridmm":"mm","mc.origin":"Coin d'origine","mc.start":"Départ du travail","mc.baud":"Bauds","dev.connect":"Connecter (USB série)","dev.disconnect":"Déconnecter","dev.run":"▶ Lancer le travail","dev.pause":"Pause","dev.resume":"Reprendre","dev.console":"Console","dev.send":"Envoyer","dev.status":"?","dev.clear":"Effacer","dev.stop":"Arrêter","dev.home":"Origine machine","dev.setorigin":"Définir l'origine","dev.unlock":"Déverrouiller","dev.noserial":"WebSerial indisponible. Utilisez Chrome ou Edge en HTTPS.","dev.connected":"Connecté en série à ","dev.connfail":"Échec de la connexion série : ","dev.disconnected":"Déconnecté.","dev.framing":"Cadrage","dev.running2":"En cours","dev.complete":"terminé","dev.busy":"Un travail est déjà en cours.","dev.connectfirst":"Connectez d'abord une machine.","dev.gennext":"Générez d'abord le G-code.","dev.runconfirm":"Lancer ce travail maintenant ? Le faisceau va tirer. Capot fermé, zone dégagée, et vous pouvez atteindre Arrêter ?","dev.paused":"En pause.","dev.resumed":"Repris.","dev.stopped":"Arrêté." });
   Object.assign(I18N["pt-BR"], { "tab.props":"Propriedades","props.empty":"Selecione um objeto para editar posição, tamanho e rotação.","props.x":"X","props.y":"Y","props.w":"Largura","props.h":"Altura","props.lock":"Travar proporção","props.rot":"Girar °","props.fliph":"Espelhar horizontal","props.flipv":"Espelhar vertical","tool.snap":"Ajustar à grade","tool.gridmm":"mm","mc.origin":"Canto de origem","mc.start":"Início do trabalho","mc.baud":"Baud","dev.connect":"Conectar (USB serial)","dev.disconnect":"Desconectar","dev.run":"▶ Executar trabalho","dev.pause":"Pausar","dev.resume":"Retomar","dev.console":"Console","dev.send":"Enviar","dev.status":"?","dev.clear":"Limpar","dev.stop":"Parar","dev.home":"Referência","dev.setorigin":"Definir origem","dev.unlock":"Desbloquear","dev.noserial":"WebSerial indisponível. Use Chrome ou Edge por HTTPS.","dev.connected":"Conectado por serial a ","dev.connfail":"Falha na conexão serial: ","dev.disconnected":"Desconectado.","dev.framing":"Enquadrando","dev.running2":"Executando","dev.complete":"concluído","dev.busy":"Já há um trabalho em execução.","dev.connectfirst":"Conecte uma máquina primeiro.","dev.gennext":"Gere o G-code primeiro.","dev.runconfirm":"Executar este trabalho agora? O feixe vai disparar. Tampa fechada, área livre e você alcança Parar?","dev.paused":"Pausado.","dev.resumed":"Retomado.","dev.stopped":"Parado." });
-  Object.assign(I18N.es, { "layer.output":"Salida de esta capa","layer.show":"Mostrar esta capa","lp.kerf":"Compensación de corte mm","lp.tabs":"Pestañas / puentes","lp.tabsize":"Tamaño de pestaña mm","lp.tabspace":"Espaciado de pestañas mm" });
-  Object.assign(I18N.de, { "layer.output":"Diese Ebene ausgeben","layer.show":"Diese Ebene anzeigen","lp.kerf":"Schnittfugen-Versatz mm","lp.tabs":"Stege / Brücken","lp.tabsize":"Steggröße mm","lp.tabspace":"Stegabstand mm" });
-  Object.assign(I18N.fr, { "layer.output":"Sortir ce calque","layer.show":"Afficher ce calque","lp.kerf":"Compensation de saignée mm","lp.tabs":"Pattes / ponts","lp.tabsize":"Taille de patte mm","lp.tabspace":"Espacement des pattes mm" });
-  Object.assign(I18N["pt-BR"], { "layer.output":"Saída desta camada","layer.show":"Mostrar esta camada","lp.kerf":"Compensação de corte mm","lp.tabs":"Abas / pontes","lp.tabsize":"Tamanho da aba mm","lp.tabspace":"Espaçamento das abas mm" });
+  Object.assign(I18N.es, { "layer.output":"Salida de esta capa","layer.show":"Mostrar esta capa","layer.delete":"Eliminar esta capa","layer.keepone":"Debe quedar al menos una capa.","layer.delconfirm":"¿Eliminar la capa \"{name}\" y sus {n} forma(s)?","lp.kerf":"Compensación de corte mm","lp.tabs":"Pestañas / puentes","lp.tabsize":"Tamaño de pestaña mm","lp.tabspace":"Espaciado de pestañas mm" });
+  Object.assign(I18N.de, { "layer.output":"Diese Ebene ausgeben","layer.show":"Diese Ebene anzeigen","layer.delete":"Diese Ebene löschen","layer.keepone":"Mindestens eine Ebene muss bleiben.","layer.delconfirm":"Ebene \"{name}\" und ihre {n} Form(en) löschen?","lp.kerf":"Schnittfugen-Versatz mm","lp.tabs":"Stege / Brücken","lp.tabsize":"Steggröße mm","lp.tabspace":"Stegabstand mm" });
+  Object.assign(I18N.fr, { "layer.output":"Sortir ce calque","layer.show":"Afficher ce calque","layer.delete":"Supprimer ce calque","layer.keepone":"Au moins un calque doit rester.","layer.delconfirm":"Supprimer le calque \"{name}\" et ses {n} forme(s) ?","lp.kerf":"Compensation de saignée mm","lp.tabs":"Pattes / ponts","lp.tabsize":"Taille de patte mm","lp.tabspace":"Espacement des pattes mm" });
+  Object.assign(I18N["pt-BR"], { "layer.output":"Saída desta camada","layer.show":"Mostrar esta camada","layer.delete":"Excluir esta camada","layer.keepone":"Pelo menos uma camada deve permanecer.","layer.delconfirm":"Excluir a camada \"{name}\" e suas {n} forma(s)?","lp.kerf":"Compensação de corte mm","lp.tabs":"Abas / pontes","lp.tabsize":"Tamanho da aba mm","lp.tabspace":"Espaçamento das abas mm" });
   Object.assign(I18N.es, { "action.group":"Agrupar","action.ungroup":"Desagrupar","action.preview":"Vista previa…","pv.title":"Vista previa","pv.play":"Reproducir","pv.pause":"Pausar","pv.travel":"Mostrar desplazamiento","pv.note":"Verde es corte, gris es desplazamiento rápido.","tool.hint.star":"Arrastre para dibujar una estrella." });
   Object.assign(I18N.de, { "action.group":"Gruppieren","action.ungroup":"Gruppierung aufheben","action.preview":"Vorschau…","pv.title":"Vorschau","pv.play":"Abspielen","pv.pause":"Pause","pv.travel":"Leerfahrten zeigen","pv.note":"Grün ist Schneiden, Grau ist Eilgang.","tool.hint.star":"Ziehen, um einen Stern zu zeichnen." });
   Object.assign(I18N.fr, { "action.group":"Grouper","action.ungroup":"Dégrouper","action.preview":"Aperçu…","pv.title":"Aperçu","pv.play":"Lire","pv.pause":"Pause","pv.travel":"Afficher les déplacements","pv.note":"Vert = coupe, gris = déplacement rapide.","tool.hint.star":"Faites glisser pour dessiner une étoile." });
