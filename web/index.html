@@ -2598,6 +2598,8 @@
     { name:"Diode 400", ctrl:"grbl-m3", w:400, h:400 },
     { name:"Snapmaker Artisan 40W", ctrl:"snapmaker", w:400, h:400, air:true, frame:true, baud:115200, origin:"FL",
       startG:"G90\nM8\nM3 S0", endG:"M5\nM9" },
+    { name:"Snapmaker Artisan 40W (Network)", ctrl:"snapmaker", plugin:"snapmaker-net", w:400, h:400, air:true, frame:true, origin:"FL",
+      startG:"G90\nM8\nM3 S0", endG:"M5\nM9" },
     { name:"Ruida CO2 600", ctrl:"grbl", w:600, h:400 },
   ];
   function customMachines(){ try { return JSON.parse(localStorage.getItem("lc_machines") || "[]"); } catch(e){ return []; } }
@@ -2663,6 +2665,9 @@
   $("editMachine").onclick = () => openMachineDialog(+$("machine").value || 0);
   $("mcOk").onclick = () => {
     const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked, origin: $("mc_origin").value, start: $("mc_start").value, baud: +$("mc_baud").value || 115200, axes: +$("mc_axes").value || 2, dual: $("mc_dual").checked, l2dx: +$("mc_l2dx").value || 0, l2dy: +$("mc_l2dy").value || 0, startG: $("mc_startg").value, endG: $("mc_endg").value };
+    // Carry over fields the form does not expose (the device plugin binding) so
+    // editing a plugin machine does not silently turn it into a plain serial one.
+    { const src = (mcEditIdx != null) ? allMachines()[mcEditIdx] : null; if (src && src.plugin) mc.plugin = src.plugin; }
     const custom = customMachines();
     let selIdx;
     if (mcEditIdx != null && mcEditIdx >= BUILTIN_COUNT){ custom[mcEditIdx - BUILTIN_COUNT] = mc; selIdx = mcEditIdx; }
@@ -3824,6 +3829,94 @@
     chk.onchange = () => { localStorage.setItem("lc_galvo_auto", chk.checked ? "1" : "0"); if (chk.checked && isGalvo()) autoConnectGalvo(); };
   })();
 
+  // ---- Device plugin system ----
+  // A device plugin drives one kind of machine connection and job flow. The core
+  // editor calls its lifecycle methods (connect/run/stop/jog/home); the plugin
+  // owns its transport. New machines (network controllers, future backends) are
+  // added by registering a plugin here, with no change to the core run/stop paths.
+  // A machine opts in with a `plugin` id on its profile. WebSerial GRBL and WebUSB
+  // galvo remain built in; a plugin only takes over when its machine is active.
+  const DEVICE_PLUGINS = [];
+  function registerDevicePlugin(p){ DEVICE_PLUGINS.push(p); }
+  function pluginById(id){ return DEVICE_PLUGINS.find(p => p.id === id) || null; }
+  // The plugin for the active machine, or null when the machine uses a built-in
+  // transport (plain serial / galvo).
+  function activePlugin(){ const mc = (typeof currentMachine === "function") ? currentMachine() : null; return (mc && mc.plugin) ? pluginById(mc.plugin) : null; }
+
+  // ---- Snapmaker network plugin ----
+  // The Snapmaker Artisan serves an OctoPrint-style HTTP API on the LAN (port
+  // 8080, firmware 2.x). A browser cannot reach it directly (mixed content, no
+  // CORS, no raw TCP), so it is proxied same-origin under /snapmaker on this host.
+  // Auth is a token plus a one-time "Allow" tap on the machine touchscreen.
+  // Verified endpoints: connect, status, execute_code, upload, start_print,
+  // pause_print, resume_print, stop_print. Power is M3 S0..255 (GRBL-M3 dialect);
+  // air assist is M8 / M9; stop forces M5 M9 as the laser-off safety.
+  const SNAPMAKER = {
+    id: "snapmaker-net",
+    label: "Snapmaker (network)",
+    base: "/snapmaker/api/v1",
+    token: "",
+    _connected: false,
+    connected(){ return this._connected; },
+    async _form(path, fields){
+      const body = new URLSearchParams(fields || {});
+      if (this.token) body.set("token", this.token);
+      return fetch(this.base + path, { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
+    },
+    async status(){
+      try { const r = await fetch(`${this.base}/status?token=${encodeURIComponent(this.token)}`); return r.ok ? await r.json() : null; }
+      catch(e){ return null; }
+    },
+    async execute(code){ return this._form("/execute_code", { code }); },
+    async connect(mc){
+      this.token = localStorage.getItem("lc_sm_token") || "";
+      setDev(tr("sm.connecting","Connecting to the Snapmaker. Tap Allow on the touchscreen if it asks."));
+      let r; try { r = await this._form("/connect", {}); }
+      catch(e){ setDev(tr("sm.netfail","Could not reach the Snapmaker bridge. Is the machine on and on the network?")); return false; }
+      if (!r.ok){ setDev(tr("sm.connfail","Snapmaker connect failed: ") + r.status); return false; }
+      try { const j = await r.json(); if (j && j.token){ this.token = j.token; localStorage.setItem("lc_sm_token", this.token); } } catch(e){}
+      // Give the operator time to approve on the screen, then confirm with status.
+      for (let i = 0; i < 20; i++){
+        const s = await this.status();
+        if (s){ this._connected = true; setDev(tr("sm.connected","Snapmaker connected over the network.")); updateDeviceButtons(); return true; }
+        await new Promise(res => setTimeout(res, 1000));
+      }
+      setDev(tr("sm.approve","Tap Allow on the Snapmaker screen, then press Connect again."));
+      return false;
+    },
+    async disconnect(){
+      try { await this._form("/disconnect", {}); } catch(e){}
+      this._connected = false; updateDeviceButtons();
+    },
+    async run(mc, gcode){
+      if (!this._connected){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; }
+      const startScript = curStartG.trim() ? curStartG.trim() + "\n" : "";
+      const endScript = curEndG.trim() ? "\n" + curEndG.trim() : "";
+      const body = startScript + gcode + endScript;
+      if (!confirm(tr("dev.runconfirm","Run this job on the laser now? The beam will fire. Make sure the lid is closed, the area is clear, and you can reach Stop."))) return;
+      setDev(tr("sm.uploading","Uploading the job to the Snapmaker..."));
+      try {
+        const fd = new FormData();
+        if (this.token) fd.set("token", this.token);
+        fd.set("file", new Blob([body], { type:"text/plain" }), "lasercraft.nc");
+        let r = await fetch(`${this.base}/upload`, { method:"POST", body: fd });
+        if (!r.ok){ setDev(tr("sm.uploadfail","Upload failed: ") + r.status); return; }
+        r = await this._form("/start_print", {});
+        setDev(r.ok ? tr("sm.started","Snapmaker job started. Watch the machine.") : tr("sm.startfail","Start failed: ") + r.status);
+      } catch(e){ setDev(tr("sm.runerr","Snapmaker run error: ") + e.message); }
+    },
+    async stop(){
+      // A stopped job never runs its end script, so force the laser-off safety.
+      try { await this._form("/stop_print", {}); } catch(e){}
+      try { await this.execute("M5\nM9"); } catch(e){}
+      setDev(tr("dev.stopped","Stopped."));
+    },
+    async pause(resume){ try { await this._form(resume ? "/resume_print" : "/pause_print", {}); } catch(e){} },
+    async home(){ try { await this.execute("G28"); } catch(e){} },
+    async jog(dx, dy, dz, feed){ try { await this.execute(`G91\nG0 X${dx} Y${dy} Z${dz||0} F${feed||1000}\nG90`); } catch(e){} }
+  };
+  registerDevicePlugin(SNAPMAKER);
+
   // ---- GRBL / G-code controller over WebSerial ----
   // A line-based streamer: send one line, wait for GRBL's "ok" or "error" before
   // the next. Slower than character-counting but simple and safe, which is what a
@@ -3832,17 +3925,24 @@
   const SERIAL = { port:null, writer:null, reader:null, baud:115200, running:false, paused:false, okq:[], rx:"" };
   function serialConnected(){ return !!SERIAL.port; }
   function updateDeviceButtons(){
-    const g = isGalvo(); const on = serialConnected();
-    $("connectSerial").textContent = on ? tr("dev.disconnect","Disconnect") : tr("dev.connect","Connect (USB serial)");
+    const g = isGalvo(); const plug = activePlugin();
+    const on = plug ? plug.connected() : serialConnected();
+    $("connectSerial").textContent = on ? tr("dev.disconnect","Disconnect")
+      : (plug ? tr("dev.connectnet","Connect (network)") : tr("dev.connect","Connect (USB serial)"));
     $("jobRow").style.display = (!g && on) ? "flex" : "none";
     $("jogRow").style.display = (!g && on) ? "flex" : "none";
-    $("consoleRow").style.display = (!g && on) ? "flex" : "none";
+    // The raw GRBL console only applies to the serial transport, not a plugin.
+    $("consoleRow").style.display = (!g && on && !plug) ? "flex" : "none";
     if ((g || !on) && $("consolePanel")) $("consolePanel").style.display = "none";
-    const busy = SERIAL.running;
+    const busy = plug ? false : SERIAL.running;
     const rb = $("runBtn"); if (rb) rb.disabled = busy;
     const pb = $("pauseBtn"); if (pb) pb.textContent = SERIAL.paused ? tr("dev.resume","Resume") : tr("dev.pause","Pause");
   }
   async function connectSerial(){
+    // A plugin machine (e.g. Snapmaker over the network) connects through its
+    // plugin, not WebSerial.
+    const plug = activePlugin();
+    if (plug){ $("devstat").style.display="flex"; if (plug.connected()) await plug.disconnect(); else await plug.connect(currentMachine()); return; }
     if (serialConnected()){ await disconnectSerial(); return; }
     if (!("serial" in navigator)){ setDev(tr("dev.noserial","WebSerial is not available. Use Chrome or Edge over HTTPS.")); $("devstat").style.display="flex"; return; }
     try {
@@ -3954,14 +4054,18 @@
     await streamGcode("M5\n" + frameG + "\nM5", tr("dev.framing","Framing"));
   }
   async function runJob(){
-    if (!serialConnected()){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; }
-    if (SERIAL.running){ setDev(tr("dev.busy","A job is already running.")); return; }
     if (isGalvo() || !ready){ setDev(tr("dev.gennext","Generate G-code first.")); return; }
     // Build the job fresh from the design, never from whatever the box displays
     // (which may be a frame outline or an error string).
     let g; try { g = generate_gcode(JSON.stringify(toProject()), MOTION, curFlavor); } catch(e){ setDev(String(e)); return; }
     if (!g || !g.trim()){ setDev(tr("dev.gennext","Generate G-code first.")); return; }
     $("gcode").textContent = g;
+    // A plugin machine runs through its plugin (it owns upload, start, and the
+    // run confirmation).
+    const plug = activePlugin();
+    if (plug){ if (!plug.connected()){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; } await plug.run(currentMachine(), g); return; }
+    if (!serialConnected()){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; }
+    if (SERIAL.running){ setDev(tr("dev.busy","A job is already running.")); return; }
     if (!confirm(tr("dev.runconfirm","Run this job on the laser now? The beam will fire. Make sure the lid is closed, the area is clear, and you can reach Stop."))) return;
     // Wrap the body in the machine's start and end scripts (homing, fans, focus,
     // and the laser-off tail). "Current position" start treats the head's current
@@ -3972,6 +4076,8 @@
     await streamGcode(startScript + originPrefix + g + endScript, tr("dev.running2","Running"));
   }
   async function pauseResume(){
+    const plug = activePlugin();
+    if (plug){ if (!plug.connected()) return; plug._paused = !plug._paused; await plug.pause(!plug._paused); setDev(plug._paused ? tr("dev.paused","Paused.") : tr("dev.resumed","Resumed.")); return; }
     if (!serialConnected() || !SERIAL.running) return;
     SERIAL.paused = !SERIAL.paused;
     await rawByte(SERIAL.paused ? 0x21 : 0x7E);   // '!' feed hold / '~' cycle start
@@ -3979,6 +4085,8 @@
     updateDeviceButtons();
   }
   async function stopJob(){
+    const plug = activePlugin();
+    if (plug){ await plug.stop(); updateDeviceButtons(); return; }
     SERIAL.running = false; SERIAL.paused = false; drainOkq();
     await rawByte(0x18);   // GRBL soft reset: halts motion and clears the planner
     // Belt and braces: cut the laser and air assist explicitly. A stopped job never
@@ -3991,9 +4099,9 @@
   $("runBtn") && ($("runBtn").onclick = runJob);
   $("pauseBtn") && ($("pauseBtn").onclick = pauseResume);
   $("stopBtn") && ($("stopBtn").onclick = stopJob);
-  $("homeBtn") && ($("homeBtn").onclick = () => serialConnected() && sendLine("$H"));
-  $("unlockBtn") && ($("unlockBtn").onclick = () => serialConnected() && sendLine("$X"));
-  $("originBtn") && ($("originBtn").onclick = () => serialConnected() && sendLine("G92 X0 Y0"));
+  $("homeBtn") && ($("homeBtn").onclick = () => { const p = activePlugin(); if (p){ p.connected() && p.home(); return; } serialConnected() && sendLine("$H"); });
+  $("unlockBtn") && ($("unlockBtn").onclick = () => { const p = activePlugin(); if (p){ p.connected() && p.execute("$X"); return; } serialConnected() && sendLine("$X"); });
+  $("originBtn") && ($("originBtn").onclick = () => { const p = activePlugin(); if (p){ p.connected() && p.execute("G92 X0 Y0"); return; } serialConnected() && sendLine("G92 X0 Y0"); });
 
   // GRBL console: raw command line to the connected controller.
   async function consoleSendCmd(){
@@ -4854,6 +4962,9 @@
   const mm2dev = mm => Math.round(mm / 110 * 0xFFFF);
   function updatePos(){ $("posX").textContent = (jogPos.x/0xFFFF*110-55).toFixed(1); $("posY").textContent = (jogPos.y/0xFFFF*110-55).toFixed(1); }
   async function jog(dx, dy){
+    // A plugin machine jogs by a relative G-code move through its transport.
+    const plug = activePlugin();
+    if (plug){ if (plug.connected()){ await plug.jog(+(dx*jogDist).toFixed(2), +(dy*jogDist).toFixed(2), 0, 1500); $("moveStat").textContent = `Jogged ${(dx*jogDist).toFixed(1)}, ${(dy*jogDist).toFixed(1)} mm.`; } else $("moveStat").textContent = "Not connected."; return; }
     jogPos.x = Math.max(0, Math.min(0xFFFF, jogPos.x + mm2dev(dx*jogDist)));
     jogPos.y = Math.max(0, Math.min(0xFFFF, jogPos.y + mm2dev(dy*jogDist)));
     updatePos();
@@ -4944,10 +5055,10 @@
   Object.assign(I18N.de, { "mat.import":"Importieren…","mat.export":"Exportieren","mat.addmat":"Material hinzufügen","mat.apply":"Anwenden","mat.addfinish":"+ Finish","mat.empty":"Noch keine Materialien. Fügen Sie eines hinzu oder importieren Sie eine Bibliothek.","mat.newname":"Materialname","mat.delconfirm":"Dieses Material und seine Finishes löschen?","mat.importerr":"Datei konnte nicht gelesen werden: ","mat.importnone":"Keine Presets in der Datei gefunden.","action.rename":"Umbenennen","action.edit":"Bearbeiten","fx.title":"Finish","fx.add":"Finish hinzufügen","fx.edit":"Finish bearbeiten","fx.name":"Finish-Name","fx.mode":"Modus","fx.note":"Erwartete Wirkung / Notiz","fx.untitled":"Finish" });
   Object.assign(I18N.fr, { "mat.import":"Importer…","mat.export":"Exporter","mat.addmat":"Ajouter un matériau","mat.apply":"Appliquer","mat.addfinish":"+ Finition","mat.empty":"Aucun matériau pour l'instant. Ajoutez-en un ou importez une bibliothèque.","mat.newname":"Nom du matériau","mat.delconfirm":"Supprimer ce matériau et ses finitions ?","mat.importerr":"Impossible de lire le fichier : ","mat.importnone":"Aucun préréglage trouvé dans le fichier.","action.rename":"Renommer","action.edit":"Modifier","fx.title":"Finition","fx.add":"Ajouter une finition","fx.edit":"Modifier la finition","fx.name":"Nom de la finition","fx.mode":"Mode","fx.note":"Effet attendu / note","fx.untitled":"Finition" });
   Object.assign(I18N["pt-BR"], { "mat.import":"Importar…","mat.export":"Exportar","mat.addmat":"Adicionar material","mat.apply":"Aplicar","mat.addfinish":"+ Acabamento","mat.empty":"Ainda não há materiais. Adicione um ou importe uma biblioteca.","mat.newname":"Nome do material","mat.delconfirm":"Excluir este material e seus acabamentos?","mat.importerr":"Não foi possível ler o arquivo: ","mat.importnone":"Nenhuma predefinição encontrada no arquivo.","action.rename":"Renomear","action.edit":"Editar","fx.title":"Acabamento","fx.add":"Adicionar acabamento","fx.edit":"Editar acabamento","fx.name":"Nome do acabamento","fx.mode":"Modo","fx.note":"Efeito esperado / nota","fx.untitled":"Acabamento" });
-  Object.assign(I18N.es, { "tab.props":"Propiedades","props.empty":"Seleccione un objeto para editar su posición, tamaño y rotación.","props.x":"X","props.y":"Y","props.w":"Ancho","props.h":"Alto","props.lock":"Bloquear proporción","props.rot":"Rotar °","props.fliph":"Voltear horizontal","props.flipv":"Voltear vertical","tool.snap":"Ajustar a la cuadrícula","tool.gridmm":"mm","mc.origin":"Esquina de origen","mc.start":"Inicio del trabajo","mc.baud":"Baudios","dev.connect":"Conectar (USB serie)","dev.disconnect":"Desconectar","dev.run":"▶ Ejecutar trabajo","dev.pause":"Pausar","dev.resume":"Reanudar","dev.console":"Consola","dev.send":"Enviar","dev.status":"?","dev.clear":"Borrar","dev.stop":"Detener","dev.home":"Origen","dev.setorigin":"Fijar origen","dev.unlock":"Desbloquear","dev.noserial":"WebSerial no disponible. Use Chrome o Edge por HTTPS.","dev.connected":"Conectado por serie a ","dev.connfail":"Error de conexión serie: ","dev.disconnected":"Desconectado.","dev.framing":"Encuadrando","dev.running2":"Ejecutando","dev.complete":"completo","dev.busy":"Ya hay un trabajo en marcha.","dev.connectfirst":"Conecte una máquina primero.","dev.gennext":"Genere el G-code primero.","dev.runconfirm":"¿Ejecutar este trabajo ahora? El haz se disparará. Asegúrese de que la tapa esté cerrada, el área despejada y pueda alcanzar Detener.","dev.paused":"En pausa.","dev.resumed":"Reanudado.","dev.stopped":"Detenido." });
-  Object.assign(I18N.de, { "tab.props":"Eigenschaften","props.empty":"Wählen Sie ein Objekt, um Position, Größe und Drehung zu bearbeiten.","props.x":"X","props.y":"Y","props.w":"Breite","props.h":"Höhe","props.lock":"Seitenverhältnis sperren","props.rot":"Drehen °","props.fliph":"Horizontal spiegeln","props.flipv":"Vertikal spiegeln","tool.snap":"Am Raster einrasten","tool.gridmm":"mm","mc.origin":"Nullpunkt-Ecke","mc.start":"Jobstart","mc.baud":"Baud","dev.connect":"Verbinden (USB seriell)","dev.disconnect":"Trennen","dev.run":"▶ Job starten","dev.pause":"Pause","dev.resume":"Fortsetzen","dev.console":"Konsole","dev.send":"Senden","dev.status":"?","dev.clear":"Leeren","dev.stop":"Stopp","dev.home":"Referenzfahrt","dev.setorigin":"Nullpunkt setzen","dev.unlock":"Entsperren","dev.noserial":"WebSerial nicht verfügbar. Chrome oder Edge über HTTPS verwenden.","dev.connected":"Seriell verbunden mit ","dev.connfail":"Serielle Verbindung fehlgeschlagen: ","dev.disconnected":"Getrennt.","dev.framing":"Rahmen","dev.running2":"Läuft","dev.complete":"fertig","dev.busy":"Es läuft bereits ein Job.","dev.connectfirst":"Zuerst eine Maschine verbinden.","dev.gennext":"Zuerst G-Code erzeugen.","dev.runconfirm":"Diesen Job jetzt am Laser starten? Der Strahl feuert. Deckel geschlossen, Bereich frei, und Sie erreichen Stopp?","dev.paused":"Pausiert.","dev.resumed":"Fortgesetzt.","dev.stopped":"Gestoppt." });
-  Object.assign(I18N.fr, { "tab.props":"Propriétés","props.empty":"Sélectionnez un objet pour modifier sa position, sa taille et sa rotation.","props.x":"X","props.y":"Y","props.w":"Largeur","props.h":"Hauteur","props.lock":"Verrouiller les proportions","props.rot":"Pivoter °","props.fliph":"Miroir horizontal","props.flipv":"Miroir vertical","tool.snap":"Aligner sur la grille","tool.gridmm":"mm","mc.origin":"Coin d'origine","mc.start":"Départ du travail","mc.baud":"Bauds","dev.connect":"Connecter (USB série)","dev.disconnect":"Déconnecter","dev.run":"▶ Lancer le travail","dev.pause":"Pause","dev.resume":"Reprendre","dev.console":"Console","dev.send":"Envoyer","dev.status":"?","dev.clear":"Effacer","dev.stop":"Arrêter","dev.home":"Origine machine","dev.setorigin":"Définir l'origine","dev.unlock":"Déverrouiller","dev.noserial":"WebSerial indisponible. Utilisez Chrome ou Edge en HTTPS.","dev.connected":"Connecté en série à ","dev.connfail":"Échec de la connexion série : ","dev.disconnected":"Déconnecté.","dev.framing":"Cadrage","dev.running2":"En cours","dev.complete":"terminé","dev.busy":"Un travail est déjà en cours.","dev.connectfirst":"Connectez d'abord une machine.","dev.gennext":"Générez d'abord le G-code.","dev.runconfirm":"Lancer ce travail maintenant ? Le faisceau va tirer. Capot fermé, zone dégagée, et vous pouvez atteindre Arrêter ?","dev.paused":"En pause.","dev.resumed":"Repris.","dev.stopped":"Arrêté." });
-  Object.assign(I18N["pt-BR"], { "tab.props":"Propriedades","props.empty":"Selecione um objeto para editar posição, tamanho e rotação.","props.x":"X","props.y":"Y","props.w":"Largura","props.h":"Altura","props.lock":"Travar proporção","props.rot":"Girar °","props.fliph":"Espelhar horizontal","props.flipv":"Espelhar vertical","tool.snap":"Ajustar à grade","tool.gridmm":"mm","mc.origin":"Canto de origem","mc.start":"Início do trabalho","mc.baud":"Baud","dev.connect":"Conectar (USB serial)","dev.disconnect":"Desconectar","dev.run":"▶ Executar trabalho","dev.pause":"Pausar","dev.resume":"Retomar","dev.console":"Console","dev.send":"Enviar","dev.status":"?","dev.clear":"Limpar","dev.stop":"Parar","dev.home":"Referência","dev.setorigin":"Definir origem","dev.unlock":"Desbloquear","dev.noserial":"WebSerial indisponível. Use Chrome ou Edge por HTTPS.","dev.connected":"Conectado por serial a ","dev.connfail":"Falha na conexão serial: ","dev.disconnected":"Desconectado.","dev.framing":"Enquadrando","dev.running2":"Executando","dev.complete":"concluído","dev.busy":"Já há um trabalho em execução.","dev.connectfirst":"Conecte uma máquina primeiro.","dev.gennext":"Gere o G-code primeiro.","dev.runconfirm":"Executar este trabalho agora? O feixe vai disparar. Tampa fechada, área livre e você alcança Parar?","dev.paused":"Pausado.","dev.resumed":"Retomado.","dev.stopped":"Parado." });
+  Object.assign(I18N.es, { "tab.props":"Propiedades","props.empty":"Seleccione un objeto para editar su posición, tamaño y rotación.","props.x":"X","props.y":"Y","props.w":"Ancho","props.h":"Alto","props.lock":"Bloquear proporción","props.rot":"Rotar °","props.fliph":"Voltear horizontal","props.flipv":"Voltear vertical","tool.snap":"Ajustar a la cuadrícula","tool.gridmm":"mm","mc.origin":"Esquina de origen","mc.start":"Inicio del trabajo","mc.baud":"Baudios","dev.connect":"Conectar (USB serie)","dev.disconnect":"Desconectar","dev.run":"▶ Ejecutar trabajo","dev.pause":"Pausar","dev.resume":"Reanudar","dev.console":"Consola","dev.send":"Enviar","dev.status":"?","dev.clear":"Borrar","dev.stop":"Detener","dev.home":"Origen","dev.setorigin":"Fijar origen","dev.unlock":"Desbloquear","dev.noserial":"WebSerial no disponible. Use Chrome o Edge por HTTPS.","dev.connected":"Conectado por serie a ","dev.connfail":"Error de conexión serie: ","dev.disconnected":"Desconectado.","dev.framing":"Encuadrando","dev.running2":"Ejecutando","dev.complete":"completo","dev.busy":"Ya hay un trabajo en marcha.","dev.connectfirst":"Conecte una máquina primero.","dev.gennext":"Genere el G-code primero.","dev.runconfirm":"¿Ejecutar este trabajo ahora? El haz se disparará. Asegúrese de que la tapa esté cerrada, el área despejada y pueda alcanzar Detener.","dev.paused":"En pausa.","dev.resumed":"Reanudado.","dev.stopped":"Detenido.","dev.connectnet":"Conectar (red)","sm.connecting":"Conectando con la Snapmaker. Toque Permitir en la pantalla si lo pide.","sm.netfail":"No se pudo contactar el puente de la Snapmaker. ¿La máquina está encendida y en la red?","sm.connfail":"Conexión con la Snapmaker fallida: ","sm.connected":"Snapmaker conectada por red.","sm.approve":"Toque Permitir en la pantalla de la Snapmaker y pulse Conectar de nuevo.","sm.uploading":"Subiendo el trabajo a la Snapmaker…","sm.uploadfail":"Error al subir: ","sm.started":"Trabajo iniciado en la Snapmaker. Vigile la máquina.","sm.startfail":"Error al iniciar: ","sm.runerr":"Error de ejecución de la Snapmaker: " });
+  Object.assign(I18N.de, { "tab.props":"Eigenschaften","props.empty":"Wählen Sie ein Objekt, um Position, Größe und Drehung zu bearbeiten.","props.x":"X","props.y":"Y","props.w":"Breite","props.h":"Höhe","props.lock":"Seitenverhältnis sperren","props.rot":"Drehen °","props.fliph":"Horizontal spiegeln","props.flipv":"Vertikal spiegeln","tool.snap":"Am Raster einrasten","tool.gridmm":"mm","mc.origin":"Nullpunkt-Ecke","mc.start":"Jobstart","mc.baud":"Baud","dev.connect":"Verbinden (USB seriell)","dev.disconnect":"Trennen","dev.run":"▶ Job starten","dev.pause":"Pause","dev.resume":"Fortsetzen","dev.console":"Konsole","dev.send":"Senden","dev.status":"?","dev.clear":"Leeren","dev.stop":"Stopp","dev.home":"Referenzfahrt","dev.setorigin":"Nullpunkt setzen","dev.unlock":"Entsperren","dev.noserial":"WebSerial nicht verfügbar. Chrome oder Edge über HTTPS verwenden.","dev.connected":"Seriell verbunden mit ","dev.connfail":"Serielle Verbindung fehlgeschlagen: ","dev.disconnected":"Getrennt.","dev.framing":"Rahmen","dev.running2":"Läuft","dev.complete":"fertig","dev.busy":"Es läuft bereits ein Job.","dev.connectfirst":"Zuerst eine Maschine verbinden.","dev.gennext":"Zuerst G-Code erzeugen.","dev.runconfirm":"Diesen Job jetzt am Laser starten? Der Strahl feuert. Deckel geschlossen, Bereich frei, und Sie erreichen Stopp?","dev.paused":"Pausiert.","dev.resumed":"Fortgesetzt.","dev.stopped":"Gestoppt.","dev.connectnet":"Verbinden (Netzwerk)","sm.connecting":"Verbinde mit dem Snapmaker. Tippen Sie bei Bedarf auf dem Touchscreen auf Zulassen.","sm.netfail":"Snapmaker-Brücke nicht erreichbar. Ist die Maschine an und im Netzwerk?","sm.connfail":"Snapmaker-Verbindung fehlgeschlagen: ","sm.connected":"Snapmaker über das Netzwerk verbunden.","sm.approve":"Tippen Sie am Snapmaker auf Zulassen und drücken Sie erneut Verbinden.","sm.uploading":"Auftrag wird zum Snapmaker hochgeladen…","sm.uploadfail":"Upload fehlgeschlagen: ","sm.started":"Snapmaker-Auftrag gestartet. Maschine beobachten.","sm.startfail":"Start fehlgeschlagen: ","sm.runerr":"Snapmaker-Lauffehler: " });
+  Object.assign(I18N.fr, { "tab.props":"Propriétés","props.empty":"Sélectionnez un objet pour modifier sa position, sa taille et sa rotation.","props.x":"X","props.y":"Y","props.w":"Largeur","props.h":"Hauteur","props.lock":"Verrouiller les proportions","props.rot":"Pivoter °","props.fliph":"Miroir horizontal","props.flipv":"Miroir vertical","tool.snap":"Aligner sur la grille","tool.gridmm":"mm","mc.origin":"Coin d'origine","mc.start":"Départ du travail","mc.baud":"Bauds","dev.connect":"Connecter (USB série)","dev.disconnect":"Déconnecter","dev.run":"▶ Lancer le travail","dev.pause":"Pause","dev.resume":"Reprendre","dev.console":"Console","dev.send":"Envoyer","dev.status":"?","dev.clear":"Effacer","dev.stop":"Arrêter","dev.home":"Origine machine","dev.setorigin":"Définir l'origine","dev.unlock":"Déverrouiller","dev.noserial":"WebSerial indisponible. Utilisez Chrome ou Edge en HTTPS.","dev.connected":"Connecté en série à ","dev.connfail":"Échec de la connexion série : ","dev.disconnected":"Déconnecté.","dev.framing":"Cadrage","dev.running2":"En cours","dev.complete":"terminé","dev.busy":"Un travail est déjà en cours.","dev.connectfirst":"Connectez d'abord une machine.","dev.gennext":"Générez d'abord le G-code.","dev.runconfirm":"Lancer ce travail maintenant ? Le faisceau va tirer. Capot fermé, zone dégagée, et vous pouvez atteindre Arrêter ?","dev.paused":"En pause.","dev.resumed":"Repris.","dev.stopped":"Arrêté.","dev.connectnet":"Connecter (réseau)","sm.connecting":"Connexion au Snapmaker. Touchez Autoriser sur l'écran si demandé.","sm.netfail":"Pont Snapmaker injoignable. La machine est-elle allumée et sur le réseau ?","sm.connfail":"Échec de la connexion au Snapmaker : ","sm.connected":"Snapmaker connecté via le réseau.","sm.approve":"Touchez Autoriser sur l'écran du Snapmaker, puis appuyez de nouveau sur Connecter.","sm.uploading":"Envoi du travail au Snapmaker…","sm.uploadfail":"Échec de l'envoi : ","sm.started":"Travail Snapmaker lancé. Surveillez la machine.","sm.startfail":"Échec du démarrage : ","sm.runerr":"Erreur d'exécution Snapmaker : " });
+  Object.assign(I18N["pt-BR"], { "tab.props":"Propriedades","props.empty":"Selecione um objeto para editar posição, tamanho e rotação.","props.x":"X","props.y":"Y","props.w":"Largura","props.h":"Altura","props.lock":"Travar proporção","props.rot":"Girar °","props.fliph":"Espelhar horizontal","props.flipv":"Espelhar vertical","tool.snap":"Ajustar à grade","tool.gridmm":"mm","mc.origin":"Canto de origem","mc.start":"Início do trabalho","mc.baud":"Baud","dev.connect":"Conectar (USB serial)","dev.disconnect":"Desconectar","dev.run":"▶ Executar trabalho","dev.pause":"Pausar","dev.resume":"Retomar","dev.console":"Console","dev.send":"Enviar","dev.status":"?","dev.clear":"Limpar","dev.stop":"Parar","dev.home":"Referência","dev.setorigin":"Definir origem","dev.unlock":"Desbloquear","dev.noserial":"WebSerial indisponível. Use Chrome ou Edge por HTTPS.","dev.connected":"Conectado por serial a ","dev.connfail":"Falha na conexão serial: ","dev.disconnected":"Desconectado.","dev.framing":"Enquadrando","dev.running2":"Executando","dev.complete":"concluído","dev.busy":"Já há um trabalho em execução.","dev.connectfirst":"Conecte uma máquina primeiro.","dev.gennext":"Gere o G-code primeiro.","dev.runconfirm":"Executar este trabalho agora? O feixe vai disparar. Tampa fechada, área livre e você alcança Parar?","dev.paused":"Pausado.","dev.resumed":"Retomado.","dev.stopped":"Parado.","dev.connectnet":"Conectar (rede)","sm.connecting":"Conectando à Snapmaker. Toque em Permitir na tela se solicitado.","sm.netfail":"Não foi possível contatar a ponte da Snapmaker. A máquina está ligada e na rede?","sm.connfail":"Falha na conexão com a Snapmaker: ","sm.connected":"Snapmaker conectada pela rede.","sm.approve":"Toque em Permitir na tela da Snapmaker e pressione Conectar novamente.","sm.uploading":"Enviando o trabalho para a Snapmaker…","sm.uploadfail":"Falha no envio: ","sm.started":"Trabalho da Snapmaker iniciado. Observe a máquina.","sm.startfail":"Falha ao iniciar: ","sm.runerr":"Erro de execução da Snapmaker: " });
   Object.assign(I18N.es, { "layer.output":"Salida de esta capa","layer.show":"Mostrar esta capa","layer.delete":"Eliminar esta capa","layer.keepone":"Debe quedar al menos una capa.","layer.delconfirm":"¿Eliminar la capa \"{name}\" y sus {n} forma(s)?","lp.kerf":"Compensación de corte mm","lp.tabs":"Pestañas / puentes","lp.tabsize":"Tamaño de pestaña mm","lp.tabspace":"Espaciado de pestañas mm" });
   Object.assign(I18N.de, { "layer.output":"Diese Ebene ausgeben","layer.show":"Diese Ebene anzeigen","layer.delete":"Diese Ebene löschen","layer.keepone":"Mindestens eine Ebene muss bleiben.","layer.delconfirm":"Ebene \"{name}\" und ihre {n} Form(en) löschen?","lp.kerf":"Schnittfugen-Versatz mm","lp.tabs":"Stege / Brücken","lp.tabsize":"Steggröße mm","lp.tabspace":"Stegabstand mm" });
   Object.assign(I18N.fr, { "layer.output":"Sortir ce calque","layer.show":"Afficher ce calque","layer.delete":"Supprimer ce calque","layer.keepone":"Au moins un calque doit rester.","layer.delconfirm":"Supprimer le calque \"{name}\" et ses {n} forme(s) ?","lp.kerf":"Compensation de saignée mm","lp.tabs":"Pattes / ponts","lp.tabsize":"Taille de patte mm","lp.tabspace":"Espacement des pattes mm" });
