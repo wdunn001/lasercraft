@@ -787,7 +787,7 @@
       <div class="mhead"><span class="dot" style="width:10px;height:10px;border-radius:50%;background:var(--accent)"></span><h2 id="mcTitle" data-i18n="mc.add">Add machine</h2><span class="spacer"></span><span class="btn" id="mcClose">&times;</span></div>
       <div class="mbody">
         <div class="f"><label data-i18n="mc.name">Name</label><input id="mc_name" style="width:100%" placeholder="My laser"></div>
-        <div class="f" style="margin-top:12px"><label data-i18n="mc.ctrl">Controller</label><select id="mc_ctrl" style="width:100%"><option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option><option value="grbl-lpc">GRBL-LPC</option><option value="marlin">Marlin</option><option value="smoothie">Smoothie</option><option value="reprap">RepRapFirmware</option><option value="linuxcnc">LinuxCNC</option><option value="galvo">EZCAD2 / JCZFiber (galvo)</option></select></div>
+        <div class="f" style="margin-top:12px"><label data-i18n="mc.ctrl">Controller</label><select id="mc_ctrl" style="width:100%"><option value="grbl">GRBL</option><option value="grbl-m3">GRBL M3</option><option value="snapmaker">Snapmaker (GRBL-M3, S255)</option><option value="grbl-lpc">GRBL-LPC</option><option value="marlin">Marlin</option><option value="smoothie">Smoothie</option><option value="reprap">RepRapFirmware</option><option value="linuxcnc">LinuxCNC</option><option value="galvo">EZCAD2 / JCZFiber (galvo)</option></select></div>
         <div class="grid3" style="margin-top:12px"><div class="f"><label data-i18n="mc.w">Width mm</label><input id="mc_w" type="number" value="400" style="width:100%"></div><div class="f"><label data-i18n="mc.h">Height mm</label><input id="mc_h" type="number" value="400" style="width:100%"></div><div></div></div>
         <div class="grid3" style="margin-top:12px">
           <div class="f"><label data-i18n="mc.origin">Origin corner</label><select id="mc_origin" style="width:100%"><option value="FL">Front-left</option><option value="FR">Front-right</option><option value="RL">Rear-left</option><option value="RR">Rear-right</option></select></div>
@@ -807,6 +807,11 @@
           <div class="f"><label data-i18n="mc.l2dy">Laser 2 offset Y mm</label><input id="mc_l2dy" type="number" step="0.1" value="0" style="width:100%"></div>
           <div></div>
         </div>
+        <div class="grid2" style="margin-top:8px">
+          <div class="f"><label data-i18n="mc.startg">Start G-code (sent before the job)</label><textarea id="mc_startg" rows="4" style="width:100%;font-family:monospace;font-size:12px" placeholder="G90&#10;M8&#10;M3 S0"></textarea></div>
+          <div class="f"><label data-i18n="mc.endg">End G-code (sent after the job)</label><textarea id="mc_endg" rows="4" style="width:100%;font-family:monospace;font-size:12px" placeholder="M5&#10;M9"></textarea></div>
+        </div>
+        <div class="hint" style="margin-top:4px" data-i18n="mc.scripthint">Paste your machine's full homing, focus, and fan script here. The laser is always cut with M5 M9 on Stop regardless.</div>
         <button class="btn" id="mcGalvoBtn" style="width:100%;margin-top:14px;display:none" data-i18n="gd.open">Galvo device settings&hellip;</button>
       </div>
       <div class="mfoot"><button class="btn danger" id="mcDelete" style="display:none" data-i18n="mc.delete">Delete</button><span class="spacer"></span><button class="btn" id="mcCancel" data-i18n="action.cancel">Close</button><button class="btn primary" id="mcOk" data-i18n="mc.save">Add</button></div>
@@ -940,6 +945,8 @@
   let curAir = true;                             // machine has a controllable air assist
   let curStart = "abs";                          // job start: absolute coords or current position
   let curOrigin = "FL";                          // which bed corner is machine zero
+  let curStartG = "";                            // custom start G-code, prepended to the job
+  let curEndG = "";                              // custom end G-code, appended to the job
   let ditherMode = "floyd";                      // image dithering algorithm (set in Preferences)
   let depthLevels = 5, depthInvert = false;      // depth-engrave bands and direction (Preferences)
   let imgBright = 0, imgContrast = 0, imgGamma = 1;   // image adjust applied before dither/depth
@@ -2589,7 +2596,8 @@
     { name:"ComMarker B6 150 lens (galvo)", ctrl:"galvo", w:150, h:150, field:170 },
     { name:"EZCAD2 Fiber (galvo)", ctrl:"galvo", w:150, h:150, field:170 },
     { name:"Diode 400", ctrl:"grbl-m3", w:400, h:400 },
-    { name:"Snapmaker (Marlin)", ctrl:"marlin", w:320, h:350 },
+    { name:"Snapmaker Artisan 40W", ctrl:"snapmaker", w:400, h:400, air:true, frame:true, baud:115200, origin:"FL",
+      startG:"G90\nM8\nM3 S0", endG:"M5\nM9" },
     { name:"Ruida CO2 600", ctrl:"grbl", w:600, h:400 },
   ];
   function customMachines(){ try { return JSON.parse(localStorage.getItem("lc_machines") || "[]"); } catch(e){ return []; } }
@@ -2604,6 +2612,7 @@
     curFlavor = mc.ctrl;
     curAir = mc.air !== false;
     curStart = mc.start || "abs"; curOrigin = mc.origin || "FL";
+    curStartG = mc.startG || ""; curEndG = mc.endG || "";
     SERIAL.baud = mc.baud || 115200;
     // Jog axes: the Move tab shows its Z row only when the machine has a Z axis.
     curAxes = mc.axes || 2;
@@ -2636,6 +2645,7 @@
     $("mc_frame").checked = mc.frame !== false; $("mc_air").checked = mc.air !== false;
     $("mc_origin").value = mc.origin || "FL"; $("mc_start").value = mc.start || "abs"; $("mc_baud").value = String(mc.baud || 115200); $("mc_axes").value = String(mc.axes || 2);
     $("mc_dual").checked = !!mc.dual; $("mc_l2dx").value = mc.l2dx || 0; $("mc_l2dy").value = mc.l2dy || 0; $("mcDualRow").style.display = mc.dual ? "grid" : "none";
+    $("mc_startg").value = mc.startG || ""; $("mc_endg").value = mc.endG || "";
     $("mcTitle").textContent = tr(editing ? "mc.edit" : "mc.add", editing ? "Edit machine" : "Add machine");
     $("mcOk").textContent = editing ? tr("mc.update", "Save") : tr("mc.save", "Add");
     // Delete is offered for custom machines only; built-ins are read-only presets.
@@ -2652,7 +2662,7 @@
   };
   $("editMachine").onclick = () => openMachineDialog(+$("machine").value || 0);
   $("mcOk").onclick = () => {
-    const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked, origin: $("mc_origin").value, start: $("mc_start").value, baud: +$("mc_baud").value || 115200, axes: +$("mc_axes").value || 2, dual: $("mc_dual").checked, l2dx: +$("mc_l2dx").value || 0, l2dy: +$("mc_l2dy").value || 0 };
+    const mc = { name: $("mc_name").value.trim() || "Custom", ctrl: $("mc_ctrl").value, w: +$("mc_w").value || 400, h: +$("mc_h").value || 400, frame: $("mc_frame").checked, air: $("mc_air").checked, origin: $("mc_origin").value, start: $("mc_start").value, baud: +$("mc_baud").value || 115200, axes: +$("mc_axes").value || 2, dual: $("mc_dual").checked, l2dx: +$("mc_l2dx").value || 0, l2dy: +$("mc_l2dy").value || 0, startG: $("mc_startg").value, endG: $("mc_endg").value };
     const custom = customMachines();
     let selIdx;
     if (mcEditIdx != null && mcEditIdx >= BUILTIN_COUNT){ custom[mcEditIdx - BUILTIN_COUNT] = mc; selIdx = mcEditIdx; }
@@ -3851,6 +3861,9 @@
   // instead of hanging on a promise that will never see its "ok".
   function drainOkq(){ SERIAL.okq.splice(0).forEach(r => { try { r("abort"); } catch(e){} }); }
   async function disconnectSerial(){
+    // Best effort: cut the laser and air before dropping the port, so a disconnect
+    // mid-job never leaves the beam on.
+    try { if (SERIAL.writer){ await SERIAL.writer.write(new TextEncoder().encode("M5\nM9\n")); } } catch(e){}
     SERIAL.running = false; SERIAL.paused = false; drainOkq();
     try { if (SERIAL.reader){ await SERIAL.reader.cancel(); } } catch(e){}
     try { if (SERIAL.writer){ SERIAL.writer.releaseLock(); } } catch(e){}
@@ -3950,9 +3963,13 @@
     if (!g || !g.trim()){ setDev(tr("dev.gennext","Generate G-code first.")); return; }
     $("gcode").textContent = g;
     if (!confirm(tr("dev.runconfirm","Run this job on the laser now? The beam will fire. Make sure the lid is closed, the area is clear, and you can reach Stop."))) return;
-    // "Current position" start treats the head's current spot as work zero.
-    const prefix = curStart === "current" ? "G92 X0 Y0\n" : "";
-    await streamGcode(prefix + g, tr("dev.running2","Running"));
+    // Wrap the body in the machine's start and end scripts (homing, fans, focus,
+    // and the laser-off tail). "Current position" start treats the head's current
+    // spot as work zero, applied after the start script which may set its own origin.
+    const startScript = curStartG.trim() ? curStartG.trim() + "\n" : "";
+    const originPrefix = curStart === "current" ? "G92 X0 Y0\n" : "";
+    const endScript = curEndG.trim() ? "\n" + curEndG.trim() : "";
+    await streamGcode(startScript + originPrefix + g + endScript, tr("dev.running2","Running"));
   }
   async function pauseResume(){
     if (!serialConnected() || !SERIAL.running) return;
@@ -3964,7 +3981,11 @@
   async function stopJob(){
     SERIAL.running = false; SERIAL.paused = false; drainOkq();
     await rawByte(0x18);   // GRBL soft reset: halts motion and clears the planner
-    setDev(tr("dev.stopped","Stopped.")); updateDeviceButtons(); setTimeout(()=>rawWrite("?"), 300);
+    // Belt and braces: cut the laser and air assist explicitly. A stopped job never
+    // runs the end script, so the beam and air must be forced off here (M5 M9). This
+    // is the Snapmaker "Laser Off" safety macro, and it is harmless on any GRBL.
+    setTimeout(()=>{ rawWrite("M5\nM9"); rawWrite("?"); }, 300);
+    setDev(tr("dev.stopped","Stopped.")); updateDeviceButtons();
   }
   $("connectSerial") && ($("connectSerial").onclick = connectSerial);
   $("runBtn") && ($("runBtn").onclick = runJob);
@@ -4915,10 +4936,10 @@
   Object.assign(I18N.de, { "panel.layers":"Ebenen","action.copy":"Kopieren","stat.lines":"Linien","stat.shapes":"Formen","galvo.notconnected":"Galvo nicht verbunden. Platine anschließen und auf Verbinden klicken." });
   Object.assign(I18N.fr, { "panel.layers":"Calques","action.copy":"Copier","stat.lines":"Lignes","stat.shapes":"Formes","galvo.notconnected":"Galvo non connecté. Branchez la carte et cliquez sur Connecter." });
   Object.assign(I18N["pt-BR"], { "panel.layers":"Camadas","action.copy":"Copiar","stat.lines":"Linhas","stat.shapes":"Formas","galvo.notconnected":"Galvo não conectado. Conecte a placa e clique em Conectar." });
-  Object.assign(I18N.es, { "mc.edit":"Editar máquina","mc.update":"Guardar","mc.delete":"Eliminar","mc.features":"Funciones","mc.cap.frame":"Marco (recorrido del contorno)","mc.cap.air":"Asistencia de aire","layer.pickcolor":"Elegir color de capa","layer.custom":"Personalizado…","layer.resetcolor":"Predeterminado" });
-  Object.assign(I18N.de, { "mc.edit":"Maschine bearbeiten","mc.update":"Speichern","mc.delete":"Löschen","mc.features":"Funktionen","mc.cap.frame":"Rahmen (Umriss abfahren)","mc.cap.air":"Luftunterstützung","layer.pickcolor":"Ebenenfarbe wählen","layer.custom":"Benutzerdefiniert…","layer.resetcolor":"Standard" });
-  Object.assign(I18N.fr, { "mc.edit":"Modifier la machine","mc.update":"Enregistrer","mc.delete":"Supprimer","mc.features":"Fonctions","mc.cap.frame":"Cadre (parcours du contour)","mc.cap.air":"Assistance d'air","layer.pickcolor":"Choisir la couleur du calque","layer.custom":"Personnalisé…","layer.resetcolor":"Par défaut" });
-  Object.assign(I18N["pt-BR"], { "mc.edit":"Editar máquina","mc.update":"Salvar","mc.delete":"Excluir","mc.features":"Recursos","mc.cap.frame":"Moldura (percorrer contorno)","mc.cap.air":"Assistência de ar","layer.pickcolor":"Escolher cor da camada","layer.custom":"Personalizado…","layer.resetcolor":"Padrão" });
+  Object.assign(I18N.es, { "mc.edit":"Editar máquina","mc.update":"Guardar","mc.delete":"Eliminar","mc.features":"Funciones","mc.cap.frame":"Marco (recorrido del contorno)","mc.cap.air":"Asistencia de aire","mc.startg":"G-code de inicio (antes del trabajo)","mc.endg":"G-code de fin (después del trabajo)","mc.scripthint":"Pegue aquí el script completo de origen, enfoque y ventiladores de su máquina. El láser siempre se corta con M5 M9 al Detener.","layer.pickcolor":"Elegir color de capa","layer.custom":"Personalizado…","layer.resetcolor":"Predeterminado" });
+  Object.assign(I18N.de, { "mc.edit":"Maschine bearbeiten","mc.update":"Speichern","mc.delete":"Löschen","mc.features":"Funktionen","mc.cap.frame":"Rahmen (Umriss abfahren)","mc.cap.air":"Luftunterstützung","mc.startg":"Start-G-Code (vor dem Auftrag)","mc.endg":"End-G-Code (nach dem Auftrag)","mc.scripthint":"Fügen Sie hier das vollständige Homing-, Fokus- und Lüfterskript Ihrer Maschine ein. Der Laser wird beim Stopp immer mit M5 M9 abgeschaltet.","layer.pickcolor":"Ebenenfarbe wählen","layer.custom":"Benutzerdefiniert…","layer.resetcolor":"Standard" });
+  Object.assign(I18N.fr, { "mc.edit":"Modifier la machine","mc.update":"Enregistrer","mc.delete":"Supprimer","mc.features":"Fonctions","mc.cap.frame":"Cadre (parcours du contour)","mc.cap.air":"Assistance d'air","mc.startg":"G-code de début (avant le travail)","mc.endg":"G-code de fin (après le travail)","mc.scripthint":"Collez ici le script complet d'origine, de mise au point et de ventilateurs de votre machine. Le laser est toujours coupé par M5 M9 à l'arrêt.","layer.pickcolor":"Choisir la couleur du calque","layer.custom":"Personnalisé…","layer.resetcolor":"Par défaut" });
+  Object.assign(I18N["pt-BR"], { "mc.edit":"Editar máquina","mc.update":"Salvar","mc.delete":"Excluir","mc.features":"Recursos","mc.cap.frame":"Moldura (percorrer contorno)","mc.cap.air":"Assistência de ar","mc.startg":"G-code inicial (antes do trabalho)","mc.endg":"G-code final (após o trabalho)","mc.scripthint":"Cole aqui o script completo de origem, foco e ventiladores da sua máquina. O laser é sempre cortado com M5 M9 ao Parar.","layer.pickcolor":"Escolher cor da camada","layer.custom":"Personalizado…","layer.resetcolor":"Padrão" });
   Object.assign(I18N.es, { "mat.import":"Importar…","mat.export":"Exportar","mat.addmat":"Añadir material","mat.apply":"Aplicar","mat.addfinish":"+ Acabado","mat.empty":"Aún no hay materiales. Añada uno o importe una biblioteca.","mat.newname":"Nombre del material","mat.delconfirm":"¿Eliminar este material y sus acabados?","mat.importerr":"No se pudo leer el archivo: ","mat.importnone":"No se encontraron ajustes en el archivo.","action.rename":"Renombrar","action.edit":"Editar","fx.title":"Acabado","fx.add":"Añadir acabado","fx.edit":"Editar acabado","fx.name":"Nombre del acabado","fx.mode":"Modo","fx.note":"Efecto esperado / nota","fx.untitled":"Acabado" });
   Object.assign(I18N.de, { "mat.import":"Importieren…","mat.export":"Exportieren","mat.addmat":"Material hinzufügen","mat.apply":"Anwenden","mat.addfinish":"+ Finish","mat.empty":"Noch keine Materialien. Fügen Sie eines hinzu oder importieren Sie eine Bibliothek.","mat.newname":"Materialname","mat.delconfirm":"Dieses Material und seine Finishes löschen?","mat.importerr":"Datei konnte nicht gelesen werden: ","mat.importnone":"Keine Presets in der Datei gefunden.","action.rename":"Umbenennen","action.edit":"Bearbeiten","fx.title":"Finish","fx.add":"Finish hinzufügen","fx.edit":"Finish bearbeiten","fx.name":"Finish-Name","fx.mode":"Modus","fx.note":"Erwartete Wirkung / Notiz","fx.untitled":"Finish" });
   Object.assign(I18N.fr, { "mat.import":"Importer…","mat.export":"Exporter","mat.addmat":"Ajouter un matériau","mat.apply":"Appliquer","mat.addfinish":"+ Finition","mat.empty":"Aucun matériau pour l'instant. Ajoutez-en un ou importez une bibliothèque.","mat.newname":"Nom du matériau","mat.delconfirm":"Supprimer ce matériau et ses finitions ?","mat.importerr":"Impossible de lire le fichier : ","mat.importnone":"Aucun préréglage trouvé dans le fichier.","action.rename":"Renommer","action.edit":"Modifier","fx.title":"Finition","fx.add":"Ajouter une finition","fx.edit":"Modifier la finition","fx.name":"Nom de la finition","fx.mode":"Mode","fx.note":"Effet attendu / note","fx.untitled":"Finition" });

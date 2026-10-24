@@ -32,6 +32,7 @@ use wasm_bindgen::prelude::*;
 fn dialect(flavor: &str) -> GCodeDialect {
     match flavor {
         "grbl-m3" => GCodeDialect::grbl_m3(),
+        "snapmaker" => GCodeDialect::snapmaker(),
         "grbl-lpc" => GCodeDialect::grbl_lpc(),
         "marlin" => GCodeDialect::marlin(),
         "smoothie" => GCodeDialect::smoothie(),

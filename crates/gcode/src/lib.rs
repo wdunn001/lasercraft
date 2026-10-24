@@ -137,6 +137,18 @@ impl GCodeDialect {
         }
     }
 
+    /// Snapmaker Artisan. The firmware is Marlin based, but LightBurn drives it as
+    /// GRBL-M3 (1.1e or earlier): constant-power `M3`/`M5`. Its exported device
+    /// profile sets S_Scale to 255, so `S` runs 0 to 255, not GRBL's usual 1000.
+    /// Recovered from the real Snapmaker Artisan LightBurn device files.
+    pub fn snapmaker() -> Self {
+        Self {
+            flavor: Flavor::Grbl,
+            laser_mode: "M3 S0",
+            power: PowerStyle::IntScale(255),
+        }
+    }
+
     /// Marlin, `M3`/`M5` with `S` scaled to the stock 255.
     pub fn marlin() -> Self {
         Self {
@@ -298,6 +310,17 @@ mod tests {
     #[test]
     fn grbl_m3_uses_constant_power_header() {
         let out = program(&GCodeDialect::grbl_m3(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
+        assert!(out.starts_with("G90\nG21\nM3 S0\n"));
+        assert!(!out.contains("M4"));
+    }
+
+    #[test]
+    fn snapmaker_is_constant_power_at_s255() {
+        let sm = GCodeDialect::snapmaker();
+        assert_eq!(sm.flavor(), Flavor::Grbl);
+        // Constant-power M3, S scaled to the device profile's 255. 50 percent is S128.
+        assert_eq!(sm.emit(&cut_50()), "G1 X10.000 Y5.000 F1200 S128");
+        let out = program(&GCodeDialect::snapmaker(), &[Op::RapidTo { x: 0.0, y: 0.0 }]);
         assert!(out.starts_with("G90\nG21\nM3 S0\n"));
         assert!(!out.contains("M4"));
     }
