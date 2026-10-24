@@ -3684,6 +3684,12 @@
         if (head.length<14){ const a=bytes[i+2]|bytes[i+3]<<8, b=bytes[i+4]|bytes[i+5]<<8; head.push(`${op.toString(16)}(${a},${b})`); } }
       galvoLog(`list field=${galvoFieldMM()}mm: ${nJump} jumps, ${nMark} marks, ${nEnd} end/pad, ${nOther} other`);
       galvoLog("head: "+head.join(" "));
+      // Surface the actual mark speed in galvo units. Below ~30 (roughly 80 mm/s on
+      // a 170mm field) the mirrors crawl and a job of any size never finishes in a
+      // sane time, which reads as "nothing happened". Warn so the cause is obvious.
+      { const g = galvoParams(); const gpm = 65535/galvoFieldMM(); const mk = Math.round(g.mark*gpm/1000);
+        galvoLog(`speed: mark ${g.mark} mm/s (galvo ${mk}), jump ${g.jump} mm/s; power ${g.power}%`);
+        if (mk < 30) galvoLog(`WARNING: mark speed ${g.mark} mm/s is a galvo crawl. Raise it toward 300-500 mm/s or the fiber will barely move.`); }
       let written = 0;
       for (let i = 0; i < bytes.length; i += 3072) {
         const r = await USB.dev.transferOut(USB.ep, bytes.slice(i, i + 3072));
@@ -3709,18 +3715,24 @@
       // Wait for the list to actually finish: the running bit (0x04 in b3) sets
       // when it starts and clears when done. Hold the MO open the whole time so a
       // long fill is not cut off, up to ~30s.
+      // Wait for the whole list to run. A dense fill at a sane mark speed finishes
+      // in a few seconds, but a large job (or a slow speed) can take minutes, so we
+      // hold MO open and poll for up to 5 minutes rather than giving up at 30s and
+      // closing the source mid-mark. The b3 bits other than 0x04 (run) and 0x08
+      // (pause) are status flags on this board, not faults.
       galvoLog("ExecuteList sent; waiting for the list to finish (b3 running bit 0x04)…");
       let ran = false, done = false;
-      for (let i = 0; i < 240; i++) {
+      const POLL_MS = 250, MAX_POLLS = 1200;
+      for (let i = 0; i < MAX_POLLS; i++) {
         const ls = words(await ctlR(OP.GetListStatus));
         const running = !!(ls[3] & 0x04);
         if (running) ran = true;
-        if (i < 8 || i % 20 === 0 || (ran && !running)) galvoLog(`list[${i}] ${fmt(ls)} running=${running}`);
-        if (ran && !running) { done = true; galvoLog(`list FINISHED after ${(i*0.125).toFixed(1)}s`); break; }
-        await new Promise(r => setTimeout(r, 125));
+        if (i < 8 || i % 40 === 0 || (ran && !running)) galvoLog(`list[${i}] ${fmt(ls)} running=${running} (${(i*POLL_MS/1000).toFixed(1)}s)`);
+        if (ran && !running) { done = true; galvoLog(`list FINISHED after ${(i*POLL_MS/1000).toFixed(1)}s`); break; }
+        await new Promise(r => setTimeout(r, POLL_MS));
       }
       await ctl(OP.IPG_OpenMO, 0);          // close MO
-      galvoLog(done ? `Done: the list ran and completed. Check the steel for a mark.` : `List never finished within 30s (running bit stayed set). b3 extra bits (0x02/0x10) may be a fault. DID anything physically happen?`);
+      galvoLog(done ? `Done: the list ran and completed. Check the steel for a mark.` : `Still running after ${(MAX_POLLS*POLL_MS/1000).toFixed(0)}s. This almost always means the mark speed is very low (galvo crawl). Raise the layer speed toward a few hundred mm/s and re-run.`);
     } catch (e) { galvoLog("Cut failed at the USB layer: " + e.message); }
   }
   // Trace the job's bounding box with the guide beam so the operator can line up
