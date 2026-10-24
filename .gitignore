@@ -1,0 +1,14 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Demo preview artifacts (not source)
+/preview/
+
+# Generated wasm bindings for the web app
+web/pkg/
+web/lc-*.png

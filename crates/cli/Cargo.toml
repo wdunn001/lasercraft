@@ -1,0 +1,25 @@
+[package]
+name = "lasercraft-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "lasercraft-cli"
+path = "src/main.rs"
+
+[dependencies]
+lasercraft-engine = { workspace = true }
+lasercraft-gcode = { workspace = true }
+lasercraft-i18n = { workspace = true }
+lasercraft-laser-doc = { workspace = true }
+lasercraft-motion = { workspace = true }
+lasercraft-persist = { workspace = true }
+lasercraft-raster = { workspace = true }
+lasercraft-toolpath = { workspace = true }
+clap = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,29 @@
+[package]
+name = "lasercraft-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "WebAssembly bindings for the LaserCraft engine: plan GCode, preview SVG, estimate time and build material tests in the browser"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+lasercraft-engine = { workspace = true }
+lasercraft-galvo = { workspace = true }
+lasercraft-geomops = { workspace = true }
+lasercraft-text = { workspace = true }
+lasercraft-dxf = { workspace = true }
+lasercraft-gcode = { workspace = true }
+lasercraft-laser-doc = { workspace = true }
+lasercraft-svg = { workspace = true }
+lasercraft-trace = { workspace = true }
+lasercraft-motion = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wasm-bindgen = { workspace = true }
+
+[lints]
+workspace = true

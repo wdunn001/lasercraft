@@ -1,0 +1,77 @@
+# Feature parity checklist
+
+This tracks LaserCraft against the documented features and controls, drawn
+from the official reference in the vendor documentation. Status is one of Done,
+Partial, or Gap. The goal is 1:1 coverage of the documented controls.
+
+The documented import formats (per the official File Management reference)
+are: .ai, .svg, .dxf, .pdf, .plt/.hpgl, .lbrn/.lbrn2, GCode, and images
+(.png/.jpg/.bmp/.gif/.tif). The reference tool does not import Snapmaker .sc or Ruida .rd,
+and has no LiDAR feature; those were removed from this list as not-real gaps.
+Ruida .rd import and HPGL are implemented here as extras beyond the reference tool.
+
+## Most-prominent 25 (baseline a reimplementation is judged on)
+
+| # | Feature | Status | Notes |
+|---|---------|--------|-------|
+| 1 | New / Open / Save / Import / Export, project files | Done | Native .lcproj; SVG/DXF/image/.lbrn/HPGL/G-code/PDF/AI import; GCode/DXF export. PDF import inflates FlateDecode streams and reads path operators. |
+| 2 | Draw lines + shape tools (rect, ellipse, polygon, star) | Done | rect, rounded rect, ellipse, regular N-gon, freeform poly, star, slot, line, pen, text. |
+| 3 | Select, move, scale, rotate + numeric edits | Done | Properties tab: X/Y/W/H, rotation, aspect lock, flips. |
+| 4 | Edit nodes (add/delete/move, convert, break/join) | Done | Node tool with insert/delete. Trim/extend/convert-curve: Partial. |
+| 5 | Text, TTF + single-line | Done | Mark (single-stroke) and Sans (filled); text-on-path warps glyphs along a selected curve. |
+| 6 | Variable text (serial, date/time, CSV merge) | Done | Serial numbers (%N token), date/time insert, and CSV merge (%col% / {col} tokens, one copy per row) all done. |
+| 7 | Group / Ungroup | Done | Group id on shapes, group-aware selection, Ctrl+G / Ctrl+Shift+G. |
+| 8 | Align and distribute | Done | Align selection left/right/centre/top/bottom/middle to the group box (bed when one shape), point-to-point move, smart drag guides that snap edges and centres (Alt suppresses), align to bed, distribute by even spacing. |
+| 9 | Boolean union / subtract / intersect + weld | Done | |
+| 10 | Offset shapes | Done | |
+| 11 | Grid array and circular array | Done | Arrange dialog. |
+| 12 | Cuts/Layers window + colour palette | Done | Layers with colour picker, output/show toggles, cut-order reorder. |
+| 13 | Cut settings editor: Line/Fill/Image/Offset-fill | Done | Full editor (double-click a layer) with perforation, wobble, tabs, ramp, timings. |
+| 14 | Speed, max/min power, passes | Done | |
+| 15 | Scan angle, line interval, cross-hatch | Done | Angle-aware hatch (engine), interval, and cross-hatch all work on galvo and G-code. |
+| 16 | Image dithering modes | Done | Floyd-Steinberg, Atkinson, Jarvis, Stucki, Ordered, Threshold, picked in Preferences. |
+| 17 | Trace image (vectorize) | Done | |
+| 18 | Laser window: start, frame, pause, stop | Done | GRBL serial: Run (confirm), Frame (beam-off), Pause/Resume, Stop. |
+| 19 | Job origin / start from (abs, current, user) | Partial | Absolute and current position done; user origin: Partial. |
+| 20 | Jog + position readout | Done | Move tab jog; GRBL position readout. |
+| 21 | Device setup and connection | Done | Machine add/edit/delete; serial and galvo USB. |
+| 22 | Bed size, origin corner, grid/snapping | Done | Bed size, origin corner stored, grid snap. |
+| 23 | Material library (save, assign, link presets) | Done | Per-machine materials with finishes; JSON/XML/CSV import, JSON export; material test grid generator. |
+| 24 | Preview / simulation before running | Done | Cut preview modal plays back the toolpath. |
+| 25 | Camera overlay, calibration, alignment | Done | Camera tab with 4-corner alignment, registration marks. |
+
+## By area (condensed)
+
+- Document/File: core open/save/import/export, the reference tool .lbrn import, HPGL (.plt) import Done. G-code (.gc/.nc) import, PDF and Adobe Illustrator (.ai, PDF inside) import, Ruida .rd import (unswizzle + command parse, reference-verified against meerk40t) Done. Snapmaker .sc import: Gap (no public spec). (the reference tool does not import Gerber or STL/3D.) Templates, bundles, print: Gap.
+- Drawing: primary shapes, rounded rect, slot, regular N-gon, star, Code 128, Code 39, QR code, Data Matrix (ECC-200 ASCII, sizes 10 to 26, reference-verified) Done; EAN/UPC and other symbologies Gap; tabs tool Partial (per-layer tabs done, manual placement Gap).
+- Edit/Transform: selection, clipboard, undo/redo, align, distribute, arrays, boolean, offset, draw-order, group/ungroup, lock/unlock, fillet, chamfer, trim, extend, mirror-across-line, nesting (shelf pack) Done. Dock, two-point rotate: Gap.
+- Node editing: insert/delete/move, trim, extend, break-at-node, convert-to-curve, convert-to-line Done; optimize/warp/deform: Gap.
+- Text: core + alignment + fonts + variable text (serial, date/time, CSV merge) + text-on-path Done; bending: Gap; bar code Partial (Code 128).
+- Layers/Cut settings: modes, speed/power/passes/interval/angle, air, output/show, cut order, tabs/bridges, perforation, lead-in/out, overcut, kerf offset (all applied in the G-code path) Done; sub-layers, PPI, dot mode, wobble, optimization toggles: Gap/Partial.
+- Material library: Done (editable, per-machine, multi-finish, 3-format import). Two-axis material test generator Done (per-axis parameter choice from speed, max power, line interval, passes, frequency; configurable counts, cell size, labels, border; saved presets; one cut layer per cell). Focus/interval test generators: Gap.
+- Fill/scan: interval, angle, cross-hatch, lines-per-inch (DPI), overscan, bidirectional/unidirectional scanning, flood fill, dot mode (grid of dwell pulses, beam off between) Done. The full fill-control set is covered.
+- Image/art: trace + dither import, every documented image format including TIFF (.tif/.tiff decoded in-app, since browsers cannot), dither-mode picker, adjust image (brightness/contrast/gamma), 3D depth map Done; mask, convert-to-bitmap: Gap.
+- Laser/device: connect, frame, run, pause, stop, home, set-origin, unlock, position, GRBL console Done; full galvo device-settings pages Done (IO ports, laser source, field, correction, COR load, 4 tabs); macros, file list, bridge: Gap.
+- Coordinate/work area: bed, origin corner, grid snap, machine axes (Move-tab Z gating), units mm/inch, smart alignment guides with edge and centre snapping (Alt suppresses) Done; guidelines, snap distances: Gap.
+
+- Tool modifier keys (SolidCraft PR #5217-style shared resolver): Shift constrains (square/circle/regular, 45° lines, keep-aspect corners) and adds to a selection, Alt suppresses grid snap and draws from the centre, the primary key (Ctrl/Cmd) toggles a selection, Shift while rotating snaps to 15°. Per-tool hints in the sub-header, translated across five locales.
+
+## Beyond the reference tool
+
+- Depth / heat-map engrave: a grayscale image drives cut depth, banded into
+  multi-pass cut layers (lighter carves deeper), for fiber-laser relief and texture.
+  Direction and level count set in Preferences.
+- Camera: overlay, 4-corner align, print-and-cut marks, lens-calibration (Brown radial k1/k2, 5x5 grid solve, image undistort; solver reference-verified) Done; head-mounted, LiDAR: Gap.
+- Rotary: Done (setup dialog: type, axis, steps, diameter, speeds, reverse, return). Galvo rotary-marking extras: Gap.
+- Advanced: preview, cylinder correction, keyboard shortcuts (undo/redo, select-all, copy/cut/paste, group/ungroup, duplicate, arrow-nudge), dual laser (per-layer source plus a second-head offset applied to the laser-2 output) center finder (circumcentre of three clicked edge points, marks a round workpiece's centre) Done; settings/prefs Partial (language done); bundles: Gap.
+
+## Done this session (2026-10-23)
+
+Hardware control (GRBL serial run/frame/pause/stop, position readout), machine
+add/edit/delete with capabilities and origin/baud/job-start, Properties tab, grid
+snap, per-layer output/show toggles, cut-order drag reorder, kerf, tabs/bridges,
+machine-scoped material library with finishes and 3-format import, group/ungroup,
+star tool, cut preview, six dithering modes, distribute horizontally/vertically,
+lock/unlock shapes. Full i18n across en/es/de/fr/pt-BR for every new control. An
+adversarial code review ran over the new JavaScript and all six confirmed defects
+were fixed; the wasm builds green and every change was screenshot-verified.

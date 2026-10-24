@@ -1,0 +1,21 @@
+[package]
+name = "lasercraft-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+lasercraft-galvo = { workspace = true }
+lasercraft-gcode = { workspace = true }
+lasercraft-laser-doc = { workspace = true }
+lasercraft-motion = { workspace = true }
+lasercraft-raster = { workspace = true }
+lasercraft-toolpath = { workspace = true }
+lasercraft-geomops = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true

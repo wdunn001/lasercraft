@@ -1,0 +1,48 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/wdunn001/lasercraft"
+
+[workspace.dependencies]
+# Laser-specific crates live here because craft-libs only accepts crates useful
+# to more than one app. They consume craft-libs for the shared UI and cloud.
+lasercraft-cli = { path = "crates/cli", version = "0.1.0" }
+lasercraft-config = { path = "crates/config", version = "0.1.0" }
+lasercraft-device = { path = "crates/device", version = "0.1.0" }
+lasercraft-dsp = { path = "crates/dsp", version = "0.1.0" }
+lasercraft-engine = { path = "crates/engine", version = "0.1.0" }
+lasercraft-galvo = { path = "crates/galvo", version = "0.1.0" }
+lasercraft-gcode = { path = "crates/gcode", version = "0.1.0" }
+lasercraft-i18n = { path = "crates/i18n", version = "0.1.0" }
+lasercraft-laser-doc = { path = "crates/laser-doc", version = "0.1.0" }
+lasercraft-material = { path = "crates/material", version = "0.1.0" }
+lasercraft-motion = { path = "crates/motion", version = "0.1.0" }
+lasercraft-persist = { path = "crates/persist", version = "0.1.0" }
+lasercraft-profile = { path = "crates/profile", version = "0.1.0" }
+lasercraft-raster = { path = "crates/raster", version = "0.1.0" }
+lasercraft-svg = { path = "crates/svg", version = "0.1.0" }
+lasercraft-toolpath = { path = "crates/toolpath", version = "0.1.0" }
+lasercraft-trace = { path = "crates/trace", version = "0.1.0" }
+lasercraft-xtool = { path = "crates/xtool", version = "0.1.0" }
+lasercraft-wasm = { path = "crates/wasm", version = "0.1.0" }
+lasercraft-geomops = { path = "crates/geomops", version = "0.1.0" }
+lasercraft-text = { path = "crates/text", version = "0.1.0" }
+lasercraft-dxf = { path = "crates/dxf", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+wasm-bindgen = "0.2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"

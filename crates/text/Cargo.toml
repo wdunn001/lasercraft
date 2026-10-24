@@ -1,0 +1,13 @@
+[package]
+name = "lasercraft-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+skrifa = "0.26"
+
+[lints]
+workspace = true

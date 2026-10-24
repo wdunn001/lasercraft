@@ -1,0 +1,9 @@
+{
+  "id": "marlin",
+  "display_name": "Marlin",
+  "controller": "Marlin",
+  "transport": "Usb",
+  "work_area_mm": [300.0, 300.0],
+  "max_speed_mm_s": 150.0,
+  "gcode_flavor": "marlin"
+}

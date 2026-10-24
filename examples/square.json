@@ -1,0 +1,31 @@
+{
+  "app_version": "0.1.0",
+  "shapes": [
+    {
+      "kind": "Path",
+      "cut_index": 0,
+      "geometry": {
+        "Polyline": {
+          "points": [
+            { "x": 0.0, "y": 0.0 },
+            { "x": 20.0, "y": 0.0 },
+            { "x": 20.0, "y": 20.0 },
+            { "x": 0.0, "y": 20.0 }
+          ],
+          "closed": true
+        }
+      }
+    }
+  ],
+  "cut_settings": [
+    {
+      "index": 0,
+      "name": "Cut",
+      "speed_mm_s": 25.0,
+      "power_min": 10.0,
+      "power_max": 75.0,
+      "num_passes": 1,
+      "air_assist": true
+    }
+  ]
+}
