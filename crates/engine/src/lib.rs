@@ -755,9 +755,16 @@ pub fn plan_galvo_project(
             && galvo.mode == FillMode::Fill
         {
             let poly: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+            // A zero or unset interval would make the hatch produce no lines, so the
+            // fill would silently mark nothing. Floor it the way Concentric does.
+            let interval = if galvo.fill.line_interval_mm > 0.0 {
+                galvo.fill.line_interval_mm
+            } else {
+                0.1
+            };
             let segments = hatch_fill_angled(
                 &poly,
-                galvo.fill.line_interval_mm,
+                interval,
                 galvo.fill.hatch_angle_deg,
                 galvo.fill.cross_hatch,
                 galvo.fill.bidirectional,

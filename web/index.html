@@ -2848,7 +2848,7 @@
         index:L.index, name:L.name, speed_mm_s:L.speed_mm_s, power_min:L.power_min, power_max:L.power_max,
         num_passes:L.num_passes, air_assist:L.air_assist,
         galvo: { mode:L.mode, frequency_khz:L.freq, q_pulse_width_ns:L.qpulse, global_passes:1,
-          fill:{ line_interval_mm:L.interval, hatch_angle_deg:L.angle, angle_increment_deg:L.angleInc||0, auto_rotate:!!L.autoRotate, dot_width_adjust:!!L.dotAdjust, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:!!L.rampOuter, cross_hatch:!!L.crosshatch, overscan_mm:L.fillOverscan||0, bidirectional:L.bidir!==false, flood_fill:!!L.flood, dot_mode:!!L.dotMode, dot_time_ms:L.dotTime||1 },
+          fill:{ line_interval_mm:(L.interval>0?L.interval:0.1), hatch_angle_deg:L.angle, angle_increment_deg:L.angleInc||0, auto_rotate:!!L.autoRotate, dot_width_adjust:!!L.dotAdjust, dot_width_mm:0.08, ramp_length_mm:L.ramp||0, ramp_outer_edge:!!L.rampOuter, cross_hatch:!!L.crosshatch, overscan_mm:L.fillOverscan||0, bidirectional:L.bidir!==false, flood_fill:!!L.flood, dot_mode:!!L.dotMode, dot_time_ms:L.dotTime||1 },
           line:{ kerf_offset_mm:L.kerf||0, perforation:!!L.perf, perforation_cut_mm:L.perfCut||0.1, perforation_skip_mm:L.perfSkip||0.1, overcut_mm:L.overcut||0, lead_in_mm:L.leadIn||0, lead_out_mm:L.leadOut||0 },
           tabs:{ enabled:!!L.tabs, automatic:true, size_mm:L.tabSize||0.5, spacing_mm:L.tabSpacing||50, tabs_per_shape:L.tabsPerShape||1, skip_inner_shapes:!!L.tabSkipInner, cut_power_pct:L.tabPower||0 },
           wobble:{ enabled:!!L.wobble, step_mm:L.wobStep||0.05, size_mm:L.wobSize||0.1 },
@@ -3684,6 +3684,7 @@
         if (head.length<14){ const a=bytes[i+2]|bytes[i+3]<<8, b=bytes[i+4]|bytes[i+5]<<8; head.push(`${op.toString(16)}(${a},${b})`); } }
       galvoLog(`list field=${galvoFieldMM()}mm: ${nJump} jumps, ${nMark} marks, ${nEnd} end/pad, ${nOther} other`);
       galvoLog("head: "+head.join(" "));
+      if (nMark === 0) galvoLog(`WARNING: this job has 0 marks, so the board will run an empty list and nothing will fire. For a Fill, check the shape is closed and the line interval is > 0. For Line, check the shape has geometry on an output layer.`);
       // Surface the actual mark speed in galvo units. Below ~30 (roughly 80 mm/s on
       // a 170mm field) the mirrors crawl and a job of any size never finishes in a
       // sane time, which reads as "nothing happened". Warn so the cause is obvious.
