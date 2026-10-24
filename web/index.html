@@ -3691,19 +3691,24 @@
       { const g = galvoParams(); const gpm = 65535/galvoFieldMM(); const mk = Math.round(g.mark*gpm/1000);
         galvoLog(`speed: mark ${g.mark} mm/s (galvo ${mk}), jump ${g.jump} mm/s; power ${g.power}%`);
         if (mk < 30) galvoLog(`WARNING: mark speed ${g.mark} mm/s is a galvo crawl. Raise it toward 300-500 mm/s or the fiber will barely move.`); }
-      let written = 0;
+      // Stream the list the way the board expects, not as one dump-then-run. The
+      // board's list memory holds only a few 0xC00 chunks, so a large job (more
+      // than ~8 chunks) written all at once overflows and never runs (b3 stays
+      // 0x220, the idle signature). meerk40t avoids this: it sends each 3072-byte
+      // chunk, issues SetEndOfList (0x0019) after each, and once more than two
+      // chunks are buffered it issues ExecuteList ONCE and keeps writing the rest
+      // while the board drains them. A small job (<= 2 chunks) executes at the end.
+      let written = 0, packets = 0, executing = false;
+      const nChunks = Math.ceil(bytes.length / 3072);
       for (let i = 0; i < bytes.length; i += 3072) {
         const r = await USB.dev.transferOut(USB.ep, bytes.slice(i, i + 3072));
         written += r.bytesWritten;
+        await ctl(OP.SetEndOfList, 0);
+        packets++;
+        if (packets > 2 && !executing) { await ctl(OP.ExecuteList); executing = true; galvoLog(`streaming: execution started after ${packets} of ${nChunks} chunks`); }
       }
-      galvoLog(`list written: ${written} bytes`);
-      // The list MUST be closed with SetEndOfList (0x0019) before ExecuteList, or
-      // the board accepts the list but never runs it (the running bit stays clear).
-      // Captured byte-for-byte from meerk40t driving this exact board over usbmon:
-      // StopExecute, ResetList, write list, SetEndOfList(0), ExecuteList. Removing
-      // this earlier was the mistake that stopped every mark.
-      await ctl(OP.SetEndOfList, 0);
-      await ctl(OP.ExecuteList);
+      if (!executing) { await ctl(OP.ExecuteList); executing = true; }
+      galvoLog(`list written: ${written} bytes in ${nChunks} chunks`);
       // Busy is read from GetVersion, status word is reply word b3 (bytes 6..7),
       // busy bit 0x04, ready 0x20 (balor-confirmed). The MO stays open the whole
       // wait so the fiber is not shut mid-mark. All four reply words are logged
@@ -3721,7 +3726,13 @@
       // hold MO open and poll for up to 5 minutes rather than giving up at 30s and
       // closing the source mid-mark. The b3 bits other than 0x04 (run) and 0x08
       // (pause) are status flags on this board, not faults.
-      galvoLog("ExecuteList sent; waiting for the list to finish (b3 running bit 0x04)…");
+      // Because the list now streams and execution starts mid-write, the job can be
+      // running (or already finished) by the time we poll. So the running bit is not
+      // a precondition: we break when it is seen to run and then stop, and we also
+      // break if it is idle for a short grace window (the job ran fast during
+      // streaming and we never caught the run bit). The b3 bits other than 0x04
+      // (run) and 0x08 (pause) are status flags on this board, not faults.
+      galvoLog("waiting for the list to finish…");
       let ran = false, done = false;
       const POLL_MS = 250, MAX_POLLS = 1200;
       for (let i = 0; i < MAX_POLLS; i++) {
@@ -3730,6 +3741,7 @@
         if (running) ran = true;
         if (i < 8 || i % 40 === 0 || (ran && !running)) galvoLog(`list[${i}] ${fmt(ls)} running=${running} (${(i*POLL_MS/1000).toFixed(1)}s)`);
         if (ran && !running) { done = true; galvoLog(`list FINISHED after ${(i*POLL_MS/1000).toFixed(1)}s`); break; }
+        if (!ran && !running && i >= 8) { done = true; galvoLog(`list completed during streaming (finished before the run bit could be sampled)`); break; }
         await new Promise(r => setTimeout(r, POLL_MS));
       }
       await ctl(OP.IPG_OpenMO, 0);          // close MO
