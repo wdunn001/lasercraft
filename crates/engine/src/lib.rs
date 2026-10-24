@@ -709,6 +709,9 @@ pub fn plan_galvo_project(
         ord_points.push(pts);
     }
     let order = nested_order(&ord_points, &ord_closed, &ord_start);
+    // A Fill layer is hatched once, as a whole. Track which layers have been filled
+    // so a glyph's several contours (and every shape on the layer) hatch together.
+    let mut filled_layers: Vec<u32> = Vec::new();
     for &oi in &order {
         let Some(shape) = drawable.get(oi).and_then(|&si| project.shapes.get(si)) else {
             continue;
@@ -754,7 +757,16 @@ pub fn plan_galvo_project(
         if let Some(galvo) = &setting.galvo
             && galvo.mode == FillMode::Fill
         {
-            let poly: Vec<Point> = points.iter().map(|p| Point { x: p.x, y: p.y }).collect();
+            // Hatch the whole layer at once, as one even-odd region, so a glyph
+            // counter (the hole in A, O, B, R) and any nested contour is left empty
+            // instead of filled solid. Hatching each contour on its own, as before,
+            // filled the holes. Gather every closed contour on this layer and hatch
+            // them together with the multi-polygon even-odd fill. Do it once.
+            let layer = setting.index;
+            if filled_layers.contains(&layer) {
+                continue;
+            }
+            filled_layers.push(layer);
             // A zero or unset interval would make the hatch produce no lines, so the
             // fill would silently mark nothing. Floor it the way Concentric does.
             let interval = if galvo.fill.line_interval_mm > 0.0 {
@@ -762,8 +774,41 @@ pub fn plan_galvo_project(
             } else {
                 0.1
             };
-            let segments = hatch_fill_angled(
-                &poly,
+            let mut contours: Vec<Vec<Point>> = Vec::new();
+            for other in &project.shapes {
+                let Some(other_setting) = project.cut_setting_for(other) else {
+                    continue;
+                };
+                if other_setting.index != layer {
+                    continue;
+                }
+                let fills = other_setting
+                    .galvo
+                    .as_ref()
+                    .is_some_and(|g| g.mode == FillMode::Fill);
+                if !fills {
+                    continue;
+                }
+                let (pts, other_closed) = match &other.geometry {
+                    Geometry::Polyline { points, closed } => (
+                        points.iter().map(|p| Point { x: p.x, y: p.y }).collect::<Vec<_>>(),
+                        *closed,
+                    ),
+                    Geometry::Path(path) => (
+                        path.flatten(CURVE_STEPS)
+                            .iter()
+                            .map(|p| Point { x: p.x, y: p.y })
+                            .collect::<Vec<_>>(),
+                        path.closed,
+                    ),
+                    Geometry::Empty => continue,
+                };
+                if other_closed && pts.len() >= 3 {
+                    contours.push(pts);
+                }
+            }
+            let segments = hatch_fill_multi(
+                &contours,
                 interval,
                 galvo.fill.hatch_angle_deg,
                 galvo.fill.cross_hatch,
@@ -1268,6 +1313,79 @@ mod tests {
             "fill {} outline {}",
             fill_cmds.len(),
             outline_cmds.len()
+        );
+    }
+
+    #[test]
+    fn galvo_fill_leaves_a_counter_empty() {
+        use lasercraft_laser_doc::{FillParams, GalvoSettings};
+        // Two nested squares on one Fill layer, the shape of a glyph counter (the
+        // hole in A, O, B). The layer must hatch as one even-odd region, so the
+        // inner square is left empty. Marked length is then less than filling the
+        // outer square solid.
+        let param = GalvoParam {
+            field_size_mm: 100.0,
+            resolution_bits: 16,
+        };
+        let fill_cut = || {
+            let mut c = cut();
+            c.galvo = Some(GalvoSettings {
+                mode: FillMode::Fill,
+                fill: FillParams {
+                    line_interval_mm: 1.0,
+                    ..FillParams::default()
+                },
+                ..GalvoSettings::default()
+            });
+            c
+        };
+        let square = |half: f64| Geometry::Polyline {
+            points: vec![
+                Point2 { x: -half, y: -half },
+                Point2 { x: half, y: -half },
+                Point2 { x: half, y: half },
+                Point2 { x: -half, y: half },
+            ],
+            closed: true,
+        };
+        let rect = |geo| Shape {
+            kind: ShapeKind::Rect,
+            cut_index: 0,
+            geometry: geo,
+        };
+        // Sum the marked (laser-on) travel so a holed fill can be compared to solid.
+        let mark_len = |cmds: &[GalvoCommand]| -> f64 {
+            let mut total = 0.0;
+            let mut last: Option<(f64, f64)> = None;
+            for c in cmds {
+                match c {
+                    GalvoCommand::Jump { x, y } => last = Some((f64::from(*x), f64::from(*y))),
+                    GalvoCommand::Mark { x, y } => {
+                        let (nx, ny) = (f64::from(*x), f64::from(*y));
+                        if let Some((px, py)) = last {
+                            total += (nx - px).hypot(ny - py);
+                        }
+                        last = Some((nx, ny));
+                    }
+                    _ => {}
+                }
+            }
+            total
+        };
+        let mut solid = Project::new();
+        solid.cut_settings.push(fill_cut());
+        solid.shapes.push(rect(square(10.0)));
+
+        let mut holed = Project::new();
+        holed.cut_settings.push(fill_cut());
+        holed.shapes.push(rect(square(10.0)));
+        holed.shapes.push(rect(square(4.0)));
+
+        let solid_len = mark_len(&plan_galvo_project(&solid, &param, 30_000));
+        let holed_len = mark_len(&plan_galvo_project(&holed, &param, 30_000));
+        assert!(
+            holed_len < solid_len,
+            "holed fill {holed_len} should mark less than solid {solid_len} (the counter must be empty)"
         );
     }
 
