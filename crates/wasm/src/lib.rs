@@ -101,8 +101,9 @@ pub fn generate_galvo_lmc(
     field_mm: f64,
     resolution_bits: u32,
     frequency_khz: f64,
-    mark_speed: u32,
-    power_ratio: u32,
+    jump_speed_mm_s: f64,
+    mark_speed_mm_s: f64,
+    power_percent: f64,
 ) -> Result<Vec<u8>, JsError> {
     let project: Project = parse(project_json, "project")?;
     let param = GalvoParam {
@@ -112,9 +113,16 @@ pub fn generate_galvo_lmc(
     let hz = (frequency_khz * 1000.0)
         .round()
         .clamp(0.0, f64::from(u32::MAX)) as u32;
-    let speed = mark_speed.min(u32::from(u16::MAX)) as u16;
-    let power = power_ratio.min(u32::from(u16::MAX)) as u16;
-    Ok(plan_galvo_lmc(&project, &param, hz, speed, power))
+    // Speeds reach the board in galvo units per millisecond, so a millimetre speed
+    // is scaled by the device units per millimetre (the field maps onto the device
+    // range). Power is the fiber current, full scale 0x0FFF.
+    let span = field_mm.max(f64::MIN_POSITIVE);
+    let galvos_per_mm = f64::from(param.device_max()) / span;
+    let to_galvo = |mm_s: f64| (mm_s * galvos_per_mm / 1000.0).round().clamp(0.0, 65535.0) as u16;
+    let jump = to_galvo(jump_speed_mm_s);
+    let mark = to_galvo(mark_speed_mm_s);
+    let power = ((power_percent / 100.0).clamp(0.0, 1.0) * 4095.0).round() as u16;
+    Ok(plan_galvo_lmc(&project, &param, hz, jump, mark, power))
 }
 
 /// Union a set of closed polylines into their merged outline.
@@ -262,7 +270,13 @@ pub fn svg_path_to_paths(d: &str) -> Result<String, JsError> {
 /// millimetres, which the page lays on the active layer. This is filled text, the
 /// companion to the single-stroke `text_to_paths`.
 #[wasm_bindgen]
-pub fn text_outline_paths(font: &[u8], text: &str, height_mm: f64, x: f64, y: f64) -> Result<String, JsError> {
+pub fn text_outline_paths(
+    font: &[u8],
+    text: &str,
+    height_mm: f64,
+    x: f64,
+    y: f64,
+) -> Result<String, JsError> {
     let out = lasercraft_text::glyph_outlines(font, text, height_mm, x, y);
     serde_json::to_string(&out).map_err(|e| JsError::new(&format!("could not serialise: {e}")))
 }
@@ -274,7 +288,13 @@ pub fn text_outline_paths(font: &[u8], text: &str, height_mm: f64, x: f64, y: f6
 /// coordinates, which the page scales onto the bed. `speckle` drops contours below
 /// that pixel area and `smoothing` sets the corner tolerance.
 #[wasm_bindgen]
-pub fn trace_image(mask: &[u8], width: u32, height: u32, speckle: u32, smoothing: f64) -> Result<String, JsError> {
+pub fn trace_image(
+    mask: &[u8],
+    width: u32,
+    height: u32,
+    speckle: u32,
+    smoothing: f64,
+) -> Result<String, JsError> {
     use lasercraft_trace::{Bitmap, BoundaryTracer, TraceParams, Tracer};
     let expected = (width as usize).saturating_mul(height as usize);
     if mask.len() != expected {

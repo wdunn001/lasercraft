@@ -835,11 +835,12 @@ pub fn plan_galvo_lmc(
     project: &Project,
     param: &GalvoParam,
     frequency_hz: u32,
+    jump_speed: u16,
     mark_speed: u16,
-    power_ratio: u16,
+    power: u16,
 ) -> Vec<u8> {
     let commands = plan_galvo_project(project, param, frequency_hz);
-    lmc::compile(&commands, mark_speed, power_ratio)
+    lmc::compile(&commands, jump_speed, mark_speed, power)
 }
 
 /// Estimate the cutting time of a project in seconds.
@@ -1151,13 +1152,13 @@ mod tests {
             field_size_mm: 110.0,
             resolution_bits: 16,
         };
-        let bytes = plan_galvo_lmc(&project, &param, 30_000, 100, 0x0800);
+        let bytes = plan_galvo_lmc(&project, &param, 30_000, 1000, 100, 0x0800);
         assert!(!bytes.is_empty());
         // The buffer is whole 0xC00 list chunks.
         assert_eq!(bytes.len() % 0xC00, 0);
-        // It opens with the start-of-list marker 0x8051, then the marking speed.
+        // It opens with the start-of-list marker 0x8051, then the dwell 0x8004.
         assert_eq!(&bytes[0..2], &0x8051u16.to_le_bytes());
-        assert_eq!(&bytes[12..14], &0x800Cu16.to_le_bytes());
+        assert_eq!(&bytes[12..14], &0x8004u16.to_le_bytes());
     }
 
     #[test]

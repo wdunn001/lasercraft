@@ -2865,7 +2865,7 @@
       const pj = JSON.stringify(toProject());
       const secs = estimate_seconds(pj, MOTION); const mm=Math.floor(secs/60), ss=(secs-mm*60).toFixed(1);
       $("est").textContent = `${mm}m ${ss}s`;
-      const bytes = generate_galvo_lmc(pj, galvoFieldMM(), 16, 30, 100, 2048);
+      const bytes = galvoBytes();
       $("galvo").innerHTML = `${tr("stat.galvo","Galvo")} <b>${bytes.length}</b> B`;
       if (isGalvo()) {
         $("gcode").textContent =
@@ -3533,7 +3533,21 @@
   // machine profile. It is larger than the work area the design is drawn on: the
   // 150 mm lens has a 170 mm field, per the ComMarker config (FIELDSIZE=170).
   function galvoFieldMM(){ const m = (typeof currentMachine === "function") ? currentMachine() : null; return (m && m.field) || BED.w; }
-  function galvoBytes(){ return generate_galvo_lmc(JSON.stringify(toProject()), galvoFieldMM(), 16, 30, 100, 2048); }
+  // Mark speed, jump speed, fiber frequency and power for the galvo list come from
+  // the active cut layer (the same Speed / Power / Freq the operator sets), not from
+  // guessed constants. The wasm converts mm/s to the board's galvo units from the
+  // field size, so these stay in human units here. Jump (travel) speed is much
+  // faster than the mark speed; use the machine's jumpSpeed if set.
+  function galvoParams(){
+    const L = (typeof doc === "object" && doc.layers && doc.layers[activeLayer]) || {};
+    const mark = Math.max(1, +L.speed_mm_s || 400);
+    const freq = Math.max(1, +L.freq || 30);
+    const power = Math.min(100, Math.max(0, L.power_max != null ? +L.power_max : 60));
+    const m = (typeof currentMachine === "function") ? currentMachine() : null;
+    const jump = Math.max(mark, (m && +m.jumpSpeed) || 2000);
+    return { freq, jump, mark, power };
+  }
+  function galvoBytes(){ const g = galvoParams(); return generate_galvo_lmc(JSON.stringify(toProject()), galvoFieldMM(), 16, g.freq, g.jump, g.mark, g.power); }
   function hex(a){ return Array.from(a).map(b=>b.toString(16).padStart(2,"0")).join(" "); }
 
   // BJJCZ control opcodes (galvoplotter consts.py).
@@ -3542,7 +3556,7 @@
   // into the shared 12-byte command sender. See docs/rea-evidence/galvo-lmc-protocol.md.
   const OP = { WriteCorLine:0x0010, DisableLaser:0x0002, EnableLaser:0x0004, ExecuteList:0x0005, SetPwmPulseWidth:0x0006, GetVersion:0x0007,
     GetSerialNo:0x0009, GetListStatus:0x000A, GotoXY:0x000D, LaserSignalOff:0x000E, LaserSignalOn:0x000F,
-    ResetList:0x0012, RestartList:0x0013, WriteCorTable:0x0015, SetControlMode:0x0016, SetDelayMode:0x0017,
+    ResetList:0x0012, RestartList:0x0013, WriteCorTable:0x0015, SetEndOfList:0x0019, SetControlMode:0x0016, SetDelayMode:0x0017,
     SetMaxPolyDelay:0x0018, SetFirstPulseKiller:0x001A, SetLaserMode:0x001B, SetTiming:0x001C, SetStandby:0x001D,
     SetPwmHalfPeriod:0x001E, StopExecute:0x001F, StopList:0x0020, WritePort:0x0021, WriteAnalogPort1:0x0022,
     ReadPort:0x0025, SetFpkParam2:0x002E, SetFlyRes:0x0032, IPG_OpenMO:0x0033, EnableZ:0x003A, GetMarkTime:0x0041, Reset:0x0040 };
@@ -3628,10 +3642,11 @@
   // upload the correction table, EnableLaser, then the control/laser/timing set.
   async function initLaser(){
     await ctl(OP.GetSerialNo); await ctl(OP.GetVersion); await ctl(OP.Reset);
-    // The board keeps the correction table its last host software uploaded (your
-    // LightBurn sessions), so we do not re-stream it on every Cut. Only push one
-    // when the user has loaded a .cor and asked for it (galvoPushCor).
-    if (galvoPushCor && galvoCorTable) await uploadCorTable();
+    // WriteCorTable MUST be sent every init or the galvo will not move at all,
+    // even with a correct list that the board reports as running. meerk40t always
+    // sends it: the real 65x65 table when a .cor is loaded, or a blank one
+    // (WriteCorTable with param 0, no cells) otherwise. Match that exactly.
+    if (galvoPushCor && galvoCorTable) await uploadCorTable(); else await ctl(OP.WriteCorTable, 0);
     await ctl(OP.EnableLaser);
     await ctl(OP.SetControlMode, 0); await ctl(OP.SetLaserMode, 1);
     await ctl(OP.SetDelayMode, 1); await ctl(OP.SetTiming, 1);
@@ -3652,7 +3667,15 @@
       galvoLog("GetSerialNo -> " + hex(await ctlR(OP.GetSerialNo) || []));
       galvoLog("init sequence…");
       await initLaser();
+      await ctl(OP.StopExecute);
       await ctl(OP.ResetList);
+      // Captured control order from meerk40t driving this board: after ResetList it
+      // sets the output port's laser-enable bit (WritePort 0x0001) and opens the MO
+      // source, THEN writes and runs the list. The list also carries its own
+      // in-stream WritePort (0x8011), but the control-side gate has to be set too.
+      await ctl(OP.WritePort, 0x0001);
+      await ctl(OP.IPG_OpenMO, 1);
+      await ctlR(OP.GetVersion);
       const bytes = galvoBytes();
       // Diagnostic: is there real motion in this list, or is it all padding? Count
       // the jump/mark commands and print the first dozen with their coordinates.
@@ -3667,11 +3690,12 @@
         written += r.bytesWritten;
       }
       galvoLog(`list written: ${written} bytes`);
-      // Execute order recovered from Lmc1.dll: the list self-terminates with its
-      // in-list 0x8002, so no SetEndOfList control command is sent (the earlier
-      // guess at 0x0019 was wrong). Open the fiber master oscillator, execute,
-      // then poll GetListStatus until the busy bit clears.
-      await ctl(OP.IPG_OpenMO, 1);
+      // The list MUST be closed with SetEndOfList (0x0019) before ExecuteList, or
+      // the board accepts the list but never runs it (the running bit stays clear).
+      // Captured byte-for-byte from meerk40t driving this exact board over usbmon:
+      // StopExecute, ResetList, write list, SetEndOfList(0), ExecuteList. Removing
+      // this earlier was the mistake that stopped every mark.
+      await ctl(OP.SetEndOfList, 0);
       await ctl(OP.ExecuteList);
       // Busy is read from GetVersion, status word is reply word b3 (bytes 6..7),
       // busy bit 0x04, ready 0x20 (balor-confirmed). The MO stays open the whole
@@ -3682,15 +3706,21 @@
       // The MO is held open for a fixed ~5s so a real mark has time to run, while
       // we sample the dedicated GetListStatus command to see which word tracks the
       // list state on this board (b3 is a constant signature, so it is not it).
-      galvoLog("ExecuteList sent; holding MO open ~5s and sampling GetListStatus…");
-      for (let i = 0; i < 40; i++) {
+      // Wait for the list to actually finish: the running bit (0x04 in b3) sets
+      // when it starts and clears when done. Hold the MO open the whole time so a
+      // long fill is not cut off, up to ~30s.
+      galvoLog("ExecuteList sent; waiting for the list to finish (b3 running bit 0x04)…");
+      let ran = false, done = false;
+      for (let i = 0; i < 240; i++) {
         const ls = words(await ctlR(OP.GetListStatus));
-        if (i < 8 || i % 5 === 0) galvoLog(`list[${i}] ${fmt(ls)}`);
+        const running = !!(ls[3] & 0x04);
+        if (running) ran = true;
+        if (i < 8 || i % 20 === 0 || (ran && !running)) galvoLog(`list[${i}] ${fmt(ls)} running=${running}`);
+        if (ran && !running) { done = true; galvoLog(`list FINISHED after ${(i*0.125).toFixed(1)}s`); break; }
         await new Promise(r => setTimeout(r, 125));
       }
-      galvoLog(`after mark: GetListStatus ${fmt(words(await ctlR(OP.GetListStatus)))}, GetVersion ${fmt(words(await ctlR(OP.GetVersion)))}`);
       await ctl(OP.IPG_OpenMO, 0);          // close MO
-      galvoLog(`List ${written}B executed, MO held ~5s. DID THE MACHINE PHYSICALLY DO ANYTHING (mirror move, red dot sweep, sound, a mark)? Report what you saw along with this log.`);
+      galvoLog(done ? `Done: the list ran and completed. Check the steel for a mark.` : `List never finished within 30s (running bit stayed set). b3 extra bits (0x02/0x10) may be a fault. DID anything physically happen?`);
     } catch (e) { galvoLog("Cut failed at the USB layer: " + e.message); }
   }
   // Trace the job's bounding box with the guide beam so the operator can line up

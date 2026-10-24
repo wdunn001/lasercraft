@@ -345,10 +345,18 @@ pub mod lmc {
     pub const LIST_JUMP_TO: u16 = 0x8001;
     /// End of a list, also the padding opcode.
     pub const LIST_END_OF_LIST: u16 = 0x8002;
+    /// A dwell written into the list (10 us units). Opens a marking list.
+    pub const LIST_DELAY: u16 = 0x8004;
     /// Move with the laser on to a field point.
     pub const LIST_MARK_TO: u16 = 0x8005;
     /// Set the jump (travel) speed.
     pub const LIST_JUMP_SPEED: u16 = 0x8006;
+    /// Write the output port from inside the list. The board gates the fiber on
+    /// the laser-enable bit here, so a mark list must set it or nothing fires.
+    pub const LIST_WRITE_PORT: u16 = 0x8011;
+    /// Set the fiber marking current, the power control a MOPA source actually
+    /// honours (the power-ratio word 0x800B is ignored on this controller).
+    pub const LIST_MARK_CURRENT: u16 = 0x8012;
     /// Set the laser-on delay (Laser On TC).
     pub const LIST_LASER_ON_DELAY: u16 = 0x8007;
     /// Set the laser-off delay (Laser Off TC).
@@ -440,19 +448,37 @@ pub mod lmc {
             self.count += 1;
         }
 
-        /// Jump with the laser off to a field point.
-        pub fn jump_to(&mut self, x: u16, y: u16) {
-            self.push(LIST_JUMP_TO, [x, y, 0, 0, 0]);
+        /// Jump with the laser off to a field point. The fourth word carries the
+        /// straight-line distance from the previous point, which the board uses to
+        /// time the move; it is clamped to the 16-bit range.
+        pub fn jump_to(&mut self, x: u16, y: u16, distance: u16) {
+            self.push(LIST_JUMP_TO, [x, y, 0, distance, 0]);
         }
 
-        /// Mark with the laser on to a field point.
-        pub fn mark_to(&mut self, x: u16, y: u16) {
-            self.push(LIST_MARK_TO, [x, y, 0, 0, 0]);
+        /// Mark with the laser on to a field point, with the point-to-point
+        /// distance in the fourth word, as the board expects.
+        pub fn mark_to(&mut self, x: u16, y: u16, distance: u16) {
+            self.push(LIST_MARK_TO, [x, y, 0, distance, 0]);
         }
 
         /// Open the list with the start-of-list marker the board arms on.
         pub fn list_ready(&mut self) {
             self.push(LIST_READY_MARK, [0, 0, 0, 0, 0]);
+        }
+
+        /// A dwell at the head of the list, in 10 us units.
+        pub fn delay(&mut self, ticks: u16) {
+            self.push(LIST_DELAY, [ticks, 0, 0, 0, 0]);
+        }
+
+        /// Write the output-port bits from inside the list (laser enable gate).
+        pub fn write_port(&mut self, bits: u16) {
+            self.push(LIST_WRITE_PORT, [bits, 0, 0, 0, 0]);
+        }
+
+        /// Set the fiber marking current (power on a MOPA source).
+        pub fn mark_current(&mut self, current: u16) {
+            self.push(LIST_MARK_CURRENT, [current, 0, 0, 0, 0]);
         }
 
         /// Set the marking speed.
@@ -522,17 +548,42 @@ pub mod lmc {
     /// The marking speed and the power ratio open the list. Each [`GalvoCommand`]
     /// then appends its list command. The result is padded to a whole chunk and is
     /// ready for the bulk write to [`WRITE_ENDPOINT`].
-    pub fn compile(commands: &[GalvoCommand], mark_speed: u16, power_ratio: u16) -> Vec<u8> {
+    pub fn compile(
+        commands: &[GalvoCommand],
+        jump_speed: u16,
+        mark_speed: u16,
+        power: u16,
+    ) -> Vec<u8> {
         let mut list = ListBuffer::new();
+        let mut last: Option<(u16, u16)> = None;
+        // The opening sequence a working mark list carries on this controller: the
+        // ready marker, a short dwell, the laser-enable port bit written into the
+        // list, the travel and mark speeds, the fiber current (power), and the
+        // on/off and polygon delays. The Q-switch (frequency) is set by the first
+        // SetFrequency command below.
         list.list_ready();
+        list.delay(0x0320);
+        list.write_port(0x0001);
+        list.jump_speed(jump_speed);
         list.mark_speed(mark_speed);
-        list.mark_power_ratio(power_ratio);
+        list.mark_current(power);
+        list.laser_on_delay(100.0);
+        list.laser_off_delay(100.0);
+        list.polygon_delay(10.0);
         for command in commands {
             match *command {
-                GalvoCommand::Jump { x, y } => list.jump_to(clamp_coord(x), clamp_coord(y)),
-                GalvoCommand::Mark { x, y } => list.mark_to(clamp_coord(x), clamp_coord(y)),
+                GalvoCommand::Jump { x, y } => {
+                    let (cx, cy) = (clamp_coord(x), clamp_coord(y));
+                    list.jump_to(cx, cy, step_distance(last, cx, cy));
+                    last = Some((cx, cy));
+                }
+                GalvoCommand::Mark { x, y } => {
+                    let (cx, cy) = (clamp_coord(x), clamp_coord(y));
+                    list.mark_to(cx, cy, step_distance(last, cx, cy));
+                    last = Some((cx, cy));
+                }
                 GalvoCommand::SetPower { percent } => {
-                    list.mark_power_ratio(power_ratio_from_percent(percent))
+                    list.mark_current(power_ratio_from_percent(percent))
                 }
                 GalvoCommand::SetFrequency { hz } => {
                     list.qswitch_period(qswitch_period(f64::from(hz) / 1000.0))
@@ -540,6 +591,19 @@ pub mod lmc {
             }
         }
         list.finish()
+    }
+
+    /// Straight-line distance between two device points, clamped to a `u16`. The
+    /// board reads this per-move distance to time the scanner through the move.
+    fn step_distance(last: Option<(u16, u16)>, x: u16, y: u16) -> u16 {
+        match last {
+            None => 0,
+            Some((lx, ly)) => {
+                let dx = f64::from(x) - f64::from(lx);
+                let dy = f64::from(y) - f64::from(ly);
+                dx.hypot(dy).round().clamp(0.0, f64::from(u16::MAX)) as u16
+            }
+        }
     }
 
     #[cfg(test)]
@@ -582,15 +646,15 @@ pub mod lmc {
         #[test]
         fn a_finished_list_is_whole_chunks() {
             let mut list = ListBuffer::new();
-            list.jump_to(0x8000, 0x8000);
-            list.mark_to(0xA000, 0x8000);
+            list.jump_to(0x8000, 0x8000, 0);
+            list.mark_to(0xA000, 0x8000, 0x2000);
             let bytes = list.finish();
             assert!(bytes.len().is_multiple_of(LIST_CHUNK_LEN));
             assert_eq!(bytes.len(), LIST_CHUNK_LEN);
         }
 
         #[test]
-        fn compile_opens_with_speed_and_power() {
+        fn compile_opens_with_the_mark_preamble() {
             let commands = [
                 GalvoCommand::Jump {
                     x: 0x8000,
@@ -601,14 +665,19 @@ pub mod lmc {
                     y: 0x8000,
                 },
             ];
-            let bytes = compile(&commands, 100, 0x0800);
-            // First command is the start-of-list marker.
-            assert_eq!(&bytes[0..2], &0x8051u16.to_le_bytes());
-            // Then the marking speed.
-            assert_eq!(&bytes[12..14], &0x800Cu16.to_le_bytes());
-            assert_eq!(&bytes[14..16], &100u16.to_le_bytes());
-            // Then the power ratio.
-            assert_eq!(&bytes[24..26], &0x800Bu16.to_le_bytes());
+            let bytes = compile(&commands, 1000, 100, 0x0800);
+            // ready, dwell, write-port, jump speed, mark speed, fiber current.
+            assert_eq!(&bytes[0..2], &LIST_READY_MARK.to_le_bytes());
+            assert_eq!(&bytes[12..14], &LIST_DELAY.to_le_bytes());
+            assert_eq!(&bytes[24..26], &LIST_WRITE_PORT.to_le_bytes());
+            assert_eq!(&bytes[36..38], &LIST_JUMP_SPEED.to_le_bytes());
+            assert_eq!(&bytes[38..40], &1000u16.to_le_bytes());
+            assert_eq!(&bytes[48..50], &LIST_MARK_SPEED.to_le_bytes());
+            assert_eq!(&bytes[50..52], &100u16.to_le_bytes());
+            assert_eq!(&bytes[60..62], &LIST_MARK_CURRENT.to_le_bytes());
+            assert_eq!(&bytes[62..64], &0x0800u16.to_le_bytes());
+            // The first geometry command is a jump, after the 9-command preamble.
+            assert_eq!(&bytes[108..110], &LIST_JUMP_TO.to_le_bytes());
             assert!(bytes.len().is_multiple_of(LIST_CHUNK_LEN));
         }
     }
