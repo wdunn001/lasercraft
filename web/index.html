@@ -522,13 +522,17 @@
         </div>
         <svg id="jog" width="280" height="280" viewBox="0 0 280 280" style="display:block;margin:16px auto"></svg>
         <div class="chips" id="distChips"></div>
+        <div class="moveacts" id="jogZrow" style="display:none;margin-top:8px">
+          <button class="btn" id="jogZup" data-i18n="move.zup">Z +</button>
+          <button class="btn" id="jogZdown" data-i18n="move.zdown">Z &minus;</button>
+        </div>
         <div class="moveacts">
           <button class="btn ok" id="jogHome">Home</button>
           <button class="btn" id="jogFrame" data-i18n="action.frame">Frame</button>
           <button class="btn" id="jogOrigin">Set Origin</button>
           <button class="btn fire" id="jogFire">Fire (1%)</button>
         </div>
-        <div class="stat" id="moveStat" style="margin-top:12px;color:var(--muted)">Jog drives the connected galvo. Connect it on the Design tab first.</div>
+        <div class="stat" id="moveStat" style="margin-top:12px;color:var(--muted)">Jog drives the connected machine. Connect it on the Design tab first.</div>
       </div>
 
       <div id="cameraPane" class="dpane" style="display:none;padding:16px;overflow:auto;gap:12px">
@@ -2596,9 +2600,9 @@
     { name:"ComMarker B6 150 lens (galvo)", ctrl:"galvo", w:150, h:150, field:170 },
     { name:"EZCAD2 Fiber (galvo)", ctrl:"galvo", w:150, h:150, field:170 },
     { name:"Diode 400", ctrl:"grbl-m3", w:400, h:400 },
-    { name:"Snapmaker Artisan 40W", ctrl:"snapmaker", w:400, h:400, air:true, frame:true, baud:115200, origin:"FL",
+    { name:"Snapmaker Artisan 40W", ctrl:"snapmaker", w:400, h:400, axes:3, air:true, frame:true, baud:115200, origin:"FL",
       startG:"G90\nM8\nM3 S0", endG:"M5\nM9" },
-    { name:"Snapmaker Artisan 40W (Network)", ctrl:"snapmaker", plugin:"snapmaker-net", net:"192.168.1.185", w:400, h:400, air:true, frame:true, origin:"FL",
+    { name:"Snapmaker Artisan 40W (Network)", ctrl:"snapmaker", plugin:"snapmaker-net", net:"192.168.1.185", w:400, h:400, axes:3, air:true, frame:true, origin:"FL",
       startG:"G90\nM8\nM3 S0", endG:"M5\nM9" },
     { name:"Ruida CO2 600", ctrl:"grbl", w:600, h:400 },
   ];
@@ -2621,6 +2625,10 @@
     // Dual laser: a second source with its own head offset, applied to its layers.
     curDual = { on: !!mc.dual, dx: mc.l2dx || 0, dy: mc.l2dy || 0 };
     const zw = $("posZwrap"); if (zw) zw.style.display = curAxes >= 3 ? "" : "none";
+    // Z jog buttons appear only on a machine with a Z axis. The Fire (red
+    // pointer) button is a galvo feature, so it hides on everything else.
+    const zr = $("jogZrow"); if (zr) zr.style.display = curAxes >= 3 ? "flex" : "none";
+    const ff = $("jogFire"); if (ff) ff.style.display = (mc.ctrl === "galvo") ? "" : "none";
     const mt = document.querySelector('.docktabs button[data-dock="move"]'); if (mt) mt.style.display = curAxes >= 2 ? "" : "none";
     const g = mc.ctrl === "galvo";
     // Galvo talks over WebUSB; every other controller streams G-code over serial.
@@ -3931,6 +3939,7 @@
     async stop(){ try{ await this._gcode("M5"); await this._gcode("M9"); }catch(e){} setDev(tr("dev.stopped","Stopped.")); },
     async pause(resume){ try{ await this._gcode(resume?"M24":"M25"); }catch(e){} },
     async home(){ try{ await this._gcode("G28"); }catch(e){} },
+    async setOrigin(){ try{ await this._gcode("G92 X0 Y0 Z0"); }catch(e){} },
     async jog(dx,dy,dz,feed){ try{ await this._gcode("G91"); await this._gcode("G0 X"+dx+" Y"+dy+" Z"+(dz||0)+" F"+(feed||1500)); await this._gcode("G90"); }catch(e){} }
   };
   registerDevicePlugin(SNAPMAKER);
@@ -4989,10 +4998,26 @@
     if (USB.dev){ try { await ctl(GotoXY, jogPos.x, jogPos.y, 0, 0); $("moveStat").textContent = `Moved to device ${jogPos.x}, ${jogPos.y}.`; } catch(e){ $("moveStat").textContent = "Move failed: " + e.message; } }
     else $("moveStat").textContent = "Not connected. Showing the simulated position.";
   }
-  async function jogHome(){ jogPos = { x:0x8000, y:0x8000 }; updatePos(); if (USB.dev){ try { await ctl(GotoXY, 0x8000, 0x8000, 0, 0); } catch(e){} } }
+  async function jogHome(){
+    const plug = activePlugin();
+    if (plug){ if (plug.connected()){ $("moveStat").textContent = "Homing (G28)…"; await plug.home(); $("moveStat").textContent = "Homed."; } else $("moveStat").textContent = "Not connected."; return; }
+    jogPos = { x:0x8000, y:0x8000 }; updatePos(); if (USB.dev){ try { await ctl(GotoXY, 0x8000, 0x8000, 0, 0); } catch(e){} }
+  }
+  // Z jog: a relative Z move through the active plugin, slower than X/Y.
+  async function jogZ(dir){
+    const plug = activePlugin();
+    if (plug){ if (plug.connected()){ const d = +(dir*jogDist).toFixed(2); await plug.jog(0, 0, d, 800); $("moveStat").textContent = `Jogged Z ${d} mm.`; } else $("moveStat").textContent = "Not connected."; return; }
+    $("moveStat").textContent = "Z jog needs a connected 3-axis machine.";
+  }
   $("jogHome").onclick = jogHome;
+  $("jogZup") && ($("jogZup").onclick = () => jogZ(1));
+  $("jogZdown") && ($("jogZdown").onclick = () => jogZ(-1));
   $("jogFrame").onclick = () => { if (!ready) return; try { $("gcode").textContent = generate_frame(JSON.stringify(toProject()), "hull", isGalvo()?"grbl":curFlavor); } catch(e){} };
-  $("jogOrigin").onclick = () => { jogPos = { x:0x8000, y:0x8000 }; updatePos(); $("moveStat").textContent = "Origin set at the current position."; };
+  $("jogOrigin").onclick = async () => {
+    const plug = activePlugin();
+    if (plug){ if (plug.connected()){ await plug.setOrigin(); $("moveStat").textContent = "Origin set here (G92 0,0,0)."; } else $("moveStat").textContent = "Not connected."; return; }
+    jogPos = { x:0x8000, y:0x8000 }; updatePos(); $("moveStat").textContent = "Origin set at the current position.";
+  };
   $("jogFire").onclick = async () => { if (!USB.dev){ $("moveStat").textContent = "Connect the galvo to fire the pointer."; return; } try { await ctl(LaserSignalOn); setTimeout(async () => { try { await ctl(LaserSignalOff); } catch(e){} }, 300); $("moveStat").textContent = "Fired the red pointer briefly."; } catch(e){ $("moveStat").textContent = "Fire failed: " + e.message; } };
   buildJog(); updatePos();
 
