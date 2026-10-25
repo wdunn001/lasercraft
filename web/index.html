@@ -2598,7 +2598,7 @@
     { name:"Diode 400", ctrl:"grbl-m3", w:400, h:400 },
     { name:"Snapmaker Artisan 40W", ctrl:"snapmaker", w:400, h:400, air:true, frame:true, baud:115200, origin:"FL",
       startG:"G90\nM8\nM3 S0", endG:"M5\nM9" },
-    { name:"Snapmaker Artisan 40W (Network)", ctrl:"snapmaker", plugin:"snapmaker-net", w:400, h:400, air:true, frame:true, origin:"FL",
+    { name:"Snapmaker Artisan 40W (Network)", ctrl:"snapmaker", plugin:"snapmaker-net", net:"192.168.1.185", w:400, h:400, air:true, frame:true, origin:"FL",
       startG:"G90\nM8\nM3 S0", endG:"M5\nM9" },
     { name:"Ruida CO2 600", ctrl:"grbl", w:600, h:400 },
   ];
@@ -3843,77 +3843,95 @@
   // transport (plain serial / galvo).
   function activePlugin(){ const mc = (typeof currentMachine === "function") ? currentMachine() : null; return (mc && mc.plugin) ? pluginById(mc.plugin) : null; }
 
-  // ---- Snapmaker network plugin ----
-  // The Snapmaker Artisan serves an OctoPrint-style HTTP API on the LAN (port
-  // 8080, firmware 2.x). A browser cannot reach it directly (mixed content, no
-  // CORS, no raw TCP), so it is proxied same-origin under /snapmaker on this host.
-  // Auth is a token plus a one-time "Allow" tap on the machine touchscreen.
-  // Verified endpoints: connect, status, execute_code, upload, start_print,
-  // pause_print, resume_print, stop_print. Power is M3 S0..255 (GRBL-M3 dialect);
-  // air assist is M8 / M9; stop forces M5 M9 as the laser-off safety.
+  // ---- Snapmaker network plugin (SACP over the collabcraft TCP relay) ----
+  // The Artisan speaks SACP, a binary protocol, over TCP 8888. A browser cannot
+  // open raw TCP, so collabcraft bridges one WebSocket to that TCP port at
+  // /api/v1/relay/tcp (session-gated, LAN:8888 only). The SACP codec lives here.
+  // Handshake: CMD_CONNECT (0x01 0x05) to the touchscreen peer pops an Allow
+  // prompt; result byte 0 means approved. G-code runs line by line via
+  // execute_code (0x01 0x02). Stop forces M5 M9. Frame: AA 55, len u16LE
+  // (payload+8), ver 01, receiver, CRC8(0-5), sender, attr, seq u16LE, cmdSet,
+  // cmdId, payload, checksum16 u16LE (internet checksum, big-endian words).
   const SNAPMAKER = {
     id: "snapmaker-net",
     label: "Snapmaker (network)",
-    base: "/snapmaker/api/v1",
-    token: "",
-    _connected: false,
+    ws: null, host: null, _connected: false, _seq: 1, _rx: new Uint8Array(0), _pending: new Map(),
     connected(){ return this._connected; },
-    async _form(path, fields){
-      const body = new URLSearchParams(fields || {});
-      if (this.token) body.set("token", this.token);
-      return fetch(this.base + path, { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
+    _crc8(d){ let c=0; for(const b of d){ for(let j=0;j<8;j++){ const bit=(b>>(7-j))&1, c7=(c>>7)&1; c=(c<<1)&0xff; if(c7!==bit)c^=0x07; } } return c&0xff; },
+    _cksum(d){ let s=0; for(let i=0;i+1<d.length;i+=2) s+=(d[i]<<8)|d[i+1]; if(d.length&1) s+=d[d.length-1]; while(s>>16) s=(s&0xffff)+(s>>16); return (~s)&0xffff; },
+    _str(s){ const u=new TextEncoder().encode(s); const o=new Uint8Array(2+u.length); o[0]=u.length&0xff; o[1]=(u.length>>8)&0xff; o.set(u,2); return o; },
+    _encode(cmdSet,cmdId,payload,receiver,seq){
+      payload = payload||new Uint8Array(0);
+      const len = payload.length+8;
+      const head = new Uint8Array(7);
+      head[0]=0xAA; head[1]=0x55; head[2]=len&0xff; head[3]=(len>>8)&0xff; head[4]=0x01; head[5]=receiver&0xff;
+      head[6]=this._crc8(head.subarray(0,6));
+      const body = new Uint8Array(6+payload.length);
+      body[0]=0x00; body[1]=0x00; body[2]=seq&0xff; body[3]=(seq>>8)&0xff; body[4]=cmdSet&0xff; body[5]=cmdId&0xff; body.set(payload,6);
+      const ck=this._cksum(body);
+      const out=new Uint8Array(7+body.length+2);
+      out.set(head,0); out.set(body,7); out[out.length-2]=ck&0xff; out[out.length-1]=(ck>>8)&0xff;
+      return out;
     },
-    async status(){
-      try { const r = await fetch(`${this.base}/status?token=${encodeURIComponent(this.token)}`); return r.ok ? await r.json() : null; }
-      catch(e){ return null; }
-    },
-    async execute(code){ return this._form("/execute_code", { code }); },
-    async connect(mc){
-      this.token = localStorage.getItem("lc_sm_token") || "";
-      setDev(tr("sm.connecting","Connecting to the Snapmaker. Tap Allow on the touchscreen if it asks."));
-      let r; try { r = await this._form("/connect", {}); }
-      catch(e){ setDev(tr("sm.netfail","Could not reach the Snapmaker bridge. Is the machine on and on the network?")); return false; }
-      if (!r.ok){ setDev(tr("sm.connfail","Snapmaker connect failed: ") + r.status); return false; }
-      try { const j = await r.json(); if (j && j.token){ this.token = j.token; localStorage.setItem("lc_sm_token", this.token); } } catch(e){}
-      // Give the operator time to approve on the screen, then confirm with status.
-      for (let i = 0; i < 20; i++){
-        const s = await this.status();
-        if (s){ this._connected = true; setDev(tr("sm.connected","Snapmaker connected over the network.")); updateDeviceButtons(); return true; }
-        await new Promise(res => setTimeout(res, 1000));
+    _onBytes(ab){
+      const chunk=new Uint8Array(ab); const merged=new Uint8Array(this._rx.length+chunk.length);
+      merged.set(this._rx,0); merged.set(chunk,this._rx.length); this._rx=merged;
+      while(this._rx.length>=7 && this._rx[0]===0xAA && this._rx[1]===0x55){
+        const len=this._rx[2]|(this._rx[3]<<8); const total=7+len;
+        if(this._rx.length<total) break;
+        const f=this._rx.slice(0,total); this._rx=this._rx.slice(total);
+        const seq=f[9]|(f[10]<<8); const cmdSet=f[11], cmdId=f[12]; const payload=f.slice(13,f.length-2);
+        const p=this._pending.get(seq);
+        if(p){ this._pending.delete(seq); p.resolve({cmdSet,cmdId,payload}); }
       }
-      setDev(tr("sm.approve","Tap Allow on the Snapmaker screen, then press Connect again."));
-      return false;
     },
-    async disconnect(){
-      try { await this._form("/disconnect", {}); } catch(e){}
-      this._connected = false; updateDeviceButtons();
+    _send(cmdSet,cmdId,payload,receiver){
+      const seq=this._seq; this._seq=(this._seq%0xffff)+1;
+      const frame=this._encode(cmdSet,cmdId,payload,receiver,seq);
+      return new Promise((resolve,reject)=>{
+        const to=setTimeout(()=>{ this._pending.delete(seq); reject(new Error("timeout")); }, 65000);
+        this._pending.set(seq,{resolve:(v)=>{clearTimeout(to);resolve(v);}});
+        try{ this.ws.send(frame); }catch(e){ clearTimeout(to); this._pending.delete(seq); reject(e); }
+      });
     },
-    async run(mc, gcode){
-      if (!this._connected){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; }
-      const startScript = curStartG.trim() ? curStartG.trim() + "\n" : "";
-      const endScript = curEndG.trim() ? "\n" + curEndG.trim() : "";
-      const body = startScript + gcode + endScript;
-      if (!confirm(tr("dev.runconfirm","Run this job on the laser now? The beam will fire. Make sure the lid is closed, the area is clear, and you can reach Stop."))) return;
-      setDev(tr("sm.uploading","Uploading the job to the Snapmaker..."));
+    async connect(mc){
+      this.host = (mc && mc.net) || "192.168.1.185";
+      const url=(location.protocol==="https:"?"wss://":"ws://")+location.host+"/api/v1/relay/tcp?host="+encodeURIComponent(this.host)+"&port=8888";
+      setDev(tr("sm.connecting","Connecting to the Snapmaker. Tap Allow on the touchscreen if it asks."));
       try {
-        const fd = new FormData();
-        if (this.token) fd.set("token", this.token);
-        fd.set("file", new Blob([body], { type:"text/plain" }), "lasercraft.nc");
-        let r = await fetch(`${this.base}/upload`, { method:"POST", body: fd });
-        if (!r.ok){ setDev(tr("sm.uploadfail","Upload failed: ") + r.status); return; }
-        r = await this._form("/start_print", {});
-        setDev(r.ok ? tr("sm.started","Snapmaker job started. Watch the machine.") : tr("sm.startfail","Start failed: ") + r.status);
-      } catch(e){ setDev(tr("sm.runerr","Snapmaker run error: ") + e.message); }
+        await new Promise((res,rej)=>{
+          this.ws=new WebSocket(url); this.ws.binaryType="arraybuffer";
+          this.ws.onopen=()=>res(); this.ws.onerror=()=>rej(new Error("relay socket error"));
+          this.ws.onmessage=(e)=>this._onBytes(e.data);
+          this.ws.onclose=()=>{ this._connected=false; updateDeviceButtons(); };
+        });
+      } catch(e){ setDev(tr("sm.netfail","Could not reach the Snapmaker bridge. Is the machine on and on the network?")); return false; }
+      const name=this._str("LaserCraft");
+      const payload=new Uint8Array(name.length*2+2); payload.set(name,0); payload.set(name,name.length);
+      try{
+        const r=await this._send(0x01,0x05,payload,2);
+        if(r.payload.length && r.payload[0]===0){ this._connected=true; setDev(tr("sm.connected","Snapmaker connected over the network.")); updateDeviceButtons(); return true; }
+        setDev(tr("sm.approve","Tap Allow on the Snapmaker screen, then press Connect again.")); try{this.ws.close();}catch(_){ } return false;
+      }catch(e){ setDev(tr("sm.connfail","Snapmaker connect failed: ")+e.message); try{this.ws.close();}catch(_){ } return false; }
     },
-    async stop(){
-      // A stopped job never runs its end script, so force the laser-off safety.
-      try { await this._form("/stop_print", {}); } catch(e){}
-      try { await this.execute("M5\nM9"); } catch(e){}
-      setDev(tr("dev.stopped","Stopped."));
+    async disconnect(){ try{ this.ws && this.ws.close(); }catch(e){} this._connected=false; this.ws=null; updateDeviceButtons(); },
+    async _gcode(line){ return this._send(0x01,0x02,this._str(line),1); },
+    async run(mc,gcode){
+      if(!this._connected){ setDev(tr("dev.connectfirst","Connect a machine first.")); return; }
+      if(!confirm(tr("dev.runconfirm","Run this job on the laser now? The beam will fire. Make sure the lid is closed, the area is clear, and you can reach Stop."))) return;
+      const start=curStartG.trim()?curStartG.trim()+"\n":""; const end=curEndG.trim()?"\n"+curEndG.trim():"";
+      const lines=(start+gcode+end).split("\n").map(l=>l.replace(/;.*/,"").trim()).filter(Boolean);
+      for(let i=0;i<lines.length;i++){
+        if(!this._connected) break;
+        try{ await this._gcode(lines[i]); }catch(e){ setDev(tr("sm.runerr","Snapmaker run error: ")+e.message); return; }
+        if((i&15)===0||i===lines.length-1) setDev(tr("sm.running","Streaming to the Snapmaker: ")+(i+1)+"/"+lines.length);
+      }
+      setDev(tr("sm.started","Snapmaker job complete. Check the machine."));
     },
-    async pause(resume){ try { await this._form(resume ? "/resume_print" : "/pause_print", {}); } catch(e){} },
-    async home(){ try { await this.execute("G28"); } catch(e){} },
-    async jog(dx, dy, dz, feed){ try { await this.execute(`G91\nG0 X${dx} Y${dy} Z${dz||0} F${feed||1000}\nG90`); } catch(e){} }
+    async stop(){ try{ await this._gcode("M5"); await this._gcode("M9"); }catch(e){} setDev(tr("dev.stopped","Stopped.")); },
+    async pause(resume){ try{ await this._gcode(resume?"M24":"M25"); }catch(e){} },
+    async home(){ try{ await this._gcode("G28"); }catch(e){} },
+    async jog(dx,dy,dz,feed){ try{ await this._gcode("G91"); await this._gcode("G0 X"+dx+" Y"+dy+" Z"+(dz||0)+" F"+(feed||1500)); await this._gcode("G90"); }catch(e){} }
   };
   registerDevicePlugin(SNAPMAKER);
 
