@@ -10,7 +10,7 @@ repository.workspace = true
 lasercraft-laser-doc = { workspace = true }
 serde_json = { workspace = true }
 # First craft-libs integration: crash-safe atomic writes from the shared suite.
-craft-atomic = { git = "https://github.com/storytold/craft-libs" }
+craft-atomic = {git = "https://github.com/wdunn001/craft-libs", branch = "quasarke"}
 
 [lints]
 workspace = true

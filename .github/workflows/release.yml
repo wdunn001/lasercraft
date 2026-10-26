@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    branches: [quasarke, release]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Crate pins match pins.toml
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/wdunn001/craft-libs/quasarke/scripts/apply-craft-pins.py" -o /tmp/apply-craft-pins.py
+          python3 /tmp/apply-craft-pins.py --pins-url "https://raw.githubusercontent.com/wdunn001/craft-libs/quasarke/pins.toml" --root . --check
+
+  linux:
+    needs: pins
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release -p lasercraft-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lasercraft-linux-x86_64
+          path: target/release/lasercraft-cli
+          if-no-files-found: error
+
+  windows:
+    needs: pins
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release -p lasercraft-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lasercraft-windows-x64
+          path: target/release/lasercraft-cli.exe
+          if-no-files-found: error
+
+  macos:
+    needs: pins
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release -p lasercraft-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lasercraft-macos
+          path: target/release/lasercraft-cli
+          if-no-files-found: error
+
+  wasm:
+    needs: pins
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo build --release -p lasercraft-wasm --target wasm32-unknown-unknown
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lasercraft-wasm
+          path: target/wasm32-unknown-unknown/release/lasercraft_wasm.wasm
+          if-no-files-found: error

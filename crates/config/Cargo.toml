@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 serde = { workspace = true }
 # Second craft-libs integration: the suite's shared settings storage.
-craft-settings = { git = "https://github.com/storytold/craft-libs" }
+craft-settings = {git = "https://github.com/wdunn001/craft-libs", branch = "quasarke"}
 
 [lints]
 workspace = true
